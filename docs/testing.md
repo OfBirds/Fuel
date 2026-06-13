@@ -43,9 +43,9 @@ npm run test:watch # watch mode
 
 ## What each suite covers
 
-These are the template's starter tests — worked examples of each style (pure logic,
-EF InMemory DB, controller, background service, frontend unit). Add your own
-alongside them as you build features.
+These are the starter tests — worked examples of each style (pure logic, EF
+InMemory DB, controller, background service, frontend unit). Add feature tests
+alongside them as the product is built out.
 
 ### Backend — `Api.Tests`
 

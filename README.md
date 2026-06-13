@@ -1,17 +1,39 @@
-# Fuel — Full-Stack Template
+# Fuel — self-hosted AI calorie tracker
 
-A batteries-included starting point for a self-hosted full-stack app:
-**ASP.NET Core (net10) + React/Vite/TypeScript + PostgreSQL**, shipped as a single
-Docker image, with CI/CD, observability, email, and deploy tooling already wired up.
+Fuel is a minimalist, self-hosted **calorie tracker** with AI-assisted logging:
+log a meal by typing it or snapping a photo, an AI provider estimates the calories
+(and macros), and Fuel files it under the day's meals against your goal. It ships
+as a single Docker image — **ASP.NET Core (net10) + React/Vite/TypeScript +
+PostgreSQL**.
 
-The point of this template is to skip re-solving the infrastructure every time.
-Clone it, rename it, and start building your actual feature — staging and prod
-deploys, migrations, logging, and release emails already work.
+Food and weight data is about as personal as it gets, so Fuel is built to be
+**self-hosted**: it runs on infrastructure you control, not someone else's cloud.
 
-> This repo is a **GitHub template**. Click **“Use this template”** (or clone it),
-> then run the rename script (see [Getting started](#getting-started)).
+> **Status: early.** The infrastructure rails below are wired and working; the
+> product features (food catalogue, logging, profile/weight, AI estimation) are
+> being built out. See [`docs/`](docs/) for the per-feature design specs.
 
-## What's included (the rails)
+## What Fuel does (the product)
+
+- **Log food three ways** — manually, by **typing** a description ("gurmanska
+  pljeskavica 300 gr in a bun"), or from a **photo**. The AI paths pre-fill the
+  same editable screen the manual path uses, so you always confirm/edit the
+  result (including the intake time).
+- **Food catalogue** — every food (a meal *or* an ingredient) is defined once,
+  with a default unit and per-unit calories/macros; log entries reference it. A
+  food can be composed of other foods as ingredients.
+- **Meal-sectioned day view** — breakfast, lunch, dinner, and snacks, with a
+  running total against your daily calorie goal.
+- **Macros** — estimated and stored, hidden behind a Settings toggle so the
+  default view stays simple.
+- **Profile & weight** — height, sex, body frame, and year of birth drive BMI and
+  a metabolism readout; a weight register tracks weigh-ins over time.
+- **AI provider is chosen by the operator at deploy time** and is swappable
+  (DeepSeek first) — never a user-facing setting.
+
+## Under the hood (already wired)
+
+These rails come from the project's self-hosted full-stack base and are in place:
 
 - **Single-image deploy** — a multi-stage `Dockerfile` builds the Vite SPA, drops
   it into the backend's `wwwroot/`, and ASP.NET serves both the API and the SPA on
@@ -38,7 +60,6 @@ deploys, migrations, logging, and release emails already work.
 - **Settings + user prefs** — a settings page and `GET/PUT /api/user/{id}/prefs`.
 - **Tests** — xUnit + EF Core InMemory (backend) and Vitest + Testing Library
   (frontend), run in CI before anything is built or deployed.
-- **Claude Code tooling** — a `project-startup` skill and settings under `.claude/`.
 
 ## Tech stack
 
@@ -48,26 +69,7 @@ deploys, migrations, logging, and release emails already work.
 - **Containerization**: Docker & Docker Compose
 - **CI/CD**: GitHub Actions + GHCR + a self-hosted runner
 
-## Getting started
-
-### 1. Create your project from the template
-
-Use the GitHub “Use this template” button, or clone this repo. Then rename the
-placeholder tokens (`Fuel` / `fuel`, the GHCR owner, ports, DB name):
-
-```bash
-# Linux / macOS / WSL / Git Bash
-./scripts/rename.sh MyApp my-github-org
-
-# Windows PowerShell
-./scripts/rename.ps1 MyApp my-github-org
-```
-
-This rewrites namespaces enrichment, the solution file name, the GHCR image path,
-compose project/DB names, ports, the PWA manifest/cache, and the docs. See
-`scripts/rename.sh --help` for options (`--db`, `--ports`).
-
-### 2. Run it locally
+## Run it locally
 
 ```bash
 # 1. Postgres (+ pgAdmin) for local dev
@@ -82,14 +84,14 @@ cd frontend && npm install && npm run dev
 
 (There's also a Claude Code `project-startup` skill that automates this.)
 
-### 3. Run the tests
+## Run the tests
 
 ```bash
 dotnet test backend/Fuel.slnx -c Release      # backend
 npm test --prefix frontend -- --run              # frontend
 ```
 
-### 4. Deploy
+## Deploy
 
 Follow [`docs/deploy-runbook.md`](docs/deploy-runbook.md) to stand up the
 self-hosted runner and env files. After that, push to `main` (staging) or
@@ -98,8 +100,8 @@ self-hosted runner and env files. After that, push to `main` (staging) or
 
 ## Before you ship
 
-This template gets you running fast, but a few things are intentionally left as
-**your** first tasks before any real or public deployment:
+A few things are deliberately left as first tasks before any real or public
+deployment:
 
 1. **🔒 Harden authentication.** The login token is a demo placeholder —
    `Base64(userId:ticks)`, unsigned and unverified, and there is **no
@@ -109,8 +111,8 @@ This template gets you running fast, but a few things are intentionally left as
    `backend/Api/Controllers/AuthController.cs`. Password hashing (PBKDF2) is fine.
 2. **TLS / reverse proxy.** The default access model is plain HTTP on the LAN. Put
    a reverse proxy with TLS in front before exposing anything publicly.
-3. **Secrets.** Fill real values into `/opt/fuel/.env.staging` and
-   `.env.prod` on the host (never commit them). Add a `LICENSE` for your project.
+3. **Secrets.** Fill real values into `/opt/fuel/.env.staging` and `.env.prod` on
+   the host (never commit them). Add a `LICENSE`.
 4. **Review the env-gated features** (Seq, email/notifications, backups) and turn
    on what you want per environment.
 
@@ -121,8 +123,8 @@ backend/Api/          ASP.NET Core API (+ SPA served from wwwroot in the image)
 backend/Api.Tests/    xUnit tests
 frontend/             React + Vite SPA
 deploy/               parameterized staging/prod compose + env templates
-docs/                 infrastructure, deploy runbook, notifications, testing
-scripts/              rename.sh / rename.ps1
+docs/                 infrastructure, deploy runbook, notifications, testing + feature specs
+scripts/              rename.sh / rename.ps1 (template provenance; vestigial now)
 .github/workflows/    CI/CD pipeline
 .claude/              Claude Code skill + settings
 ```

@@ -1,7 +1,9 @@
 # Release notifications — design
 
-> Status: **planning / draft**. No code yet. Captures the agreed design for
-> emailing registered users when a new version is released to prod.
+> Status: **implemented** (see the ✅ items in §8). Documents the design and the
+> as-built behaviour for emailing registered users when a new version is released
+> to prod. The remaining open item is the prod public address / reverse proxy
+> (§5), handled with the deployment pipeline.
 
 ## Goal
 
