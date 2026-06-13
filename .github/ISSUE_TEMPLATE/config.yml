@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or help
+    url: https://github.com/trifunovich/fuel/discussions
+    about: For setup help and general questions, please open a Discussion.
