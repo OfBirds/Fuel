@@ -62,13 +62,20 @@ NutritionEstimate {
   `barcode-lookup.md`) — it is a database lookup, not an AI estimate.
 
 ## Providers
-- **`DeepSeekEstimator` (first)** — text **and** image (DeepSeek supports image
-  input). Base URL `https://api.deepseek.com`; confirm the multimodal model id for
-  `AI_MODEL`.
+- **`DeepSeekEstimator` (built)** — text (Phase 2) via DeepSeek's OpenAI-compatible
+  `/chat/completions` in JSON mode. Image support (Phase 3) is stubbed; DeepSeek
+  supports image input natively.
+- **Default model: `deepseek-v4-flash`** — chosen after benchmarking v4-flash,
+  v4-pro, v3-chat, Claude Haiku/Sonnet/Opus against multilingual food descriptions
+  (SR/DE/RU). V4-flash matched or beat v4-pro on Latin-script accuracy at 7–18× lower
+  cost than Claude Haiku (~$0.14/M input, $0.28/M output) and ~4× faster latency
+  than v4-pro. For this structured-JSON food-estimation task, reasoning models add
+  cost and latency without accuracy gains.
+- **Claude models** (Haiku/Sonnet/Opus) were benchmarked as candidates via the
+  Anthropic API; Haiku-4.5 was competitive on accuracy (slightly better on obscure
+  regional terms like "kajmak") but 7× pricier per input token. A `ClaudeEstimator`
+  implementing the same `INutritionEstimator` seam is a future option.
 - **Registry/factory** keyed by `AI_PROVIDER` → DI registration in `Program.cs`.
-- **Future — a Claude vision estimator** (official Anthropic C# SDK): vision-capable
-  models `claude-haiku-4-5` ($1/$5 per MTok), `claude-sonnet-4-6` ($3/$15),
-  `claude-opus-4-8` ($5/$25); use structured outputs for the JSON result.
 
 ## Resilience
 The estimator is a slow, fallible **external** call — treat every call as

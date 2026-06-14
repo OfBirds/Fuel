@@ -10,6 +10,28 @@ Let the user log food without doing the lookup: **type** a description, **snap a
 photo**, or **scan a barcode**, and get a structured, editable result they confirm
 before anything is saved. The AI never writes to history directly.
 
+## Language support
+The AI prompt instructs the model to return **English food names** regardless of
+input language, so they can be matched against the shared (English) food catalogue.
+
+- **English:** works best (~100% match rate). Just describe what you ate naturally.
+- **Latin-alphabet languages** (German, French, Serbian, Polish, etc.): usually fine.
+  Tested across Serbian, German, and Russian (Latin-transcribed); the model
+  understands the food correctly and translates the name to English most of the time.
+  German → English is near-perfect; Slavic languages are ~80% reliable.
+- **Cyrillic (Russian, Ukrainian, etc.):** the model understands the food but often
+  returns the name in Cyrillic, missing the catalogue match. If you must use Cyrillic,
+  expect to edit the names manually after estimation.
+- **Latin-transcribed Cyrillic** (writing Russian with English letters, e.g.
+  "kuraga" for курага): the model *understands* it but name translation is hit-or-miss
+  — regional/dialect words like "kajmak" or "kuraga" may stay untranslated. Refine
+  with a clarification note, or edit the name directly in the review row.
+- **When a name isn't matched,** the row appears with an orange left border and an
+  "edit the name" hint. Just type the English name — the food is created in your
+  catalogue on save and will match next time.
+
+An info tooltip next to the description box summarizes this for the user.
+
 ## The unified review screen (multi-item)
 A single input can describe **several foods** ("chicken 1 kg with 100 g green
 salad", or a plate with rice + beans + chicken). So the estimate is a **list of

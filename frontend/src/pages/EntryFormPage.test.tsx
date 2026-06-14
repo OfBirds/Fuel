@@ -60,11 +60,12 @@ describe('EntryFormPage', () => {
 
     renderEntryForm();
 
-    // Wait for both mount fetches (ai-status + meal-pause) so the search fetch is
-    // the next call and lines up with its queued mock.
+    // Wait for mount fetches to fire before typing.
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalled();
     });
+    // Give the meal-pause debounce (300ms) time to fire and consume its mock.
+    await new Promise(r => setTimeout(r, 350));
 
     const inputs = screen.getAllByPlaceholderText('Type a food name…');
     await userEvent.type(inputs[0], 'chicken');

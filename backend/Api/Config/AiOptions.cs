@@ -10,7 +10,7 @@ public class AiOptions
     public string Provider { get; set; } = "deepseek";
     public string ApiKey { get; set; } = "";
     public string BaseUrl { get; set; } = "https://api.deepseek.com";
-    public string Model { get; set; } = "deepseek-v4-pro";
+    public string Model { get; set; } = "deepseek-v4-flash";
     public bool Enabled { get; set; }
     public int TimeoutSeconds { get; set; } = 30;
 }

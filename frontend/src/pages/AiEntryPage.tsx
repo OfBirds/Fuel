@@ -200,7 +200,10 @@ function AiEntryPage() {
           {error && <p className="form-error" role="alert">{error}</p>}
 
           <div className="form-section">
-            <label htmlFor="ai-desc">What did you eat?</label>
+            <label htmlFor="ai-desc">
+              What did you eat?
+              <span className="ai-lang-info" title="English works best. Other Latin-alphabet languages (German, Serbian, French, etc.) are usually fine too. Cyrillic and transcribed Cyrillic may miss items — if something isn't recognised, refine with a note, or edit the name below after estimating."> ℹ️</span>
+            </label>
             <textarea
               id="ai-desc"
               className="ai-desc-input"
@@ -240,10 +243,10 @@ function AiEntryPage() {
               {rows.length === 0 && <p className="settings-muted">No items left — add a note and refine, or enter manually.</p>}
 
               {rows.map((r) => (
-                <div key={r.key} className={`ai-row${r.confidence < LOW_CONFIDENCE ? ' low-confidence' : ''}`}>
+                <div key={r.key} className={`ai-row${r.confidence < LOW_CONFIDENCE ? ' low-confidence' : ''}${r.isNew ? ' unmatched' : ''}`}>
                   <div className="ai-row-top">
                     <input
-                      className="ai-row-name"
+                      className={`ai-row-name${r.isNew ? ' unmatched-name' : ''}`}
                       value={r.name}
                       onChange={(e) => updateRow(r.key, { name: e.target.value })}
                       aria-label="Food name"
@@ -254,6 +257,9 @@ function AiEntryPage() {
                       <button className="entry-row-btn danger" onClick={() => deleteRow(r.key)} aria-label={`Remove ${r.name}`}>Del</button>
                     </div>
                   </div>
+                  {r.isNew && (
+                    <div className="ai-unmatched-hint">Not matched to your catalogue — edit the name above if needed</div>
+                  )}
                   <div className="ai-row-fields">
                     <label>Qty
                       <input type="number" min="0" value={r.quantity}

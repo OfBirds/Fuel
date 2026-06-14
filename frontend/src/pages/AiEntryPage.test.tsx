@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -10,6 +10,7 @@ vi.mock('../context/AuthContext', () => ({
 
 import AiEntryPage from './AiEntryPage';
 
+const _realFetch = globalThis.fetch;
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
 
@@ -40,6 +41,7 @@ const row = (over: Record<string, unknown> = {}) => ({
 describe('AiEntryPage', () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => cleanup());
+  afterAll(() => { globalThis.fetch = _realFetch; });
 
   it('estimate populates multiple review rows', async () => {
     mockFetch
@@ -50,8 +52,8 @@ describe('AiEntryPage', () => {
       ]));
 
     renderPage();
-    await screen.findByText('What did you eat?');
-    await userEvent.type(screen.getByLabelText('What did you eat?'), 'chicken and broccoli');
+    await screen.findByRole('textbox', { name: /what did you eat/i });
+    await userEvent.type(screen.getByRole('textbox', { name: /what did you eat/i }), 'chicken and broccoli');
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
     await waitFor(() => expect(screen.getByDisplayValue('Chicken Breast')).toBeInTheDocument());
@@ -65,8 +67,8 @@ describe('AiEntryPage', () => {
       .mockResolvedValueOnce(estimateOk([row({ name: 'Rice' }), row({ name: 'Beans' })]));
 
     renderPage();
-    await screen.findByText('What did you eat?');
-    await userEvent.type(screen.getByLabelText('What did you eat?'), 'rice and beans');
+    await screen.findByRole('textbox', { name: /what did you eat/i });
+    await userEvent.type(screen.getByRole('textbox', { name: /what did you eat/i }), 'rice and beans');
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
     await screen.findByDisplayValue('Rice');
@@ -83,8 +85,8 @@ describe('AiEntryPage', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => [] }); // batch save
 
     renderPage();
-    await screen.findByText('What did you eat?');
-    await userEvent.type(screen.getByLabelText('What did you eat?'), 'rice');
+    await screen.findByRole('textbox', { name: /what did you eat/i });
+    await userEvent.type(screen.getByRole('textbox', { name: /what did you eat/i }), 'rice');
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
     const calInput = await screen.findByDisplayValue('205');
@@ -108,8 +110,8 @@ describe('AiEntryPage', () => {
       .mockResolvedValueOnce(estimateOk([row({ name: 'Wholemeal Toast' })]));
 
     renderPage();
-    await screen.findByText('What did you eat?');
-    await userEvent.type(screen.getByLabelText('What did you eat?'), 'toast');
+    await screen.findByRole('textbox', { name: /what did you eat/i });
+    await userEvent.type(screen.getByRole('textbox', { name: /what did you eat/i }), 'toast');
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
     await screen.findByDisplayValue('Toast');
@@ -128,8 +130,8 @@ describe('AiEntryPage', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: false, error: "Couldn't estimate — enter it manually.", overallConfidence: 0, source: 'AiText', items: [] }) });
 
     renderPage();
-    await screen.findByText('What did you eat?');
-    await userEvent.type(screen.getByLabelText('What did you eat?'), 'something');
+    await screen.findByRole('textbox', { name: /what did you eat/i });
+    await userEvent.type(screen.getByRole('textbox', { name: /what did you eat/i }), 'something');
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/enter it manually/i));
@@ -140,6 +142,6 @@ describe('AiEntryPage', () => {
 
     renderPage();
     await waitFor(() => expect(screen.getByText(/turned off/i)).toBeInTheDocument());
-    expect(screen.queryByLabelText('What did you eat?')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: /what did you eat/i })).toBeNull();
   });
 });
