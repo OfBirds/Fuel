@@ -26,7 +26,7 @@ function renderPage(route = '/entry/ai?meal=Lunch&date=2026-06-14') {
   );
 }
 
-const aiOn = () => ({ ok: true, json: async () => ({ enabled: true, supportsImages: true }) });
+const aiOn = () => ({ ok: true, json: async () => ({ enabled: true, supportsText: true, supportsImages: true }) });
 
 function estimateOk(items: unknown[], overall = 0.7) {
   return { ok: true, json: async () => ({ ok: true, error: null, overallConfidence: overall, source: 'AiText', items }) };
@@ -155,7 +155,7 @@ describe('AiEntryPage', () => {
   });
 
   it('hides the photo tab when the provider cannot do images', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ enabled: true, supportsImages: false }) });
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ enabled: true, supportsText: true, supportsImages: false }) });
 
     renderPage();
     await screen.findByRole('textbox', { name: /what did you eat/i });
@@ -176,10 +176,10 @@ describe('AiEntryPage', () => {
   });
 
   it('shows a disabled notice when AI is off', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ enabled: false, supportsImages: false }) });
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ enabled: false, supportsText: false, supportsImages: false }) });
 
     renderPage();
-    await waitFor(() => expect(screen.getByText(/turned off/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/isn't configured/i)).toBeInTheDocument());
     expect(screen.queryByRole('textbox', { name: /what did you eat/i })).toBeNull();
   });
 });

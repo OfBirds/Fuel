@@ -1,17 +1,22 @@
 namespace Api.Services;
 
 /// <summary>
-/// The one seam for AI calorie/macro estimation (text and photo). The provider is chosen
-/// at deploy time (AI_* env keys); callers depend only on this interface. A single query
-/// yields MANY line-items — see docs/ai-estimation.md. Every call takes a
-/// <see cref="CancellationToken"/> so a user "Cancel" (or the per-call timeout) tears
-/// down the in-flight provider request.
+/// One provider connection: the endpoint, the (optional) API key, the model, and whether
+/// that model can see images. This is the only thing that differs between providers — the
+/// <see cref="EstimatorChain"/> builds one per configured <see cref="Api.Config.AiProvider"/>
+/// and hands it to the matching convention's estimator.
+/// </summary>
+public record ProviderConnection(string BaseUrl, string? ApiKey, string Model, bool SupportsImages);
+
+/// <summary>
+/// The seam for a single AI calorie/macro estimator over one connection (text + photo). A
+/// single query yields MANY line-items — see docs/ai-estimation.md. Every call takes a
+/// <see cref="CancellationToken"/> so a user "Cancel" (or the per-call timeout) tears down
+/// the in-flight provider request. Concrete impls: <see cref="AnthropicEstimator"/> and
+/// <see cref="OpenAiEstimator"/>, one per wire convention.
 /// </summary>
 public interface INutritionEstimator
 {
-    /// <summary>Whether this provider's model can actually see images (the photo path).</summary>
-    bool SupportsImages { get; }
-
     Task<NutritionEstimate> EstimateFromTextAsync(
         string description, IReadOnlyList<string> notes, CancellationToken ct);
 
@@ -40,30 +45,9 @@ public class EstimatedItem
 }
 
 /// <summary>
-/// Thin composite that delegates text→DeepSeek, image→Claude (both are
-/// <see cref="AnthropicEstimator"/> instances over different connections). If only one
-/// provider is configured it serves both directions. Photos go to Claude because
-/// DeepSeek's v4 models are text-only — their Anthropic-compatible endpoint accepts an
-/// image but silently substitutes "[Unsupported Image]" before the model sees it, so it
-/// returns nothing usable. <see cref="SupportsImages"/> reflects the image provider.
+/// Raised when a provider call fails (disabled, transient failure after retry, bad JSON, or
+/// an empty/unusable result). The <see cref="EstimatorChain"/> catches it to fall through to
+/// the next provider; the controller catches it to degrade to manual entry
+/// (docs/ai-providers.md §Resilience).
 /// </summary>
-public class CompositeNutritionEstimator(
-    INutritionEstimator textProvider, INutritionEstimator imageProvider) : INutritionEstimator
-{
-    public bool SupportsImages => imageProvider.SupportsImages;
-
-    public Task<NutritionEstimate> EstimateFromTextAsync(
-        string description, IReadOnlyList<string> notes, CancellationToken ct)
-        => textProvider.EstimateFromTextAsync(description, notes, ct);
-
-    public Task<NutritionEstimate> EstimateFromImageAsync(
-        byte[] image, string contentType, IReadOnlyList<string> notes, CancellationToken ct)
-        => imageProvider.EstimateFromImageAsync(image, contentType, notes, ct);
-}
-
-/// <summary>
-/// Raised when AI is disabled or the provider call fails after retry. The controller
-/// catches it and returns a "couldn't estimate — enter it manually" response so
-/// logging is never blocked (docs/ai-providers.md §Resilience).
-/// </summary>
-public class AiUnavailableException(string message) : Exception(message);
+public class AiUnavailableException(string message, Exception? inner = null) : Exception(message, inner);

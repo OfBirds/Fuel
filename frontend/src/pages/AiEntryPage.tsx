@@ -58,6 +58,7 @@ function AiEntryPage() {
   const queryDate = searchParams.get('date') || localDate();
 
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
+  const [supportsText, setSupportsText] = useState(false);
   const [supportsImages, setSupportsImages] = useState(false);
   const [mode, setMode] = useState<'text' | 'photo'>('text');
   const [description, setDescription] = useState('');
@@ -83,8 +84,8 @@ function AiEntryPage() {
   const [saving, setSaving] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  // AI affordances render only when the operator has AI on; the photo tab needs an
-  // image-capable provider (supportsImages).
+  // AI affordances render per modality: the Describe input needs a text provider, the
+  // Photo tab needs a vision provider. Each is configured independently in the chain.
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -93,7 +94,10 @@ function AiEntryPage() {
         if (alive && res.ok) {
           const status = await res.json();
           setAiEnabled(status.enabled === true);
+          setSupportsText(status.supportsText === true);
           setSupportsImages(status.supportsImages === true);
+          // If only photo is configured, start on the photo input.
+          if (status.supportsText !== true && status.supportsImages === true) setMode('photo');
         } else if (alive) setAiEnabled(false);
       } catch {
         if (alive) setAiEnabled(false);
@@ -284,14 +288,14 @@ function AiEntryPage() {
 
       {aiEnabled === false ? (
         <div className="ai-disabled-notice">
-          <p>AI estimation is turned off on this server.</p>
+          <p>AI estimation isn't configured on this server.</p>
           <Link to={manualHref} className="save-btn ai-manual-link">Enter it manually</Link>
         </div>
       ) : (
         <>
           {error && <p className="form-error" role="alert">{error}</p>}
 
-          {supportsImages && (
+          {supportsText && supportsImages && (
             <div className="ai-mode-toggle" role="tablist" aria-label="Input method">
               <button
                 role="tab" type="button"

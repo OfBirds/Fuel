@@ -52,24 +52,24 @@ services:
       # Periodic on-disk backups (BackupService). Off unless BACKUP_ENABLED=true.
       BACKUP_ENABLED: ${BACKUP_ENABLED}
       BACKUP_INTERVAL: ${BACKUP_INTERVAL}
-      # AI nutrition estimator. Off unless AI_ENABLED=true; AI_API_KEY is a secret.
-      AI_ENABLED: ${AI_ENABLED}
-      AI_PROVIDER: ${AI_PROVIDER}
-      AI_BASE_URL: ${AI_BASE_URL}
-      AI_MODEL: ${AI_MODEL}
-      AI_API_KEY: ${AI_API_KEY}
+      # AI nutrition estimator (docs/ai-providers.md). The provider LIST lives in the
+      # mounted ai-providers.json (hot-reloaded, see volumes below); only secret key
+      # VALUES come from env as AI_KEY_<NAME>. Adding a new key = add a line here +
+      # redeploy; reorder/enable/model/url changes are live file edits, no redeploy.
+      AI_CONFIG_FILE: /app/ai-providers.json
       AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS}
-      # Claude for photo estimation (DeepSeek's v4 models are text-only). Separate connection.
-      AI_CLAUDE_ENABLED: ${AI_CLAUDE_ENABLED}
-      AI_CLAUDE_API_KEY: ${AI_CLAUDE_API_KEY}
-      AI_CLAUDE_BASE_URL: ${AI_CLAUDE_BASE_URL}
-      AI_CLAUDE_MODEL: ${AI_CLAUDE_MODEL}
+      AI_KEY_DEEPSEEK: ${AI_KEY_DEEPSEEK}
+      AI_KEY_CLAUDE: ${AI_KEY_CLAUDE}
       # Structured logs -> Seq (internal). UI is published below per stack.
       SEQ_URL: http://seq
     ports:
       - "${APP_PORT}:8080"
     networks:
       - internal
+    volumes:
+      # Hot-reloadable AI provider registry, mounted read-only. Edit the host file
+      # (AI_CONFIG_HOST_PATH) → the app's IOptionsMonitor reloads it live (docs/ai-providers.md).
+      - ${AI_CONFIG_HOST_PATH}:/app/ai-providers.json:ro
 
   seq:
     image: datalust/seq:latest

@@ -93,49 +93,24 @@ builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 builder.Services.AddHostedService<ReleaseNotifier>();
 builder.Services.AddHostedService<BackupService>();
 
-// AI nutrition estimator — provider chosen at deploy time from flat AI_* keys (the
-// API key stays in the env file). Wired only when enabled + configured; otherwise a
-// no-op estimator keeps DI resolvable and the UI shows AI as off. See docs/ai-providers.md.
-static bool Blank(string? s) => string.IsNullOrWhiteSpace(s);
-var aiOptions = new Api.Config.AiOptions
-{
-    Provider = builder.Configuration["AI_PROVIDER"] ?? "deepseek",
-    ApiKey = builder.Configuration["AI_API_KEY"] ?? "",
-    // Coalesce blank (not just missing) base URLs to defaults — an env file/compose can
-    // pass an empty string, which would otherwise produce an invalid relative URI.
-    BaseUrl = Blank(builder.Configuration["AI_BASE_URL"]) ? "https://api.deepseek.com/anthropic" : builder.Configuration["AI_BASE_URL"]!,
-    Model = builder.Configuration["AI_MODEL"] ?? "deepseek-v4-flash",
-    Enabled = string.Equals(builder.Configuration["AI_ENABLED"], "true", StringComparison.OrdinalIgnoreCase),
-    TimeoutSeconds = int.TryParse(builder.Configuration["AI_TIMEOUT_SECONDS"], out var aiTimeout) ? aiTimeout : 30,
-    ClaudeEnabled = string.Equals(builder.Configuration["AI_CLAUDE_ENABLED"], "true", StringComparison.OrdinalIgnoreCase),
-    ClaudeApiKey = builder.Configuration["AI_CLAUDE_API_KEY"] ?? "",
-    ClaudeBaseUrl = Blank(builder.Configuration["AI_CLAUDE_BASE_URL"]) ? "https://api.anthropic.com" : builder.Configuration["AI_CLAUDE_BASE_URL"]!,
-    ClaudeModel = builder.Configuration["AI_CLAUDE_MODEL"] ?? "claude-haiku-4-5-20251001",
-};
-builder.Services.AddSingleton(aiOptions);
+// AI nutrition estimator — a hot-reloadable registry of providers (docs/ai-providers.md).
+// The provider LIST lives in a JSON file (path in AI_CONFIG_FILE), added as a
+// reloadOnChange config source so reorder/enable/model edits apply live, no redeploy.
+// Secret key VALUES stay in flat AI_KEY_<NAME> env vars; a provider references one by name.
+// EstimatorChain resolves keys per-request and tries providers in priority order per
+// modality (text/vision), falling through on failure. AnthropicEstimator and OpenAiEstimator
+// implement the two wire conventions (the latter also covers self-hosted Ollama/vLLM).
+var aiConfigFile = builder.Configuration["AI_CONFIG_FILE"];
+if (!string.IsNullOrWhiteSpace(aiConfigFile))
+    builder.Configuration.AddJsonFile(aiConfigFile, optional: true, reloadOnChange: true);
 
-// Both providers speak the Anthropic Messages API, so ONE implementation
-// (AnthropicEstimator) drives both — they differ only by *connection* (endpoint + key +
-// model). DeepSeek serves an Anthropic-compatible endpoint at /anthropic, used for text;
-// Claude (vision) handles photos, because DeepSeek's v4 models are text-only (their
-// /anthropic endpoint accepts an image but silently drops it as "[Unsupported Image]").
-// A composite routes text→DeepSeek, image→Claude; if only one is configured it serves
-// both directions. Each connection gets its own named HttpClient + resilience pipeline.
-// (The OpenAI-compatible OpenAiEstimator is parked for a future OpenAI-format provider.)
+builder.Services.Configure<Api.Config.AiProvidersOptions>(builder.Configuration.GetSection("ai"));
 
-var hasText = aiOptions.Enabled && !string.IsNullOrWhiteSpace(aiOptions.ApiKey);
-var hasImage = aiOptions.ClaudeEnabled && !string.IsNullOrWhiteSpace(aiOptions.ClaudeApiKey);
-
-void AddAnthropicClient(string name, string baseUrl)
-{
-    builder.Services.AddHttpClient(name, c =>
+var aiTimeout = int.TryParse(builder.Configuration["AI_TIMEOUT_SECONDS"], out var t) ? t : 30;
+builder.Services.AddHttpClient("ai", c => c.Timeout = Timeout.InfiniteTimeSpan) // pipeline owns the timeout
+    .AddResilienceHandler("ai-resilience", b =>
     {
-        c.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
-        c.Timeout = Timeout.InfiniteTimeSpan; // the resilience pipeline owns the timeout
-    })
-    .AddResilienceHandler($"{name}-resilience", b =>
-    {
-        b.AddTimeout(TimeSpan.FromSeconds(Math.Max(1, aiOptions.TimeoutSeconds)));
+        b.AddTimeout(TimeSpan.FromSeconds(Math.Max(1, aiTimeout)));
         b.AddRetry(new HttpRetryStrategyOptions
         {
             MaxRetryAttempts = 1,
@@ -144,41 +119,8 @@ void AddAnthropicClient(string name, string baseUrl)
             UseJitter = true,
         });
     });
-}
 
-if (!hasText && !hasImage)
-{
-    builder.Services.AddSingleton<INutritionEstimator, DisabledNutritionEstimator>();
-    if (aiOptions.Enabled)
-        Log.Warning("AI_ENABLED is true but no provider/key is configured — AI estimation disabled.");
-}
-else
-{
-    if (hasText) AddAnthropicClient("ai-text", aiOptions.BaseUrl);
-    if (hasImage) AddAnthropicClient("ai-image", aiOptions.ClaudeBaseUrl);
-
-    builder.Services.AddSingleton<INutritionEstimator>(sp =>
-    {
-        var clients = sp.GetRequiredService<IHttpClientFactory>();
-        var loggers = sp.GetRequiredService<ILoggerFactory>();
-
-        // DeepSeek's text models can't see images → SupportsImages: false; Claude can.
-        AnthropicEstimator? text = hasText
-            ? new(clients.CreateClient("ai-text"),
-                  new AnthropicConnection(aiOptions.ApiKey, aiOptions.Model, SupportsImages: false),
-                  loggers.CreateLogger<AnthropicEstimator>())
-            : null;
-        AnthropicEstimator? image = hasImage
-            ? new(clients.CreateClient("ai-image"),
-                  new AnthropicConnection(aiOptions.ClaudeApiKey, aiOptions.ClaudeModel, SupportsImages: true),
-                  loggers.CreateLogger<AnthropicEstimator>())
-            : null;
-
-        return new CompositeNutritionEstimator(
-            textProvider: text ?? image!,   // fall back to the other if only one is configured
-            imageProvider: image ?? text!);
-    });
-}
+builder.Services.AddSingleton<IEstimatorChain, EstimatorChain>();
 
 var app = builder.Build();
 

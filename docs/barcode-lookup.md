@@ -52,7 +52,7 @@ BarcodeMatch { Name, CaloriesPerGram, ProteinPerGram, CarbsPerGram, FatPerGram, 
 | `BARCODE_TIMEOUT_SECONDS` | guard for the external call |
 
 No secret/API key for Open Food Facts. If a future source needs one, it follows the
-`AI_API_KEY` handling (`/opt/fuel/.env.*`, never committed).
+`AI_KEY_*` handling (`/opt/fuel/.env.*`, never committed).
 
 ## Resilience
 External call → time-box (`BARCODE_TIMEOUT_SECONDS`); on timeout/error or a not-found,

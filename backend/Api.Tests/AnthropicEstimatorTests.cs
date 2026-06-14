@@ -13,13 +13,12 @@ namespace Api.Tests;
 /// </summary>
 public class AnthropicEstimatorTests
 {
-    private static AnthropicEstimator Estimator(string responseBody, bool supportsImages = true,
-        List<string>? capturedBodies = null)
+    private static AnthropicEstimator Estimator(string responseBody, List<string>? capturedBodies = null)
     {
         var handler = new StubHandler(responseBody, capturedBodies);
-        var http = new HttpClient(handler) { BaseAddress = new Uri("https://example.test/") };
+        var http = new HttpClient(handler);
         return new AnthropicEstimator(http,
-            new AnthropicConnection("test-key", "test-model", supportsImages),
+            new ProviderConnection("https://example.test", "test-key", "test-model", SupportsImages: true),
             NullLogger<AnthropicEstimator>.Instance);
     }
 
@@ -70,13 +69,6 @@ public class AnthropicEstimatorTests
 
         await Assert.ThrowsAsync<AiUnavailableException>(() =>
             Estimator(body).EstimateFromTextAsync("x", [], default));
-    }
-
-    [Fact]
-    public void SupportsImages_ReflectsConnection()
-    {
-        Assert.True(Estimator("{}", supportsImages: true).SupportsImages);
-        Assert.False(Estimator("{}", supportsImages: false).SupportsImages);
     }
 
     [Fact]

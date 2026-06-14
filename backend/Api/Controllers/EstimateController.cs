@@ -1,4 +1,3 @@
-using Api.Config;
 using Api.Data;
 using Api.DTOs;
 using Api.Services;
@@ -11,14 +10,19 @@ namespace Api.Controllers;
 [Route("api/user/{userId}")]
 public class EstimateController(
     AppDbContext db,
-    INutritionEstimator estimator,
-    AiOptions options,
+    IEstimatorChain estimator,
     ILogger<EstimateController> logger) : ControllerBase
 {
-    /// <summary>Whether AI affordances should render (lets the SPA disable them when off).</summary>
+    /// <summary>Which AI affordances should render — text and photo are gated independently,
+    /// since the provider chains for each are configured separately.</summary>
     [HttpGet("/api/ai/status")]
     public ActionResult AiStatus()
-        => Ok(new { enabled = options.Enabled, supportsImages = options.Enabled && estimator.SupportsImages });
+        => Ok(new
+        {
+            enabled = estimator.SupportsText || estimator.SupportsImages,
+            supportsText = estimator.SupportsText,
+            supportsImages = estimator.SupportsImages,
+        });
 
     /// <summary>
     /// Estimate nutrition from a typed description → editable review rows. Side-effect
@@ -32,8 +36,8 @@ public class EstimateController(
         var user = await db.Users.FindAsync([userId], ct);
         if (user is null) return NotFound();
 
-        if (!options.Enabled)
-            return Ok(EstimateResponse.Unavailable("AI estimation is turned off."));
+        if (!estimator.SupportsText)
+            return Ok(EstimateResponse.Unavailable("AI text estimation isn't configured."));
         if (string.IsNullOrWhiteSpace(request.Description))
             return BadRequest(new { error = "Description is required." });
 
@@ -77,10 +81,8 @@ public class EstimateController(
         var user = await db.Users.FindAsync([userId], ct);
         if (user is null) return NotFound();
 
-        if (!options.Enabled)
-            return Ok(EstimateResponse.Unavailable("AI estimation is turned off."));
         if (!estimator.SupportsImages)
-            return Ok(EstimateResponse.Unavailable("Photo estimation isn't available on this server."));
+            return Ok(EstimateResponse.Unavailable("Photo estimation isn't configured."));
         if (request.Image is null || request.Image.Length == 0)
             return BadRequest(new { error = "An image is required." });
         if (!request.Image.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))

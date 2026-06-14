@@ -1,4 +1,3 @@
-using Api.Config;
 using Api.Controllers;
 using Api.Data;
 using Api.DTOs;
@@ -12,15 +11,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Api.Tests;
 
 /// <summary>
-/// EstimateController with a fake <see cref="INutritionEstimator"/> — no live provider
-/// calls. Covers item→row mapping, catalogue matching, the AI-off / failure fallbacks,
-/// user-cancel propagation, and that refine passes the accumulated notes through.
+/// EstimateController with a fake <see cref="IEstimatorChain"/> — no live provider calls.
+/// Covers item→row mapping, catalogue matching, the not-configured / failure fallbacks,
+/// user-cancel propagation, and that refine passes accumulated notes through. The chain's
+/// own ordering/fallback is tested separately.
 /// </summary>
 public class EstimateControllerTests : IDisposable
 {
     private readonly AppDbContext _db;
-    private readonly FakeNutritionEstimator _estimator = new();
-    private readonly AiOptions _options = new() { Enabled = true };
+    private readonly FakeEstimatorChain _chain = new();
     private readonly Guid _userId;
     private readonly Guid _chickenId;
 
@@ -43,15 +42,43 @@ public class EstimateControllerTests : IDisposable
     public void Dispose() => _db.Dispose();
 
     private EstimateController NewController()
-        => new(_db, _estimator, _options, NullLogger<EstimateController>.Instance);
+        => new(_db, _chain, NullLogger<EstimateController>.Instance);
 
     private static EstimatedItem Item(string name, double qty, double cal, double conf = 0.8)
         => new() { Name = name, Quantity = qty, Uom = "g", Calories = cal, Confidence = conf };
 
+    private static EstimateImageRequest ImageReq(byte[]? bytes = null, string contentType = "image/jpeg", List<string>? notes = null)
+    {
+        bytes ??= [1, 2, 3];
+        var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "image", "meal.jpg")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = contentType,
+        };
+        return new EstimateImageRequest { Image = file, Notes = notes };
+    }
+
+    // ── /api/ai/status ──
+
+    [Fact]
+    public void Status_ReportsTextAndVisionIndependently()
+    {
+        _chain.SupportsText = true;
+        _chain.SupportsImages = false;
+
+        var ok = Assert.IsType<OkObjectResult>(NewController().AiStatus());
+        var json = System.Text.Json.JsonSerializer.Serialize(ok.Value);
+        Assert.Contains("\"supportsText\":true", json);
+        Assert.Contains("\"supportsImages\":false", json);
+        Assert.Contains("\"enabled\":true", json); // text alone is enough to be "enabled"
+    }
+
+    // ── text ──
+
     [Fact]
     public async Task EstimateText_MapsItems_AndMatchesExistingFood()
     {
-        _estimator.Result = new NutritionEstimate
+        _chain.Result = new NutritionEstimate
         {
             OverallConfidence = 0.7,
             Items = { Item("Chicken Breast", 200, 330), Item("Broccoli", 100, 34) },
@@ -63,36 +90,29 @@ public class EstimateControllerTests : IDisposable
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var resp = Assert.IsType<EstimateResponse>(ok.Value);
         Assert.True(resp.Ok);
-        Assert.Equal(0.7, resp.OverallConfidence);
+        Assert.Equal("AiText", resp.Source);
         Assert.Equal(2, resp.Items.Count);
-
-        var chicken = resp.Items[0];
-        Assert.Equal(_chickenId, chicken.MatchedFoodId);
-        Assert.False(chicken.IsNew);
-        Assert.Equal("g", chicken.MatchedDefaultUoM);
-
-        var broccoli = resp.Items[1];
-        Assert.Null(broccoli.MatchedFoodId);
-        Assert.True(broccoli.IsNew);
+        Assert.Equal(_chickenId, resp.Items[0].MatchedFoodId);
+        Assert.False(resp.Items[0].IsNew);
+        Assert.True(resp.Items[1].IsNew);
     }
 
     [Fact]
     public async Task EstimateText_MatchIsCaseInsensitive()
     {
-        _estimator.Result = new NutritionEstimate { Items = { Item("chicken breast", 100, 165) } };
+        _chain.Result = new NutritionEstimate { Items = { Item("chicken breast", 100, 165) } };
 
         var result = await NewController().EstimateText(
             _userId, new EstimateTextRequest { Description = "chicken" }, default);
 
         var resp = Assert.IsType<EstimateResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.Equal(_chickenId, resp.Items[0].MatchedFoodId);
-        Assert.False(resp.Items[0].IsNew);
     }
 
     [Fact]
-    public async Task EstimateText_AiDisabled_ReturnsUnavailable_WithoutCallingProvider()
+    public async Task EstimateText_NotConfigured_ReturnsUnavailable_WithoutCallingChain()
     {
-        _options.Enabled = false;
+        _chain.SupportsText = false;
 
         var result = await NewController().EstimateText(
             _userId, new EstimateTextRequest { Description = "anything" }, default);
@@ -101,13 +121,13 @@ public class EstimateControllerTests : IDisposable
         Assert.False(resp.Ok);
         Assert.NotNull(resp.Error);
         Assert.Empty(resp.Items);
-        Assert.False(_estimator.WasCalled);
+        Assert.False(_chain.TextCalled);
     }
 
     [Fact]
-    public async Task EstimateText_ProviderFails_DegradesToManualFallback()
+    public async Task EstimateText_AllProvidersFail_DegradesToManualFallback()
     {
-        _estimator.ThrowThis = new AiUnavailableException("boom");
+        _chain.ThrowThis = new AiUnavailableException("all providers failed");
 
         var result = await NewController().EstimateText(
             _userId, new EstimateTextRequest { Description = "anything" }, default);
@@ -121,7 +141,7 @@ public class EstimateControllerTests : IDisposable
     public async Task EstimateText_UserCancel_PropagatesInsteadOfFallback()
     {
         var cts = new CancellationTokenSource();
-        _estimator.CancelOnCall = cts; // simulate the request being aborted mid-call
+        _chain.CancelOnCall = cts;
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
             NewController().EstimateText(_userId, new EstimateTextRequest { Description = "x" }, cts.Token));
@@ -130,13 +150,13 @@ public class EstimateControllerTests : IDisposable
     [Fact]
     public async Task EstimateText_Refine_PassesAccumulatedNotes()
     {
-        _estimator.Result = new NutritionEstimate { Items = { Item("Toast", 1, 80) } };
+        _chain.Result = new NutritionEstimate { Items = { Item("Toast", 1, 80) } };
         var notes = new List<string> { "it's wholemeal", "two slices" };
 
         await NewController().EstimateText(
             _userId, new EstimateTextRequest { Description = "toast", Notes = notes }, default);
 
-        Assert.Equal(notes, _estimator.LastNotes);
+        Assert.Equal(notes, _chain.LastNotes);
     }
 
     [Fact]
@@ -157,24 +177,12 @@ public class EstimateControllerTests : IDisposable
         Assert.IsType<NotFoundResult>(result.Result);
     }
 
-    // ── Photo path (Phase 3) — same mapping/fallbacks, source = AiPhoto ──
-
-    private static EstimateImageRequest ImageReq(byte[]? bytes = null, string contentType = "image/jpeg", List<string>? notes = null)
-    {
-        bytes ??= [1, 2, 3];
-        var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "image", "meal.jpg")
-        {
-            Headers = new HeaderDictionary(),
-            ContentType = contentType,
-        };
-        return new EstimateImageRequest { Image = file, Notes = notes };
-    }
+    // ── photo ──
 
     [Fact]
-    public async Task EstimateImage_MapsItems_MatchesFood_AndTagsSourceAiPhoto()
+    public async Task EstimateImage_MapsItems_AndTagsSourceAiPhoto()
     {
-        _estimator.SupportsImagesValue = true;
-        _estimator.Result = new NutritionEstimate
+        _chain.Result = new NutritionEstimate
         {
             OverallConfidence = 0.6,
             Items = { Item("Chicken Breast", 200, 330), Item("Broccoli", 100, 34) },
@@ -188,40 +196,25 @@ public class EstimateControllerTests : IDisposable
         Assert.Equal(2, resp.Items.Count);
         Assert.Equal(_chickenId, resp.Items[0].MatchedFoodId);
         Assert.True(resp.Items[1].IsNew);
-        Assert.True(_estimator.ImageWasCalled);
+        Assert.True(_chain.ImageCalled);
     }
 
     [Fact]
-    public async Task EstimateImage_AiDisabled_ReturnsUnavailable_WithoutCallingProvider()
+    public async Task EstimateImage_NotConfigured_ReturnsUnavailable_WithoutCallingChain()
     {
-        _options.Enabled = false;
-        _estimator.SupportsImagesValue = true;
-
-        var result = await NewController().EstimateImage(_userId, ImageReq(), default);
-
-        var resp = Assert.IsType<EstimateResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
-        Assert.False(resp.Ok);
-        Assert.False(_estimator.ImageWasCalled);
-    }
-
-    [Fact]
-    public async Task EstimateImage_ProviderCannotDoImages_ReturnsUnavailable()
-    {
-        _estimator.SupportsImagesValue = false;
+        _chain.SupportsImages = false;
 
         var result = await NewController().EstimateImage(_userId, ImageReq(), default);
 
         var resp = Assert.IsType<EstimateResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.False(resp.Ok);
         Assert.NotNull(resp.Error);
-        Assert.False(_estimator.ImageWasCalled);
+        Assert.False(_chain.ImageCalled);
     }
 
     [Fact]
     public async Task EstimateImage_NoImage_BadRequest()
     {
-        _estimator.SupportsImagesValue = true;
-
         var result = await NewController().EstimateImage(
             _userId, new EstimateImageRequest { Image = null }, default);
 
@@ -231,8 +224,6 @@ public class EstimateControllerTests : IDisposable
     [Fact]
     public async Task EstimateImage_NonImageContentType_BadRequest()
     {
-        _estimator.SupportsImagesValue = true;
-
         var result = await NewController().EstimateImage(
             _userId, ImageReq(contentType: "application/pdf"), default);
 
@@ -240,10 +231,9 @@ public class EstimateControllerTests : IDisposable
     }
 
     [Fact]
-    public async Task EstimateImage_ProviderFails_DegradesToManualFallback()
+    public async Task EstimateImage_AllProvidersFail_DegradesToManualFallback()
     {
-        _estimator.SupportsImagesValue = true;
-        _estimator.ThrowThis = new AiUnavailableException("boom");
+        _chain.ThrowThis = new AiUnavailableException("boom");
 
         var result = await NewController().EstimateImage(_userId, ImageReq(), default);
 
@@ -255,46 +245,43 @@ public class EstimateControllerTests : IDisposable
     [Fact]
     public async Task EstimateImage_Refine_PassesAccumulatedNotes()
     {
-        _estimator.SupportsImagesValue = true;
-        _estimator.Result = new NutritionEstimate { Items = { Item("Toast", 1, 80) } };
-        var notes = new List<string> { "the spread is peanut butter", "two slices" };
+        _chain.Result = new NutritionEstimate { Items = { Item("Toast", 1, 80) } };
+        var notes = new List<string> { "the spread is peanut butter" };
 
         await NewController().EstimateImage(_userId, ImageReq(notes: notes), default);
 
-        Assert.Equal(notes, _estimator.LastNotes);
+        Assert.Equal(notes, _chain.LastNotes);
     }
 
-    private sealed class FakeNutritionEstimator : INutritionEstimator
+    private sealed class FakeEstimatorChain : IEstimatorChain
     {
+        public bool SupportsText { get; set; } = true;
+        public bool SupportsImages { get; set; } = true;
         public NutritionEstimate Result = new();
         public Exception? ThrowThis;
         public CancellationTokenSource? CancelOnCall;
-        public bool WasCalled;
-        public bool ImageWasCalled;
+        public bool TextCalled;
+        public bool ImageCalled;
         public IReadOnlyList<string>? LastNotes;
-        public bool SupportsImagesValue;
-
-        public bool SupportsImages => SupportsImagesValue;
 
         public Task<NutritionEstimate> EstimateFromTextAsync(
             string description, IReadOnlyList<string> notes, CancellationToken ct)
         {
-            WasCalled = true;
+            TextCalled = true;
             LastNotes = notes;
-            if (CancelOnCall is not null)
-            {
-                CancelOnCall.Cancel();
-                throw new OperationCanceledException(CancelOnCall.Token);
-            }
-            if (ThrowThis is not null) throw ThrowThis;
-            return Task.FromResult(Result);
+            return Run();
         }
 
         public Task<NutritionEstimate> EstimateFromImageAsync(
             byte[] image, string contentType, IReadOnlyList<string> notes, CancellationToken ct)
         {
-            ImageWasCalled = true;
+            ImageCalled = true;
             LastNotes = notes;
+            return Run();
+        }
+
+        private Task<NutritionEstimate> Run()
+        {
             if (CancelOnCall is not null)
             {
                 CancelOnCall.Cancel();

@@ -47,8 +47,9 @@ line-items**, and the entry screen is a **multi-row review**:
 
 ## Phase 2 — text
 1. User types a description and hits **Estimate**.
-2. Backend calls `INutritionEstimator.EstimateFromTextAsync(description, notes)`
-   (`notes` empty on the first pass; provider chosen by `AI_PROVIDER`, DeepSeek first).
+2. Backend calls `EstimatorChain.EstimateFromTextAsync(description, notes)` (`notes` empty
+   on the first pass; the chain tries text providers in `order`, falling through on failure
+   — see `ai-providers.md`).
 3. The returned items populate the review screen. `Source = AiText`, per-item
    `AiConfidence` recorded.
 4. New foods are **defined into the catalogue first** (see §"new food" below), then

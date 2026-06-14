@@ -1,0 +1,36 @@
+{
+  "_comment": "AI provider registry — copy to the host path in AI_CONFIG_HOST_PATH (e.g. /opt/fuel/ai-providers.staging.json), mounted read-only into the app and hot-reloaded on edit (docs/ai-providers.md). No secrets here: 'keyRef' names an env key (keyRef 'claude' → AI_KEY_CLAUDE); omit it for key-less local servers (Ollama). Lower 'order' runs first within each capability chain; on failure the chain falls through to the next. 'enabled': false skips an entry without deleting it.",
+  "ai": {
+    "providers": [
+      {
+        "name": "ollama-local",
+        "convention": "openai",
+        "capabilities": ["text", "vision"],
+        "baseUrl": "http://gpubox.lan:11434/v1",
+        "model": "qwen2.5-vl",
+        "order": 1,
+        "enabled": false
+      },
+      {
+        "name": "deepseek",
+        "convention": "anthropic",
+        "capabilities": ["text"],
+        "baseUrl": "https://api.deepseek.com/anthropic",
+        "model": "deepseek-v4-flash",
+        "order": 2,
+        "enabled": true,
+        "keyRef": "deepseek"
+      },
+      {
+        "name": "claude-haiku",
+        "convention": "anthropic",
+        "capabilities": ["vision", "text"],
+        "baseUrl": "https://api.anthropic.com",
+        "model": "claude-haiku-4-5-20251001",
+        "order": 2,
+        "enabled": true,
+        "keyRef": "claude"
+      }
+    ]
+  }
+}
