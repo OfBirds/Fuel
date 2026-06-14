@@ -131,6 +131,13 @@ scripts/              rename.sh / rename.ps1 (template provenance; vestigial now
 
 ## Docs
 
+**Product / feature specs (design)**
+- [`docs/food-catalogue-and-logging.md`](docs/food-catalogue-and-logging.md) — Phase 0: catalogue + manual logging + day view
+- [`docs/profile-and-weight.md`](docs/profile-and-weight.md) — Phase 1: profile, weight register, metabolism/BMI, meal-pause
+- [`docs/ai-estimation.md`](docs/ai-estimation.md) — Phase 2/3: AI calorie estimation from text & photo
+- [`docs/ai-providers.md`](docs/ai-providers.md) — the deploy-time, swappable AI provider abstraction
+
+**Platform**
 - [`docs/infrastructure.md`](docs/infrastructure.md) — CI/CD + hosting design
 - [`docs/deploy-runbook.md`](docs/deploy-runbook.md) — one-time host/runner setup
 - [`docs/notifications.md`](docs/notifications.md) — versioning + release emails

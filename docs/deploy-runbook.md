@@ -1,9 +1,12 @@
 # Deploy runbook (homelab)
 
-One-time setup of the Debian VM `source` (`vm.example.lan`) so that pushes to
-`main`/`release` auto-deploy via the GitHub Actions workflow
-(`.github/workflows/deploy.yml`). Run everything below **on the VM** as a normal
-sudo-capable user.
+Host setup on the Debian VM `source` (`vm.example.lan` — substitute the VM's real
+LAN address) so pushes to `main`/`release` auto-deploy via
+`.github/workflows/deploy.yml`. Run on the VM as a sudo-capable user. Fuel shares
+the host with other template-based apps, so it gets its **own** runner instance and
+its **own** ports.
+
+> Reusable across projects: the `setup-deploy-pipeline` skill automates this.
 
 ## 1. Docker present
 
@@ -11,99 +14,92 @@ sudo-capable user.
 docker version            # daemon reachable?
 docker compose version    # v2 compose plugin present?
 ```
-
-If missing, install Docker Engine + the compose plugin (get.docker.com), then:
-
+If missing, install Docker Engine + the compose plugin (get.docker.com), then add
+the runner's user to the `docker` group:
 ```bash
-sudo usermod -aG docker "$USER"   # run docker without sudo
-# log out / back in for the group to take effect
+sudo usermod -aG docker at   # the runner runs as 'at'; re-login for it to take effect
 ```
 
-## 2. Runtime env files (hold the real secrets, never in git)
+## 2. Runtime env files (real secrets, never in git)
 
 ```bash
-sudo mkdir -p /opt/fuel
-sudo chown "$USER" /opt/fuel
+sudo mkdir -p /opt/fuel && sudo chown at:at /opt/fuel
 ```
-
-Create `/opt/fuel/.env.staging` and `/opt/fuel/.env.prod` using the
-committed templates in `deploy/.env.staging.example` / `.env.prod.example` as the
-shape. Fill in **real** DB passwords. The workflow references these absolute
-paths. Minimum contents:
+Create `/opt/fuel/.env.staging` and `/opt/fuel/.env.prod` from the committed
+templates `deploy/.env.staging.example` / `.env.prod.example`. Fill in **real** DB
+passwords (and, for prod, `SMTP_*` + a real `PUBLIC_BASE_URL`). The workflow reads
+these absolute paths. Ports are already Fuel's deconflicted block:
 
 ```
 # /opt/fuel/.env.staging
 COMPOSE_PROJECT_NAME=fuel-staging
 APP_IMAGE=ghcr.io/trifunovich/fuel:staging
-APP_PORT=9123
-DB_HOST_PORT=5433
+APP_PORT=9223
+DB_HOST_PORT=5435
+SEQ_PORT=9233
 DB_NAME=fuel
 DB_USER=fuel
 DB_PASSWORD=<real-staging-password>
 ```
-
 ```
 # /opt/fuel/.env.prod
 COMPOSE_PROJECT_NAME=fuel-prod
 APP_IMAGE=ghcr.io/trifunovich/fuel:prod
-APP_PORT=9124
-DB_HOST_PORT=5434
+APP_PORT=9224
+DB_HOST_PORT=5436
+SEQ_PORT=9234
 DB_NAME=fuel
 DB_USER=fuel
 DB_PASSWORD=<real-prod-password>
 ```
-
 ```bash
 chmod 600 /opt/fuel/.env.*
 ```
 
-## 3. Self-hosted GitHub Actions runner
+The runner's user also needs to pull from GHCR: `docker login ghcr.io` as `at`
+(once; reused across apps).
 
-On GitHub: **repo → Settings → Actions → Runners → New self-hosted runner →
-Linux / x64**. That page shows a download block and a `./config.sh` line with a
-**registration token** (short-lived). Use that page's exact version/token, but
-with the customizations below.
+## 3. Self-hosted GitHub Actions runner (Fuel's own instance)
+
+⚠️ Use a **dedicated folder** — do not reconfigure another app's runner folder.
+
+On GitHub: **Fuel repo → Settings → Actions → Runners → New self-hosted runner →
+Linux / x64** for a short-lived **registration token**.
 
 ```bash
-mkdir -p ~/actions-runner && cd ~/actions-runner
-# (use the download/extract lines GitHub shows for the current runner version)
+# as 'at' — own folder so other runners are untouched:
+mkdir -p ~/actions-runner-fuel && cd ~/actions-runner-fuel
+# extract the runner (reuse an existing actions-runner tarball if present)
+tar xzf ~/actions-runner/actions-runner-linux-x64-2.334.0.tar.gz
 
-# Configure — note the custom label `source`, which the workflow targets:
 ./config.sh \
-  --url https://github.com/trifunovich/Fuel \
+  --url https://github.com/Trifunovich/Fuel \
   --token <REGISTRATION_TOKEN_FROM_GITHUB> \
-  --name source \
-  --labels source \
-  --unattended
+  --name fuel \
+  --unattended --replace
 
-# Install + start as a systemd service so it survives reboots:
-sudo ./svc.sh install
+# install + start as a systemd service so it survives reboots:
+sudo ./svc.sh install at
 sudo ./svc.sh start
 sudo ./svc.sh status
 ```
-
-The runner connects outbound to GitHub — no inbound ports opened.
-
-> The runner runs `docker compose`, so the runner's user must be in the `docker`
-> group (step 1). If you installed the service before adding the group, restart
-> it: `sudo ./svc.sh stop && sudo ./svc.sh start`.
+Fuel's workflow targets `runs-on: [self-hosted]` (no custom label needed — the
+runner is repo-scoped to Fuel). The runner connects outbound only; no inbound
+ports. If `config.sh` returns `404 Not Found`, the token expired — get a fresh one.
 
 ## 4. First deploy
 
-Push to `main` → the workflow builds the image, pushes to GHCR, the runner pulls,
-migrates, and brings up the staging stack. Then verify on the LAN:
+Push to `main` → the workflow tests, builds, pushes to GHCR, applies the migration
+script, and the runner brings up the staging stack. Verify on the LAN:
+- staging app: `http://vm.example.lan:9223/`
+- staging DB (DBeaver): `vm.example.lan:5435`
+- staging Seq UI: `http://vm.example.lan:9233/`
 
-- staging app:  `http://vm.example.lan:9123/`
-- staging DB (DBeaver): `vm.example.lan:5433`
-
-For prod, create the `release` branch and push it:
-
+For prod, create and push `release`:
 ```bash
 git checkout -b release && git push -u origin release
 ```
-
-- prod app: `http://vm.example.lan:9124/`
-- prod DB (DBeaver): `vm.example.lan:5434`
+- prod app: `http://vm.example.lan:9224/` · DB `vm.example.lan:5436` · Seq `:9234`
 
 ## Day-to-day
 
@@ -114,6 +110,6 @@ git checkout -b release && git push -u origin release
   docker compose --env-file /opt/fuel/.env.staging ps
   docker compose --env-file /opt/fuel/.env.staging logs -f app
   ```
-- Images are tagged `:staging`/`:prod` (moving) and `:<sha>` (immutable) in GHCR,
-  so rollback = point the env file's `APP_IMAGE` at a known `:<sha>` and re-run
+- Images are tagged `:staging`/`:prod` (moving) and `:<sha>` (immutable) in GHCR —
+  rollback = point the env file's `APP_IMAGE` at a known `:<sha>` and re-run
   `up -d`.
