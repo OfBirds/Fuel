@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     public DbSet<Food> Foods { get; set; }
     public DbSet<FoodIngredient> FoodIngredients { get; set; }
     public DbSet<FoodEntry> FoodEntries { get; set; }
+    public DbSet<WeightEntry> WeightEntries { get; set; }
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
@@ -28,6 +29,10 @@ public class AppDbContext : DbContext
             // gen_random_uuid() backfills existing rows with unique tokens (PG15 core).
             entity.Property(e => e.UnsubscribeToken).HasDefaultValueSql("gen_random_uuid()");
             entity.HasIndex(e => e.UnsubscribeToken).IsUnique();
+
+            entity.Property(e => e.Sex).HasConversion<string>();
+            entity.Property(e => e.Constitution).HasConversion<string>();
+            entity.Property(e => e.ShowMacros).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<SystemSetting>(entity =>
@@ -85,6 +90,19 @@ public class AppDbContext : DbContext
                 .HasDefaultValue(EntrySource.Manual);
 
             entity.HasIndex(e => new { e.UserId, e.IntakeAtUtc });
+        });
+
+        modelBuilder.Entity<WeightEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(e => e.Weight).IsRequired();
+            entity.HasIndex(e => new { e.UserId, e.RecordedAtUtc });
         });
     }
 }

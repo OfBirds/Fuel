@@ -74,6 +74,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IFoodService, FoodService>();
+builder.Services.AddScoped<IProfileService, ProfileService>();
 
 // SMTP from flat SMTP_* env keys (same style as DB_*); password stays in the env file.
 builder.Services.Configure<Api.Config.SmtpOptions>(o =>

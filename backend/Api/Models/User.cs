@@ -16,4 +16,18 @@ public class User
 
     /// <summary>Daily calorie goal, set by the user. Null if not configured.</summary>
     public double? DailyCalorieGoal { get; set; }
+
+    // ── Profile (null = onboarding not completed) ──
+    public double? Height { get; set; }
+    public Sex? Sex { get; set; }
+    public Constitution? Constitution { get; set; }
+    public int? YearOfBirth { get; set; }
+    public string? ActivityLevel { get; set; }
+
+    // ── Meal pause ──
+    public double? MealPauseHours { get; set; }
+    public string? MealPauseScope { get; set; }
+
+    // ── Display ──
+    public bool ShowMacros { get; set; }
 }

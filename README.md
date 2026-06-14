@@ -134,8 +134,9 @@ scripts/              rename.sh / rename.ps1 (template provenance; vestigial now
 **Product / feature specs (design)**
 - [`docs/food-catalogue-and-logging.md`](docs/food-catalogue-and-logging.md) — Phase 0: catalogue + manual logging + day view
 - [`docs/profile-and-weight.md`](docs/profile-and-weight.md) — Phase 1: profile, weight register, metabolism/BMI, meal-pause
-- [`docs/ai-estimation.md`](docs/ai-estimation.md) — Phase 2/3: AI calorie estimation from text & photo
+- [`docs/ai-estimation.md`](docs/ai-estimation.md) — Phase 2/3: AI calorie estimation from text & photo (multi-item, unit conversion, refine loop, camera)
 - [`docs/ai-providers.md`](docs/ai-providers.md) — the deploy-time, swappable AI provider abstraction
+- [`docs/barcode-lookup.md`](docs/barcode-lookup.md) — Phase 3: grocery barcode/EAN → official food definition (Open Food Facts)
 
 **Platform**
 - [`docs/infrastructure.md`](docs/infrastructure.md) — CI/CD + hosting design

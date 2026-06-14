@@ -85,6 +85,9 @@ function EntryFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(isEdit);
 
+  // Meal-pause warning
+  const [mealPauseWarning, setMealPauseWarning] = useState<{ hoursSinceLast: number; mealPauseHours: number } | null>(null);
+
   // Load existing entry for editing
   useEffect(() => {
     if (!entryId || !user) return;
@@ -193,6 +196,26 @@ function EntryFormPage() {
     }
   };
 
+  // Check meal-pause when meal or intake time changes
+  useEffect(() => {
+    if (!user) return;
+    const timer = setTimeout(async () => {
+      try {
+        const dt = new Date(intakeAtUtc).toISOString();
+        const res = await fetch(`/api/user/${user.id}/meal-pause-check?intakeAtUtc=${encodeURIComponent(dt)}&mealType=${encodeURIComponent(mealType)}`);
+        if (res.ok) {
+          const check = await res.json();
+          if (check.isWithinPause) {
+            setMealPauseWarning({ hoursSinceLast: check.hoursSinceLast, mealPauseHours: check.mealPauseHours });
+          } else {
+            setMealPauseWarning(null);
+          }
+        }
+      } catch { setMealPauseWarning(null); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [mealType, intakeAtUtc, user]);
+
   const save = async () => {
     if (!user) return;
     if (!selectedFood) { setError('Please select a food.'); return; }
@@ -246,6 +269,12 @@ function EntryFormPage() {
       <h1>{isEdit ? 'Edit Entry' : 'Add Entry'}</h1>
 
       {error && <p className="form-error" role="alert">{error}</p>}
+
+      {mealPauseWarning && (
+        <p className="meal-pause-warning" role="alert">
+          ⏱ Only {mealPauseWarning.hoursSinceLast}h since your last intake (pause: {mealPauseWarning.mealPauseHours}h). Just a heads-up!
+        </p>
+      )}
 
       {/* Food search */}
       {!selectedFood ? (

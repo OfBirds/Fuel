@@ -24,12 +24,17 @@ function renderEntryForm(route: string = '/entry/new?meal=Lunch&date=2026-06-14'
   );
 }
 
+function mockMealPauseNotConfigured() {
+  return { ok: true, json: async () => ({ isWithinPause: false, hoursSinceLast: null, mealPauseHours: null }) };
+}
+
 describe('EntryFormPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders the add entry form', async () => {
+    mockFetch.mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
       const headings = screen.getAllByText('Add Entry');
@@ -38,14 +43,21 @@ describe('EntryFormPage', () => {
   });
 
   it('searches foods on input', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => [
-        { id: '1', name: 'Chicken Breast', defaultUoM: 'g', caloriesPerUnit: 1.65, ingredientCount: 0, isComposite: false },
-      ],
-    });
+    mockFetch
+      .mockResolvedValueOnce(mockMealPauseNotConfigured())  // meal-pause check
+      .mockResolvedValueOnce({                               // food search
+        ok: true,
+        json: async () => [
+          { id: '1', name: 'Chicken Breast', defaultUoM: 'g', caloriesPerUnit: 1.65, ingredientCount: 0, isComposite: false },
+        ],
+      });
 
     renderEntryForm();
+
+    // Wait for meal-pause check to resolve
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalled();
+    });
 
     const inputs = screen.getAllByPlaceholderText('Type a food name…');
     await userEvent.type(inputs[0], 'chicken');
@@ -57,6 +69,7 @@ describe('EntryFormPage', () => {
   });
 
   it('shows inline food define link', async () => {
+    mockFetch.mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
       const links = screen.getAllByText("Can't find it? Define a new food");
@@ -65,6 +78,7 @@ describe('EntryFormPage', () => {
   });
 
   it('does not show save button without food selected', async () => {
+    mockFetch.mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
       expect(screen.queryByText('Save Entry')).toBeNull();

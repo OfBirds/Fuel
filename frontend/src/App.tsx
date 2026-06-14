@@ -8,6 +8,8 @@ import HomePage from './pages/HomePage';
 import SettingsPage from './pages/SettingsPage';
 import EntryFormPage from './pages/EntryFormPage';
 import CataloguePage from './pages/CataloguePage';
+import WeightPage from './pages/WeightPage';
+import OnboardingPage from './pages/OnboardingPage';
 import './styles/app.css';
 
 const FONT_MIN = 40;
@@ -54,9 +56,36 @@ function FontSizeControl() {
 
 function AppContent() {
   const { user, logout } = useAuth();
+  const [profileChecked, setProfileChecked] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+
+  // Check if onboarding is needed (first login — no profile)
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/user/${user.id}/profile`);
+        if (alive && res.ok) {
+          const p = await res.json();
+          setNeedsOnboarding(p.height == null);
+        }
+      } catch { /* if this fails, don't block — let them in */ }
+      finally { if (alive) setProfileChecked(true); }
+    })();
+    return () => { alive = false; };
+  }, [user]);
 
   if (!user) {
     return <LoginPage onLoginSuccess={() => {}} />;
+  }
+
+  if (!profileChecked) {
+    return <div className="app"><main className="app-main"><p className="settings-muted" style={{ textAlign: 'center', marginTop: '4rem' }}>Loading…</p></main></div>;
+  }
+
+  if (needsOnboarding) {
+    return <OnboardingPage />;
   }
 
   return (
@@ -66,6 +95,7 @@ function AppContent() {
         <nav className="app-nav">
           <NavLink to="/" end className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>Home</NavLink>
           <NavLink to="/catalogue" className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>Catalogue</NavLink>
+          <NavLink to="/weight" className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>Weight</NavLink>
           <NavLink to="/settings" className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>Settings</NavLink>
         </nav>
         <div className="app-header-right">
@@ -78,6 +108,7 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/catalogue" element={<CataloguePage />} />
+          <Route path="/weight" element={<WeightPage />} />
           <Route path="/entry/new" element={<EntryFormPage />} />
           <Route path="/entry/:entryId/edit" element={<EntryFormPage />} />
           <Route path="/settings" element={<SettingsPage />} />
