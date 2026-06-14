@@ -62,6 +62,38 @@ alongside them as the product is built out.
 |------|---------------|
 | `lib/storage.test.ts` | localStorage helpers: the `app:` key prefix, `getAutoUpdate`/`getFontScale` defaults, font-scale round-trip, malformed-JSON resilience, and theme save/read. |
 
+## Planned — real-dependency integration tier (deferred)
+
+> **Sequencing:** scaffold this *after* the AI-text and AI-photo features land, not
+> before. Those features add the first external dependency (the DeepSeek nutrition
+> estimator), and the same suite that gives us real-Postgres coverage is where the
+> provider-call tests will live — so it's cheaper to stand it up once, then.
+
+**Why it's needed (two reasons):**
+
+1. **EF InMemory is not Postgres.** It silently ignores provider-specific rules, so a
+   green unit suite can still ship a persistence bug. Concrete example already hit:
+   `GetEntries` passed a `DateTimeKind.Unspecified` value, which Npgsql *rejects*
+   against a `timestamptz` column — InMemory accepted it, real Postgres would not.
+   InMemory also won't enforce real unique constraints, migrations, or LINQ-translation
+   limits.
+2. **External calls (`INutritionEstimator` → DeepSeek).** The AI add-methods make
+   outbound HTTP we'll want to test against a stub/recorded server (capability flags,
+   timeouts, malformed responses, the text-only vs multimodal split) — without hitting
+   the real provider or spending tokens in CI.
+
+**Shape (keep it thin — a second tier, not a rewrite):**
+
+- A separate `Api.IntegrationTests` project (or a `[Trait("Category","Integration")]`
+  filter) so local `dotnet test` stays fast and these run as their own CI step.
+- Real Postgres via **Testcontainers**, or just point at the `docker compose` Postgres
+  the deploy workflow already has up for the migration step.
+- External HTTP via a stub server (e.g. WireMock.Net) or recorded fixtures behind the
+  `INutritionEstimator` abstraction — never the live provider.
+- **First regression test:** `GET entries?from=&to=` round-trips a `timestamptz` range
+  on real Postgres (includes an in-window instant, excludes an out-of-window one). This
+  is the exact case InMemory missed.
+
 ## InternalsVisibleTo convention
 
 To test `internal` members without exposing them publicly, the `Api` project declares:
