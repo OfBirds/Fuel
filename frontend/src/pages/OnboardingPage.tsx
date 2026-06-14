@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { saveOnboardingCompleted } from '../lib/storage';
 import '../styles/onboarding.css';
 
 interface ProfileResponse {
@@ -199,6 +200,19 @@ function OnboardingPage({ onComplete }: { onComplete?: () => void }) {
 
           <button className="onboarding-submit" onClick={save} disabled={saving}>
             {saving ? 'Saving…' : 'Get Started'}
+          </button>
+
+          <button
+            className="onboarding-skip"
+            type="button"
+            onClick={() => { saveOnboardingCompleted(); onComplete?.(); navigate('/'); }}
+            style={{
+              display: 'block', width: '100%', marginTop: '0.5rem',
+              background: 'none', border: 'none', color: 'var(--text-light)',
+              cursor: 'pointer', fontSize: '0.85rem', textDecoration: 'underline',
+            }}
+          >
+            Skip for now — I'll fill this in later
           </button>
         </div>
       </div>

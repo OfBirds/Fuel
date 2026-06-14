@@ -137,42 +137,45 @@ function HomePage() {
 
       {loading ? (
         <p className="settings-muted" style={{ textAlign: 'center', marginTop: '2rem' }}>Loading…</p>
-      ) : entries.length === 0 ? (
-        <div className="empty-state">
-          <h2>Nothing logged yet</h2>
-          <p>Use an “+ Add” button below to log your first meal of the day.</p>
-        </div>
       ) : (
-        grouped.map(({ meal, entries: mealEntries, mealTotal }) => (
-          <section key={meal} className="meal-section" aria-labelledby={`meal-${meal}`}>
-            <div className="meal-section-header">
-              <h2 id={`meal-${meal}`} className="meal-section-title">{meal}</h2>
-              <span className="meal-section-calories">{mealTotal} cal</span>
+        <>
+          {entries.length === 0 && (
+            <div className="empty-state">
+              <h2>Nothing logged yet</h2>
+              <p>Use an "+ Add" button below to log your first meal of the day.</p>
             </div>
-            {mealEntries.map((entry) => (
-              <div key={entry.id} className="entry-row">
-                <div className="entry-row-main">
-                  <div className="entry-row-name">{entry.foodName}</div>
-                  <div className="entry-row-qty">{entry.quantity} {entry.uoM}</div>
-                </div>
-                <span className="entry-row-calories">{entry.calories} cal</span>
-                <div className="entry-row-actions">
-                  <button
-                    className="entry-row-btn"
-                    onClick={() => navigate(`/entry/${entry.id}/edit`)}
-                    aria-label="Edit entry"
-                  >Edit</button>
-                  <button
-                    className="entry-row-btn danger"
-                    onClick={() => deleteEntry(entry.id)}
-                    aria-label="Delete entry"
-                  >Del</button>
-                </div>
+          )}
+          {grouped.map(({ meal, entries: mealEntries, mealTotal }) => (
+            <section key={meal} className="meal-section" aria-labelledby={`meal-${meal}`}>
+              <div className="meal-section-header">
+                <h2 id={`meal-${meal}`} className="meal-section-title">{meal}</h2>
+                <span className="meal-section-calories">{mealTotal} cal</span>
               </div>
-            ))}
-            <button className="add-entry-btn" onClick={() => addEntry(meal)}>+ Add {meal}</button>
-          </section>
-        ))
+              {mealEntries.map((entry) => (
+                <div key={entry.id} className="entry-row">
+                  <div className="entry-row-main">
+                    <div className="entry-row-name">{entry.foodName}</div>
+                    <div className="entry-row-qty">{entry.quantity} {entry.uoM}</div>
+                  </div>
+                  <span className="entry-row-calories">{entry.calories} cal</span>
+                  <div className="entry-row-actions">
+                    <button
+                      className="entry-row-btn"
+                      onClick={() => navigate(`/entry/${entry.id}/edit`)}
+                      aria-label="Edit entry"
+                    >Edit</button>
+                    <button
+                      className="entry-row-btn danger"
+                      onClick={() => deleteEntry(entry.id)}
+                      aria-label="Delete entry"
+                    >Del</button>
+                  </div>
+                </div>
+              ))}
+              <button className="add-entry-btn" onClick={() => addEntry(meal)}>+ Add {meal}</button>
+            </section>
+          ))}
+        </>
       )}
     </div>
   );

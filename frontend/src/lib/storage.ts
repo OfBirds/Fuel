@@ -37,3 +37,7 @@ export const saveFontScale = (pct: number) => write('fontScale', pct);
 // --- Last used meal type (preselected on entry form) ---
 export const getLastMealType = () => read<string>('lastMealType') ?? 'Breakfast';
 export const saveLastMealType = (mealType: string) => write('lastMealType', mealType);
+
+// --- Onboarding completed flag (set on skip or completion) ---
+export const getOnboardingCompleted = () => read<boolean>('onboardingCompleted') ?? false;
+export const saveOnboardingCompleted = () => write('onboardingCompleted', true);

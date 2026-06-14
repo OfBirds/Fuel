@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
-import { getFontScale, saveFontScale } from './lib/storage';
+import { getFontScale, saveFontScale, getOnboardingCompleted, saveOnboardingCompleted } from './lib/storage';
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import SettingsPage from './pages/SettingsPage';
@@ -59,7 +59,7 @@ function AppContent() {
   const [profileChecked, setProfileChecked] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
-  // Check if onboarding is needed (first login — no profile)
+  // Check if onboarding is needed (first login, no profile, not explicitly skipped)
   useEffect(() => {
     if (!user) return;
     let alive = true;
@@ -68,13 +68,19 @@ function AppContent() {
         const res = await fetch(`/api/user/${user.id}/profile`);
         if (alive && res.ok) {
           const p = await res.json();
-          setNeedsOnboarding(p.height == null);
+          const skipped = getOnboardingCompleted();
+          setNeedsOnboarding(p.height == null && !skipped);
         }
       } catch { /* if this fails, don't block — let them in */ }
       finally { if (alive) setProfileChecked(true); }
     })();
     return () => { alive = false; };
   }, [user]);
+
+  const handleOnboardingDone = () => {
+    saveOnboardingCompleted();
+    setNeedsOnboarding(false);
+  };
 
   if (!user) {
     return <LoginPage onLoginSuccess={() => {}} />;
@@ -85,7 +91,7 @@ function AppContent() {
   }
 
   if (needsOnboarding) {
-    return <OnboardingPage onComplete={() => setNeedsOnboarding(false)} />;
+    return <OnboardingPage onComplete={handleOnboardingDone} />;
   }
 
   return (
