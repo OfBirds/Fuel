@@ -77,8 +77,11 @@ public class ProfileController(AppDbContext db, IProfileService profileService) 
         if (user.YearOfBirth is null)
             return BadRequest(new { error = "Year of birth not set." });
 
+        if (user.Sex is null)
+            return BadRequest(new { error = "Sex not set." });
+
         var age = profileService.CalculateAge(user.YearOfBirth.Value);
-        var sex = user.Sex ?? Sex.Male;
+        var sex = user.Sex.Value;
         var level = activityLevel ?? user.ActivityLevel ?? "sedentary";
 
         var bmr = profileService.CalculateBmr(w, user.Height.Value, age, sex);

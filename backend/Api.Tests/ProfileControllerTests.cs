@@ -129,6 +129,22 @@ public class ProfileControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task GetMetabolism_SexNotSet_ReturnsBadRequest()
+    {
+        // Has height, year of birth and a weigh-in, but no sex → must not silently
+        // assume a sex (it changes BMR by ~166 kcal).
+        _db.WeightEntries.Add(new WeightEntry { UserId = _userId, Weight = 70, RecordedAtUtc = DateTime.UtcNow });
+        var user = await _db.Users.FindAsync(_userId);
+        user!.Height = 170;
+        user.YearOfBirth = 1990;
+        // user.Sex intentionally left null
+        await _db.SaveChangesAsync();
+
+        var result = await _controller.GetMetabolism(_userId, null, null, CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
     public async Task MealPauseCheck_WithinWindow_ReturnsWarning()
     {
         var now = DateTime.UtcNow;

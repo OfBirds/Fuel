@@ -85,7 +85,7 @@ function AppContent() {
   }
 
   if (needsOnboarding) {
-    return <OnboardingPage />;
+    return <OnboardingPage onComplete={() => setNeedsOnboarding(false)} />;
   }
 
   return (

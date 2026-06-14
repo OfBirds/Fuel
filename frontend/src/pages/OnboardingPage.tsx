@@ -22,7 +22,7 @@ const ACTIVITY_LEVELS = [
   { value: 'very_active', label: 'Very Active (intense exercise daily)' },
 ];
 
-function OnboardingPage() {
+function OnboardingPage({ onComplete }: { onComplete?: () => void }) {
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -105,6 +105,9 @@ function OnboardingPage() {
         }
       }
 
+      // Lift the onboarding gate in AppContent (its profile check won't re-run on
+      // its own — user identity hasn't changed), then land on the day view.
+      onComplete?.();
       navigate('/');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed.');
