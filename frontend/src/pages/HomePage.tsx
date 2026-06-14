@@ -30,8 +30,19 @@ function formatDate(d: Date): string {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+// Local calendar date (YYYY-MM-DD) — NOT toISOString(), which would shift to UTC.
 function toDateString(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// The viewer's local day as a [from, to) pair of UTC instants. The browser handles
+// the offset (and DST), so the day view shows the day as the user actually lived it.
+function localDayRangeUtc(d: Date): { from: string; to: string } {
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { from: start.toISOString(), to: end.toISOString() };
 }
 
 function HomePage() {
@@ -51,8 +62,9 @@ function HomePage() {
     setLoading(true);
     setError(null);
     try {
+      const { from, to } = localDayRangeUtc(currentDate);
       const [entriesRes, prefsRes] = await Promise.all([
-        fetch(`/api/user/${user.id}/entries?date=${dateStr}`),
+        fetch(`/api/user/${user.id}/entries?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
         fetch(`/api/user/${user.id}/prefs`),
       ]);
       if (!entriesRes.ok) throw new Error('Failed to load entries');
@@ -68,7 +80,7 @@ function HomePage() {
     } finally {
       setLoading(false);
     }
-  }, [user, dateStr]);
+  }, [user, currentDate]);
 
   useEffect(() => {
     fetchData();

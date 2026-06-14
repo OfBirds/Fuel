@@ -97,11 +97,9 @@ function EntryFormPage() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`/api/user/${user.id}/entries?date=`);
+        const res = await fetch(`/api/user/${user.id}/entries/${entryId}`);
         if (!res.ok) throw new Error('load failed');
-        const entries = (await res.json()) as EntryDetail[];
-        const entry = entries.find((e: EntryDetail) => e.id === entryId);
-        if (!entry) throw new Error('Entry not found');
+        const entry = (await res.json()) as EntryDetail;
         if (alive) {
           setQuantity(entry.quantity);
           setUom(entry.uoM);

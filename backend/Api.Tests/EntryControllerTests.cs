@@ -143,7 +143,7 @@ public class EntryControllerTests : IDisposable
         });
         await _db.SaveChangesAsync();
 
-        var result = await _controller.GetEntries(_userId, "2026-06-14", CancellationToken.None);
+        var result = await _controller.GetEntries(_userId, null, null, "2026-06-14", CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var list = Assert.IsType<List<EntryResponse>>(ok.Value);
@@ -169,7 +169,7 @@ public class EntryControllerTests : IDisposable
         );
         await _db.SaveChangesAsync();
 
-        var result = await _controller.GetEntries(_userId, "2026-06-14", CancellationToken.None);
+        var result = await _controller.GetEntries(_userId, null, null, "2026-06-14", CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var list = Assert.IsType<List<EntryResponse>>(ok.Value);
@@ -180,7 +180,7 @@ public class EntryControllerTests : IDisposable
     [Fact]
     public async Task GetEntries_UnknownUser_ReturnsNotFound()
     {
-        var result = await _controller.GetEntries(Guid.NewGuid(), null, CancellationToken.None);
+        var result = await _controller.GetEntries(Guid.NewGuid(), null, null, null, CancellationToken.None);
         Assert.IsType<NotFoundResult>(result.Result);
     }
 
@@ -286,7 +286,7 @@ public class EntryControllerTests : IDisposable
         );
         await _db.SaveChangesAsync();
 
-        var result = await _controller.GetEntries(_userId, "2026-06-14", CancellationToken.None);
+        var result = await _controller.GetEntries(_userId, null, null, "2026-06-14", CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var list = Assert.IsType<List<EntryResponse>>(ok.Value);

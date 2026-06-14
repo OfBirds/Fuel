@@ -10,22 +10,38 @@ namespace Api.Controllers;
 [Route("api/user/{userId}")]
 public class EntryController(AppDbContext db) : ControllerBase
 {
-    /// <summary>Get all entries for a user on a given date (UTC).</summary>
+    /// <summary>
+    /// Get a user's entries within a UTC instant range [from, to). Callers compute the
+    /// range from the viewer's local day so the day view is timezone-aware while storage
+    /// stays UTC. Falls back to a UTC calendar day (<paramref name="date"/>, or today).
+    /// </summary>
     [HttpGet("entries")]
     public async Task<ActionResult<List<EntryResponse>>> GetEntries(
-        Guid userId, [FromQuery] string? date, CancellationToken ct)
+        Guid userId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] string? date,
+        CancellationToken ct)
     {
         var user = await db.Users.FindAsync([userId], ct);
         if (user is null)
             return NotFound();
 
-        // Parse date or default to today UTC
-        var targetDate = DateTime.UtcNow.Date;
-        if (!string.IsNullOrWhiteSpace(date) && DateTime.TryParse(date, out var parsed))
-            targetDate = parsed.Date;
-
-        var startUtc = targetDate; // midnight UTC of target date
-        var endUtc = targetDate.AddDays(1);
+        DateTime startUtc, endUtc;
+        if (from.HasValue && to.HasValue)
+        {
+            // Normalize to UTC: query-string binding parses the trailing 'Z' to local time.
+            startUtc = from.Value.ToUniversalTime();
+            endUtc = to.Value.ToUniversalTime();
+        }
+        else
+        {
+            var targetDate = DateTime.UtcNow.Date;
+            if (!string.IsNullOrWhiteSpace(date) && DateTime.TryParse(date, out var parsed))
+                targetDate = parsed.Date;
+            startUtc = DateTime.SpecifyKind(targetDate, DateTimeKind.Utc); // midnight UTC
+            endUtc = startUtc.AddDays(1);
+        }
 
         var entries = await db.FoodEntries
             .Where(e => e.UserId == userId && e.IntakeAtUtc >= startUtc && e.IntakeAtUtc < endUtc)
@@ -34,6 +50,20 @@ public class EntryController(AppDbContext db) : ControllerBase
             .ToListAsync(ct);
 
         return Ok(entries);
+    }
+
+    /// <summary>Get a single entry by id (used when editing, regardless of its day).</summary>
+    [HttpGet("entries/{entryId:guid}")]
+    public async Task<ActionResult<EntryResponse>> GetEntry(
+        Guid userId, Guid entryId, CancellationToken ct)
+    {
+        var entry = await db.FoodEntries
+            .FirstOrDefaultAsync(e => e.Id == entryId && e.UserId == userId, ct);
+
+        if (entry is null)
+            return NotFound();
+
+        return Ok(ToResponse(entry));
     }
 
     /// <summary>Create a food entry. Nutrition values are snapshotted as provided.</summary>
