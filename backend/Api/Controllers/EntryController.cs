@@ -114,6 +114,86 @@ public class EntryController(AppDbContext db) : ControllerBase
         return CreatedAtAction(nameof(GetEntries), new { userId }, ToResponse(entry));
     }
 
+    /// <summary>
+    /// Create several entries at once from reviewed AI rows. Each item becomes its own
+    /// <c>FoodEntry</c>; an item with no <c>FoodId</c> defines a new catalogue food
+    /// first (per-unit nutrition derived from the row), then references it. All-or-nothing.
+    /// </summary>
+    [HttpPost("entries/batch")]
+    public async Task<ActionResult<List<EntryResponse>>> CreateEntries(
+        Guid userId, [FromBody] CreateEntriesBatchRequest request, CancellationToken ct)
+    {
+        var user = await db.Users.FindAsync([userId], ct);
+        if (user is null)
+            return NotFound();
+
+        if (request.Items.Count == 0)
+            return BadRequest(new { error = "At least one item is required." });
+
+        var created = new List<FoodEntry>(request.Items.Count);
+        foreach (var row in request.Items)
+        {
+            if (string.IsNullOrWhiteSpace(row.FoodName))
+                return BadRequest(new { error = "FoodName is required." });
+            if (!Enum.TryParse<MealType>(row.MealType, out var mealType))
+                return BadRequest(new { error = $"Invalid MealType: {row.MealType}." });
+            if (string.IsNullOrWhiteSpace(row.UoM))
+                return BadRequest(new { error = "UoM is required." });
+            if (row.Quantity <= 0)
+                return BadRequest(new { error = "Quantity must be greater than zero." });
+
+            var source = Enum.TryParse<EntrySource>(row.Source, out var s) ? s : EntrySource.AiText;
+
+            Guid? foodId = row.FoodId;
+            if (foodId.HasValue)
+            {
+                if (!await db.Foods.AnyAsync(f => f.Id == foodId.Value, ct))
+                    return BadRequest(new { error = $"Food {foodId} not found." });
+            }
+            else
+            {
+                // New food → define it into the shared catalogue first, then reference it.
+                // Per-unit nutrition is derived from this row's amount.
+                // TODO(dedup): get-or-create under a unique name index once dedup lands.
+                var perUnit = row.Quantity > 0 ? row.Quantity : 1;
+                var food = new Food
+                {
+                    Name = row.FoodName,
+                    DefaultUoM = row.UoM,
+                    CaloriesPerUnit = row.Calories / perUnit,
+                    ProteinPerUnit = row.Protein.HasValue ? row.Protein.Value / perUnit : null,
+                    CarbsPerUnit = row.Carbs.HasValue ? row.Carbs.Value / perUnit : null,
+                    FatPerUnit = row.Fat.HasValue ? row.Fat.Value / perUnit : null,
+                };
+                db.Foods.Add(food);
+                foodId = food.Id;
+            }
+
+            var entry = new FoodEntry
+            {
+                UserId = userId,
+                FoodId = foodId,
+                FoodName = row.FoodName,
+                IntakeAtUtc = row.IntakeAtUtc ?? DateTime.UtcNow,
+                MealType = mealType,
+                Quantity = row.Quantity,
+                UoM = row.UoM,
+                Calories = row.Calories,
+                Protein = row.Protein,
+                Carbs = row.Carbs,
+                Fat = row.Fat,
+                Source = source,
+                AiConfidence = row.Confidence,
+            };
+            db.FoodEntries.Add(entry);
+            created.Add(entry);
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        return Ok(created.Select(ToResponse).ToList());
+    }
+
     /// <summary>Update an existing entry. All fields are optional (partial update).</summary>
     [HttpPut("entries/{entryId:guid}")]
     public async Task<ActionResult<EntryResponse>> UpdateEntry(

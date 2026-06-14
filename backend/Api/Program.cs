@@ -91,6 +91,39 @@ builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 builder.Services.AddHostedService<ReleaseNotifier>();
 builder.Services.AddHostedService<BackupService>();
 
+// AI nutrition estimator — provider chosen at deploy time from flat AI_* keys (the
+// API key stays in the env file). Wired only when enabled + configured; otherwise a
+// no-op estimator keeps DI resolvable and the UI shows AI as off. See docs/ai-providers.md.
+var aiOptions = new Api.Config.AiOptions
+{
+    Provider = builder.Configuration["AI_PROVIDER"] ?? "deepseek",
+    ApiKey = builder.Configuration["AI_API_KEY"] ?? "",
+    BaseUrl = builder.Configuration["AI_BASE_URL"] ?? "https://api.deepseek.com",
+    Model = builder.Configuration["AI_MODEL"] ?? "deepseek-chat",
+    Enabled = string.Equals(builder.Configuration["AI_ENABLED"], "true", StringComparison.OrdinalIgnoreCase),
+    TimeoutSeconds = int.TryParse(builder.Configuration["AI_TIMEOUT_SECONDS"], out var aiTimeout) ? aiTimeout : 30,
+};
+builder.Services.AddSingleton(aiOptions);
+
+if (aiOptions.Enabled
+    && aiOptions.Provider.Equals("deepseek", StringComparison.OrdinalIgnoreCase)
+    && !string.IsNullOrWhiteSpace(aiOptions.ApiKey))
+{
+    builder.Services.AddHttpClient<INutritionEstimator, DeepSeekEstimator>(c =>
+    {
+        c.BaseAddress = new Uri(aiOptions.BaseUrl.TrimEnd('/') + "/");
+        // The estimator owns per-call timeout/cancellation (linked CTS) so it can tell a
+        // user-cancel from a timeout — disable HttpClient's own blanket timeout.
+        c.Timeout = Timeout.InfiniteTimeSpan;
+    });
+}
+else
+{
+    builder.Services.AddSingleton<INutritionEstimator, DisabledNutritionEstimator>();
+    if (aiOptions.Enabled)
+        Log.Warning("AI_ENABLED is true but provider/key is missing — AI estimation disabled.");
+}
+
 var app = builder.Build();
 
 // Apply any pending EF Core migrations on startup. CI applies them as an

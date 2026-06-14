@@ -52,6 +52,13 @@ services:
       # Periodic on-disk backups (BackupService). Off unless BACKUP_ENABLED=true.
       BACKUP_ENABLED: ${BACKUP_ENABLED}
       BACKUP_INTERVAL: ${BACKUP_INTERVAL}
+      # AI nutrition estimator. Off unless AI_ENABLED=true; AI_API_KEY is a secret.
+      AI_ENABLED: ${AI_ENABLED}
+      AI_PROVIDER: ${AI_PROVIDER}
+      AI_BASE_URL: ${AI_BASE_URL}
+      AI_MODEL: ${AI_MODEL}
+      AI_API_KEY: ${AI_API_KEY}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS}
       # Structured logs -> Seq (internal). UI is published below per stack.
       SEQ_URL: http://seq
     ports:

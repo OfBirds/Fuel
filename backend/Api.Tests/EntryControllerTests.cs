@@ -129,6 +129,112 @@ public class EntryControllerTests : IDisposable
         Assert.True(response.IntakeAtUtc <= DateTime.UtcNow.AddSeconds(1));
     }
 
+    // ── Batch create (AI multi-item save) ──
+
+    [Fact]
+    public async Task CreateEntries_ExistingFood_ReferencesWithoutNewCatalogueRow()
+    {
+        var foodCountBefore = await _db.Foods.CountAsync();
+        var request = new CreateEntriesBatchRequest
+        {
+            Items =
+            {
+                new BatchEntryItem
+                {
+                    FoodId = _foodId, FoodName = "Chicken Breast", MealType = "Lunch",
+                    Quantity = 200, UoM = "g", Calories = 330, Confidence = 0.9,
+                },
+            },
+        };
+
+        var result = await _controller.CreateEntries(_userId, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var entries = Assert.IsType<List<EntryResponse>>(ok.Value);
+        Assert.Single(entries);
+        Assert.Equal(_foodId, entries[0].FoodId);
+        Assert.Equal("AiText", entries[0].Source);
+        Assert.Equal(0.9, entries[0].AiConfidence);
+        Assert.Equal(foodCountBefore, await _db.Foods.CountAsync()); // no new food
+    }
+
+    [Fact]
+    public async Task CreateEntries_NewFood_CreatesCatalogueFoodWithDerivedPerUnit()
+    {
+        var request = new CreateEntriesBatchRequest
+        {
+            Items =
+            {
+                new BatchEntryItem
+                {
+                    FoodId = null, FoodName = "Oatmeal", MealType = "Breakfast",
+                    Quantity = 50, UoM = "g", Calories = 180, Protein = 6, Confidence = 0.6,
+                },
+            },
+        };
+
+        var result = await _controller.CreateEntries(_userId, request, CancellationToken.None);
+
+        var entries = Assert.IsType<List<EntryResponse>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Single(entries);
+        Assert.NotNull(entries[0].FoodId);
+
+        var food = await _db.Foods.FirstAsync(f => f.Name == "Oatmeal");
+        Assert.Equal(180.0 / 50, food.CaloriesPerUnit); // per-unit derived from the row
+        Assert.Equal(6.0 / 50, food.ProteinPerUnit);
+        Assert.Equal(entries[0].FoodId, food.Id);
+    }
+
+    [Fact]
+    public async Task CreateEntries_MultipleRows_AllPersist()
+    {
+        var request = new CreateEntriesBatchRequest
+        {
+            Items =
+            {
+                new BatchEntryItem { FoodId = _foodId, FoodName = "Chicken Breast", MealType = "Dinner", Quantity = 150, UoM = "g", Calories = 248 },
+                new BatchEntryItem { FoodId = null, FoodName = "Rice", MealType = "Dinner", Quantity = 100, UoM = "g", Calories = 130 },
+            },
+        };
+
+        var result = await _controller.CreateEntries(_userId, request, CancellationToken.None);
+
+        var entries = Assert.IsType<List<EntryResponse>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(2, entries.Count);
+        Assert.Equal(2, await _db.FoodEntries.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreateEntries_Empty_ReturnsBadRequest()
+    {
+        var result = await _controller.CreateEntries(_userId, new CreateEntriesBatchRequest(), CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateEntries_InvalidMealType_ReturnsBadRequest()
+    {
+        var request = new CreateEntriesBatchRequest
+        {
+            Items = { new BatchEntryItem { FoodName = "X", MealType = "Brunch", Quantity = 1, UoM = "g", Calories = 1 } },
+        };
+
+        var result = await _controller.CreateEntries(_userId, request, CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateEntries_UnknownUser_ReturnsNotFound()
+    {
+        var request = new CreateEntriesBatchRequest
+        {
+            Items = { new BatchEntryItem { FoodName = "X", MealType = "Lunch", Quantity = 1, UoM = "g", Calories = 1 } },
+        };
+
+        var result = await _controller.CreateEntries(Guid.NewGuid(), request, CancellationToken.None);
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
     // ── Read ──
 
     [Fact]
