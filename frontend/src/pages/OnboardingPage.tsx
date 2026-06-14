@@ -93,14 +93,20 @@ function OnboardingPage({ onComplete }: { onComplete?: () => void }) {
       });
       if (!weightRes.ok) throw new Error('Failed to save weight');
 
-      // 3. Save goal if provided
+      // 3. Save goal if provided — preserve existing prefs (e.g. the release-email
+      //    opt-in); the prefs PUT is a full overwrite, so don't clobber notifyReleases.
       if (goal) {
         const g = Number(goal);
         if (g > 0) {
+          let notifyReleases = true;
+          try {
+            const cur = await fetch(`/api/user/${user.id}/prefs`);
+            if (cur.ok) notifyReleases = (await cur.json()).notifyReleases ?? true;
+          } catch { /* fall back to default */ }
           await fetch(`/api/user/${user.id}/prefs`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ notifyReleases: true, dailyCalorieGoal: g }),
+            body: JSON.stringify({ notifyReleases, dailyCalorieGoal: g }),
           });
         }
       }

@@ -42,6 +42,19 @@ public class ProfileControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task UpdateProfile_InvalidSex_ReturnsBadRequest()
+    {
+        var result = await _controller.UpdateProfile(
+            _userId, new UpdateProfileRequest { Sex = "Helicopter" }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+
+        // Not silently persisted.
+        var user = await _db.Users.FindAsync(_userId);
+        Assert.Null(user!.Sex);
+    }
+
+    [Fact]
     public async Task GetProfile_UnknownUser_ReturnsNotFound()
     {
         var result = await _controller.GetProfile(Guid.NewGuid(), CancellationToken.None);

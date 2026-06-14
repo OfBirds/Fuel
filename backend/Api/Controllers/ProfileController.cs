@@ -29,8 +29,18 @@ public class ProfileController(AppDbContext db, IProfileService profileService) 
         if (user is null) return NotFound();
 
         if (request.Height.HasValue) user.Height = request.Height;
-        if (request.Sex is not null && Enum.TryParse<Sex>(request.Sex, out var sex)) user.Sex = sex;
-        if (request.Constitution is not null && Enum.TryParse<Constitution>(request.Constitution, out var con)) user.Constitution = con;
+        if (!string.IsNullOrWhiteSpace(request.Sex))
+        {
+            if (!Enum.TryParse<Sex>(request.Sex, out var sex))
+                return BadRequest(new { error = $"Invalid sex '{request.Sex}'." });
+            user.Sex = sex;
+        }
+        if (!string.IsNullOrWhiteSpace(request.Constitution))
+        {
+            if (!Enum.TryParse<Constitution>(request.Constitution, out var con))
+                return BadRequest(new { error = $"Invalid constitution '{request.Constitution}'." });
+            user.Constitution = con;
+        }
         if (request.YearOfBirth.HasValue) user.YearOfBirth = request.YearOfBirth;
         if (request.ActivityLevel is not null) user.ActivityLevel = request.ActivityLevel;
         if (request.MealPauseHours.HasValue) user.MealPauseHours = request.MealPauseHours;
