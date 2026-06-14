@@ -101,7 +101,7 @@ var aiOptions = new Api.Config.AiOptions
     Provider = builder.Configuration["AI_PROVIDER"] ?? "deepseek",
     ApiKey = builder.Configuration["AI_API_KEY"] ?? "",
     BaseUrl = builder.Configuration["AI_BASE_URL"] ?? "https://api.deepseek.com",
-    Model = builder.Configuration["AI_MODEL"] ?? "deepseek-chat",
+    Model = builder.Configuration["AI_MODEL"] ?? "deepseek-v4-pro",
     Enabled = string.Equals(builder.Configuration["AI_ENABLED"], "true", StringComparison.OrdinalIgnoreCase),
     TimeoutSeconds = int.TryParse(builder.Configuration["AI_TIMEOUT_SECONDS"], out var aiTimeout) ? aiTimeout : 30,
 };

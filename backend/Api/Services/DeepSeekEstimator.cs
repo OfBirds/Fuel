@@ -115,16 +115,19 @@ public class DeepSeekEstimator(HttpClient http, AiOptions options, ILogger<DeepS
     }
 
     private const string SystemPrompt =
-        "You are a nutrition estimator. Given a free-text description of food (and optional " +
-        "clarifications), break it into individual food items and estimate each one's amount " +
-        "and nutrition. A single description may contain several foods. Respond with ONLY a " +
-        "JSON object of this exact shape:\n" +
+        "You are a nutrition estimator. Break a free-text food description into " +
+        "individual items with estimated amounts and nutrition. A single description " +
+        "may contain several foods.\n\n" +
+        "CRITICAL RULE: You MUST use English (lowercase) for every food name, " +
+        "regardless of the input language. This is a hard requirement — non-English " +
+        "names will be rejected.\n\n" +
+        "Respond with ONLY a JSON object of this exact shape (no prose):\n" +
         "{\"items\":[{\"name\":string,\"quantity\":number,\"uom\":string,\"calories\":number," +
         "\"protein\":number,\"carbs\":number,\"fat\":number,\"confidence\":number}]," +
         "\"overallConfidence\":number}\n" +
-        "Rules: quantity is the eaten amount in the unit you choose (prefer g or ml; use 'piece' " +
-        "for countable items); calories are kcal and protein/carbs/fat are grams for the stated " +
-        "quantity; confidence and overallConfidence are 0..1. Do not include any prose.";
+        "Rules: quantity is the eaten amount in the unit you choose (prefer g or ml; " +
+        "use 'piece' for countable items); calories are kcal, macros in grams; " +
+        "confidence and overallConfidence are 0..1.";
 
     // ── DeepSeek (OpenAI-compatible) response shapes ──
     private sealed record ChatResponse([property: JsonPropertyName("choices")] List<Choice>? Choices);

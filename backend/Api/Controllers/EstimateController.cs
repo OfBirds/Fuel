@@ -64,16 +64,16 @@ public class EstimateController(
     }
 
     /// <summary>Resolve each estimated item to an existing catalogue food by exact
-    /// (case-insensitive) name, else flag it new. Read-only. Fuzzy match / dedup is a
-    /// later optimization (docs/food-catalogue-and-logging.md).</summary>
+    /// (case-insensitive, paren-stripped) name, else flag it new. Read-only. Fuzzy
+    /// match / dedup is a later optimization (docs/food-catalogue-and-logging.md).</summary>
     private async Task<List<EstimateRow>> ResolveAsync(NutritionEstimate estimate, CancellationToken ct)
     {
         var rows = new List<EstimateRow>(estimate.Items.Count);
         foreach (var item in estimate.Items)
         {
-            var lowered = item.Name.ToLower();
+            var normal = NormalizeName(item.Name);
             var match = await db.Foods
-                .Where(f => f.Name.ToLower() == lowered)
+                .Where(f => f.Name.ToLower() == normal)
                 .Select(f => new { f.Id, f.DefaultUoM })
                 .FirstOrDefaultAsync(ct);
 
@@ -93,5 +93,16 @@ public class EstimateController(
             });
         }
         return rows;
+    }
+
+    /// <summary>Normalize an AI-returned food name for matching: lowercase, strip
+    /// parenthetical qualifiers like "(groß)" or "(fried)", collapse whitespace.</summary>
+    private static string NormalizeName(string raw)
+    {
+        var s = raw.ToLowerInvariant();
+        // Strip parenthetical qualifiers — "Schnitzel (groß)" → "schnitzel"
+        var paren = s.IndexOf('(');
+        if (paren >= 0) s = s[..paren];
+        return s.Trim();
     }
 }
