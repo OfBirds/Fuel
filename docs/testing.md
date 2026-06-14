@@ -64,10 +64,12 @@ alongside them as the product is built out.
 
 ## Planned — real-dependency integration tier (deferred)
 
-> **Sequencing:** scaffold this *after* the AI-text and AI-photo features land, not
-> before. Those features add the first external dependency (the DeepSeek nutrition
-> estimator), and the same suite that gives us real-Postgres coverage is where the
-> provider-call tests will live — so it's cheaper to stand it up once, then.
+> **Sequencing:** scaffold this *after* the AI-text and AI-photo features **and the
+> food sorting/ranking step** (`docs/food-sorting-and-ranking.md`) land — it is the
+> last step before this tier. The AI features add the first external dependency (the
+> DeepSeek nutrition estimator) and sorting adds provider-specific sort/aggregation
+> SQL; this suite is where both the real-Postgres and the provider-call tests live, so
+> it's cheaper to stand it up once, then.
 
 **Why it's needed (two reasons):**
 
