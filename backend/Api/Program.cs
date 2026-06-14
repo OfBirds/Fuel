@@ -73,6 +73,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IFoodService, FoodService>();
 
 // SMTP from flat SMTP_* env keys (same style as DB_*); password stays in the env file.
 builder.Services.Configure<Api.Config.SmtpOptions>(o =>

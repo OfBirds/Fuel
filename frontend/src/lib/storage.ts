@@ -33,3 +33,7 @@ export const saveAutoUpdate = (on: boolean) => write('autoUpdate', on);
 // --- Font scale (percent, e.g. 100) ---
 export const getFontScale = () => read<number>('fontScale') ?? 100;
 export const saveFontScale = (pct: number) => write('fontScale', pct);
+
+// --- Last used meal type (preselected on entry form) ---
+export const getLastMealType = () => read<string>('lastMealType') ?? 'Breakfast';
+export const saveLastMealType = (mealType: string) => write('lastMealType', mealType);

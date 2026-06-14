@@ -13,4 +13,7 @@ public class User
 
     /// <summary>Opaque token for one-click unsubscribe links.</summary>
     public Guid UnsubscribeToken { get; set; } = Guid.NewGuid();
+
+    /// <summary>Daily calorie goal, set by the user. Null if not configured.</summary>
+    public double? DailyCalorieGoal { get; set; }
 }

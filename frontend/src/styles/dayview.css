@@ -1,0 +1,199 @@
+.day-view {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.day-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.day-nav-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.day-nav-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.day-date {
+  font-family: 'Merriweather', serif;
+  font-size: 1.3rem;
+  min-width: 12rem;
+  text-align: center;
+}
+
+.day-today-btn {
+  background: var(--primary);
+  color: white;
+  padding: 0.4rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+
+.day-today-btn:hover {
+  opacity: 0.9;
+}
+
+.calorie-bar {
+  margin-bottom: 1.5rem;
+}
+
+.calorie-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  margin-bottom: 0.3rem;
+  color: var(--text-light);
+}
+
+.calorie-bar-track {
+  height: 8px;
+  background: var(--neutral);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.calorie-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.meal-section {
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  background: var(--surface);
+}
+
+.meal-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.meal-section-title {
+  font-family: 'Merriweather', serif;
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.meal-section-calories {
+  font-size: 0.85rem;
+  color: var(--text-light);
+}
+
+.entry-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+
+.entry-row:last-child {
+  border-bottom: none;
+}
+
+.entry-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.entry-row-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.entry-row-qty {
+  color: var(--text-light);
+  font-size: 0.85rem;
+}
+
+.entry-row-calories {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.entry-row-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.entry-row-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-light);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.entry-row-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.entry-row-btn.danger:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.add-entry-btn {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: none;
+  border: 1px dashed var(--border);
+  color: var(--text-light);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-entry-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-light);
+}
+
+.empty-state h2 {
+  font-family: 'Merriweather', serif;
+  margin-bottom: 0.5rem;
+  color: var(--text);
+}
+
+.empty-state p {
+  margin-bottom: 1.5rem;
+}

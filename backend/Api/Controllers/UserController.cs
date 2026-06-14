@@ -28,6 +28,7 @@ public class UserController(AppDbContext db) : ControllerBase
             return NotFound();
 
         user.NotifyReleases = request.NotifyReleases;
+        user.DailyCalorieGoal = request.DailyCalorieGoal;
         await db.SaveChangesAsync(ct);
 
         return Ok(ToResponse(user));
@@ -36,5 +37,6 @@ public class UserController(AppDbContext db) : ControllerBase
     private static UserPrefsResponse ToResponse(Models.User user) => new()
     {
         NotifyReleases = user.NotifyReleases,
+        DailyCalorieGoal = user.DailyCalorieGoal,
     };
 }

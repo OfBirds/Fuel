@@ -6,6 +6,8 @@ import { getFontScale, saveFontScale } from './lib/storage';
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import SettingsPage from './pages/SettingsPage';
+import EntryFormPage from './pages/EntryFormPage';
+import CataloguePage from './pages/CataloguePage';
 import './styles/app.css';
 
 const FONT_MIN = 40;
@@ -63,6 +65,7 @@ function AppContent() {
         <FontSizeControl />
         <nav className="app-nav">
           <NavLink to="/" end className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>Home</NavLink>
+          <NavLink to="/catalogue" className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>Catalogue</NavLink>
           <NavLink to="/settings" className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>Settings</NavLink>
         </nav>
         <div className="app-header-right">
@@ -74,6 +77,9 @@ function AppContent() {
       <main className="app-main">
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/catalogue" element={<CataloguePage />} />
+          <Route path="/entry/new" element={<EntryFormPage />} />
+          <Route path="/entry/:entryId/edit" element={<EntryFormPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

@@ -4,6 +4,7 @@ import '../styles/settings.css';
 
 interface Prefs {
   notifyReleases: boolean;
+  dailyCalorieGoal: number | null;
 }
 
 function SettingsPage() {
@@ -89,6 +90,36 @@ function SettingsPage() {
               {error}
             </p>
           )}
+        </section>
+      )}
+
+      {!loading && (
+        <section className="settings-section" aria-labelledby="settings-goal-heading" style={{ marginTop: '1.5rem' }}>
+          <h2 id="settings-goal-heading" className="settings-section-title">
+            Daily Goal
+          </h2>
+
+          <label className="settings-row">
+            <span className="settings-row-label">
+              Daily calorie goal
+              <span className="settings-row-help">
+                Your target for the day. Leave empty if you don't want a goal.
+              </span>
+            </span>
+            <input
+              type="number"
+              min="0"
+              step="50"
+              value={prefs?.dailyCalorieGoal ?? ''}
+              disabled={saving || !prefs}
+              onChange={(e) => {
+                const val = e.target.value ? Number(e.target.value) : null;
+                prefs && update({ ...prefs, dailyCalorieGoal: val });
+              }}
+              style={{ width: '100px', textAlign: 'right' }}
+              placeholder="e.g. 2000"
+            />
+          </label>
         </section>
       )}
     </div>

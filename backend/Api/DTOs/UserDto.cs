@@ -7,9 +7,11 @@ namespace Api.DTOs;
 public class UserPrefsResponse
 {
     public bool NotifyReleases { get; set; }
+    public double? DailyCalorieGoal { get; set; }
 }
 
 public class UpdateUserPrefsRequest
 {
     public bool NotifyReleases { get; set; }
+    public double? DailyCalorieGoal { get; set; }
 }

@@ -1,0 +1,302 @@
+.catalogue-page {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.catalogue-page h1 {
+  font-family: 'Merriweather', serif;
+  color: var(--primary);
+  margin-bottom: 1rem;
+}
+
+.catalogue-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.catalogue-search {
+  flex: 1;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 1rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.catalogue-add-btn {
+  background: var(--primary);
+  color: white;
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.catalogue-add-btn:hover {
+  opacity: 0.9;
+}
+
+.food-list {
+  list-style: none;
+  padding: 0;
+}
+
+.food-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.food-card:hover {
+  border-color: var(--primary);
+}
+
+.food-card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.food-card-name {
+  font-weight: 600;
+}
+
+.food-card-detail {
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+
+.food-card-badge {
+  background: var(--neutral);
+  color: var(--text-light);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.food-card-delete {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-light);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.food-card-delete:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.food-form {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  background: var(--surface);
+}
+
+.food-form h2 {
+  font-family: 'Merriweather', serif;
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.food-form-section {
+  margin-bottom: 1rem;
+}
+
+.food-form-section label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 0.3rem;
+}
+
+.food-form-section input,
+.food-form-section select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.food-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.ingredients-section {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+}
+
+.ingredients-section h3 {
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+}
+
+.ingredient-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ingredient-row select,
+.ingredient-row input {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.ingredient-name {
+  flex: 1;
+  min-width: 120px;
+}
+
+.ingredient-qty {
+  width: 80px;
+}
+
+.ingredient-uom {
+  width: 70px;
+}
+
+.ingredient-remove {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-light);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.ingredient-remove:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.add-ingredient-btn {
+  background: none;
+  border: 1px dashed var(--border);
+  color: var(--text-light);
+  padding: 0.4rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+  transition: all 0.15s;
+}
+
+.add-ingredient-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.inline-ingredient-form {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  margin-left: 1rem;
+  background: var(--neutral);
+}
+
+.inline-ingredient-form input {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  margin-right: 0.5rem;
+  margin-bottom: 0.3rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.inline-ingredient-name {
+  width: 140px;
+}
+
+.inline-ingredient-cal {
+  width: 80px;
+}
+
+.food-form-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.food-form-save {
+  flex: 1;
+  background: var(--primary);
+  color: white;
+  padding: 0.6rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.food-form-save:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.food-form-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.food-form-cancel {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.6rem 1.2rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.food-form-cancel:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.delete-confirm {
+  text-align: center;
+  padding: 1rem;
+}
+
+.delete-confirm p {
+  margin-bottom: 1rem;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
