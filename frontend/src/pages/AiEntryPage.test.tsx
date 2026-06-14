@@ -124,6 +124,44 @@ describe('AiEntryPage', () => {
     expect(body.notes).toEqual(["it's wholemeal"]);
   });
 
+  it('photo tab: chosen file is sent to estimate/image and saved as AiPhoto', async () => {
+    mockFetch
+      .mockResolvedValueOnce(aiOn()) // supportsImages: true
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ok: true, error: null, overallConfidence: 0.6, source: 'AiPhoto', items: [row({ name: 'Pizza', matchedFoodId: null, isNew: true })] }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] }); // batch save
+
+    renderPage();
+    await screen.findByRole('tab', { name: 'Photo' });
+    await userEvent.click(screen.getByRole('tab', { name: 'Photo' }));
+
+    const file = new File(['fake-bytes'], 'meal.jpg', { type: 'image/jpeg' });
+    await userEvent.upload(screen.getByLabelText('Choose a photo'), file);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    await screen.findByDisplayValue('Pizza');
+    const [url, opts] = mockFetch.mock.calls[1];
+    expect(url).toBe('/api/user/test-user-id/estimate/image');
+    expect((opts as RequestInit).body).toBeInstanceOf(FormData);
+    expect(((opts as RequestInit).body as FormData).get('image')).toBeInstanceOf(File);
+
+    await userEvent.click(screen.getByRole('button', { name: /Save 1 item/ }));
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
+    const saveBody = JSON.parse((mockFetch.mock.calls[2][1] as RequestInit).body as string);
+    expect(saveBody.items[0].source).toBe('AiPhoto');
+  });
+
+  it('hides the photo tab when the provider cannot do images', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ enabled: true, supportsImages: false }) });
+
+    renderPage();
+    await screen.findByRole('textbox', { name: /what did you eat/i });
+    expect(screen.queryByRole('tab', { name: 'Photo' })).toBeNull();
+  });
+
   it('shows the manual fallback when estimation is unavailable', async () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())

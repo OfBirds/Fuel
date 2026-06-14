@@ -4,6 +4,7 @@ using Api.Data;
 using Api.DTOs;
 using Api.Models;
 using Api.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -156,15 +157,124 @@ public class EstimateControllerTests : IDisposable
         Assert.IsType<NotFoundResult>(result.Result);
     }
 
+    // ── Photo path (Phase 3) — same mapping/fallbacks, source = AiPhoto ──
+
+    private static EstimateImageRequest ImageReq(byte[]? bytes = null, string contentType = "image/jpeg", List<string>? notes = null)
+    {
+        bytes ??= [1, 2, 3];
+        var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "image", "meal.jpg")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = contentType,
+        };
+        return new EstimateImageRequest { Image = file, Notes = notes };
+    }
+
+    [Fact]
+    public async Task EstimateImage_MapsItems_MatchesFood_AndTagsSourceAiPhoto()
+    {
+        _estimator.SupportsImagesValue = true;
+        _estimator.Result = new NutritionEstimate
+        {
+            OverallConfidence = 0.6,
+            Items = { Item("Chicken Breast", 200, 330), Item("Broccoli", 100, 34) },
+        };
+
+        var result = await NewController().EstimateImage(_userId, ImageReq(), default);
+
+        var resp = Assert.IsType<EstimateResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.True(resp.Ok);
+        Assert.Equal("AiPhoto", resp.Source);
+        Assert.Equal(2, resp.Items.Count);
+        Assert.Equal(_chickenId, resp.Items[0].MatchedFoodId);
+        Assert.True(resp.Items[1].IsNew);
+        Assert.True(_estimator.ImageWasCalled);
+    }
+
+    [Fact]
+    public async Task EstimateImage_AiDisabled_ReturnsUnavailable_WithoutCallingProvider()
+    {
+        _options.Enabled = false;
+        _estimator.SupportsImagesValue = true;
+
+        var result = await NewController().EstimateImage(_userId, ImageReq(), default);
+
+        var resp = Assert.IsType<EstimateResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.False(resp.Ok);
+        Assert.False(_estimator.ImageWasCalled);
+    }
+
+    [Fact]
+    public async Task EstimateImage_ProviderCannotDoImages_ReturnsUnavailable()
+    {
+        _estimator.SupportsImagesValue = false;
+
+        var result = await NewController().EstimateImage(_userId, ImageReq(), default);
+
+        var resp = Assert.IsType<EstimateResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.False(resp.Ok);
+        Assert.NotNull(resp.Error);
+        Assert.False(_estimator.ImageWasCalled);
+    }
+
+    [Fact]
+    public async Task EstimateImage_NoImage_BadRequest()
+    {
+        _estimator.SupportsImagesValue = true;
+
+        var result = await NewController().EstimateImage(
+            _userId, new EstimateImageRequest { Image = null }, default);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task EstimateImage_NonImageContentType_BadRequest()
+    {
+        _estimator.SupportsImagesValue = true;
+
+        var result = await NewController().EstimateImage(
+            _userId, ImageReq(contentType: "application/pdf"), default);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task EstimateImage_ProviderFails_DegradesToManualFallback()
+    {
+        _estimator.SupportsImagesValue = true;
+        _estimator.ThrowThis = new AiUnavailableException("boom");
+
+        var result = await NewController().EstimateImage(_userId, ImageReq(), default);
+
+        var resp = Assert.IsType<EstimateResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.False(resp.Ok);
+        Assert.Empty(resp.Items);
+    }
+
+    [Fact]
+    public async Task EstimateImage_Refine_PassesAccumulatedNotes()
+    {
+        _estimator.SupportsImagesValue = true;
+        _estimator.Result = new NutritionEstimate { Items = { Item("Toast", 1, 80) } };
+        var notes = new List<string> { "the spread is peanut butter", "two slices" };
+
+        await NewController().EstimateImage(_userId, ImageReq(notes: notes), default);
+
+        Assert.Equal(notes, _estimator.LastNotes);
+    }
+
     private sealed class FakeNutritionEstimator : INutritionEstimator
     {
         public NutritionEstimate Result = new();
         public Exception? ThrowThis;
         public CancellationTokenSource? CancelOnCall;
         public bool WasCalled;
+        public bool ImageWasCalled;
         public IReadOnlyList<string>? LastNotes;
+        public bool SupportsImagesValue;
 
-        public bool SupportsImages => false;
+        public bool SupportsImages => SupportsImagesValue;
 
         public Task<NutritionEstimate> EstimateFromTextAsync(
             string description, IReadOnlyList<string> notes, CancellationToken ct)
@@ -182,6 +292,16 @@ public class EstimateControllerTests : IDisposable
 
         public Task<NutritionEstimate> EstimateFromImageAsync(
             byte[] image, string contentType, IReadOnlyList<string> notes, CancellationToken ct)
-            => throw new NotImplementedException();
+        {
+            ImageWasCalled = true;
+            LastNotes = notes;
+            if (CancelOnCall is not null)
+            {
+                CancelOnCall.Cancel();
+                throw new OperationCanceledException(CancelOnCall.Token);
+            }
+            if (ThrowThis is not null) throw ThrowThis;
+            return Task.FromResult(Result);
+        }
     }
 }

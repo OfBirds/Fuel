@@ -8,17 +8,18 @@ using Api.Config;
 namespace Api.Services;
 
 /// <summary>
-/// DeepSeek nutrition estimator over its OpenAI-compatible chat/completions API in
-/// JSON mode. Best-effort external call (docs/ai-providers.md §Resilience): timeout +
-/// one retry on transient errors are applied by the Microsoft.Extensions.Http.Resilience
-/// pipeline on the typed client (see Program.cs). The caller's CancellationToken threads
-/// through so a user "Cancel" — or the timeout — tears down the in-flight request; a user
-/// cancel surfaces as OperationCanceledException, malformed/odd JSON as a failure.
+/// Generic OpenAI-compatible nutrition estimator (chat/completions, JSON mode, Bearer
+/// auth). PARKED — not wired by default. Both shipping connections (DeepSeek text,
+/// Claude vision) now go through <see cref="AnthropicEstimator"/> over the Anthropic
+/// Messages API, since DeepSeek exposes an Anthropic-compatible endpoint too. This class
+/// is kept ready for a future OpenAI-format provider (OpenAI, Azure OpenAI, vLLM, …):
+/// register it in Program.cs and point it at the provider's base URL. Resilience is the
+/// caller's typed-client pipeline; the CancellationToken threads through for cancel/timeout.
 /// </summary>
-public class DeepSeekEstimator(HttpClient http, AiOptions options, ILogger<DeepSeekEstimator> logger)
+public class OpenAiEstimator(HttpClient http, AiOptions options, ILogger<OpenAiEstimator> logger)
     : INutritionEstimator
 {
-    public bool SupportsImages => true; // DeepSeek supports image input (wired in Phase 3)
+    public bool SupportsImages => false; // text-only path; vision goes via AnthropicEstimator
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -28,7 +29,8 @@ public class DeepSeekEstimator(HttpClient http, AiOptions options, ILogger<DeepS
 
     public Task<NutritionEstimate> EstimateFromImageAsync(
         byte[] image, string contentType, IReadOnlyList<string> notes, CancellationToken ct)
-        => throw new NotImplementedException("Photo estimation lands in Phase 3.");
+        => throw new NotImplementedException(
+            "OpenAiEstimator is text-only; route image estimation through AnthropicEstimator.");
 
     private async Task<NutritionEstimate> CallAsync(string userContent, CancellationToken ct)
     {

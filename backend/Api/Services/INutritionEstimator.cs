@@ -1,15 +1,15 @@
 namespace Api.Services;
 
 /// <summary>
-/// The one seam for AI calorie/macro estimation (text now; image in Phase 3). The
-/// provider is chosen at deploy time (AI_PROVIDER); callers depend only on this
-/// interface. A single query yields MANY line-items — see docs/ai-estimation.md.
-/// Every call takes a <see cref="CancellationToken"/> so a user "Cancel" (or the
-/// per-call timeout) tears down the in-flight provider request.
+/// The one seam for AI calorie/macro estimation (text and photo). The provider is chosen
+/// at deploy time (AI_* env keys); callers depend only on this interface. A single query
+/// yields MANY line-items — see docs/ai-estimation.md. Every call takes a
+/// <see cref="CancellationToken"/> so a user "Cancel" (or the per-call timeout) tears
+/// down the in-flight provider request.
 /// </summary>
 public interface INutritionEstimator
 {
-    /// <summary>Whether this provider can estimate from an image (Phase 3 photo path).</summary>
+    /// <summary>Whether this provider's model can actually see images (the photo path).</summary>
     bool SupportsImages { get; }
 
     Task<NutritionEstimate> EstimateFromTextAsync(
@@ -40,10 +40,12 @@ public class EstimatedItem
 }
 
 /// <summary>
-/// Thin composite that delegates text→DeepSeek, image→Claude. Both implement
-/// both methods, so if only one provider is configured it handles both directions
-/// (DeepSeek images currently fail at the API level — v4-flash is text-only — but
-/// future models or providers plug in with no code changes).
+/// Thin composite that delegates text→DeepSeek, image→Claude (both are
+/// <see cref="AnthropicEstimator"/> instances over different connections). If only one
+/// provider is configured it serves both directions. Photos go to Claude because
+/// DeepSeek's v4 models are text-only — their Anthropic-compatible endpoint accepts an
+/// image but silently substitutes "[Unsupported Image]" before the model sees it, so it
+/// returns nothing usable. <see cref="SupportsImages"/> reflects the image provider.
 /// </summary>
 public class CompositeNutritionEstimator(
     INutritionEstimator textProvider, INutritionEstimator imageProvider) : INutritionEstimator

@@ -8,6 +8,16 @@ public class EstimateTextRequest
     public List<string>? Notes { get; set; }
 }
 
+/// <summary>Multipart request to estimate nutrition from a photo. The image rides in the
+/// request body (multipart/form-data), is read into memory, and is never persisted — see
+/// docs/ai-estimation.md §"Image lifetime". `Notes` accumulates the user's clarifications
+/// across the refine loop; the same photo is re-sent each turn.</summary>
+public class EstimateImageRequest
+{
+    public IFormFile? Image { get; set; }
+    public List<string>? Notes { get; set; }
+}
+
 /// <summary>
 /// The estimate result mapped for the multi-row review screen. `Ok = false` carries a
 /// human message and an empty item list (AI off / failure / timeout) — the UI then

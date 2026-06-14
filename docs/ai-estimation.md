@@ -1,9 +1,11 @@
 # AI calorie estimation — text & photo (Phase 2 & 3) — design
 
-> Status: **spec, not yet built**. Phase 2 = estimate from a **typed description**;
-> Phase 3 = estimate from a **photo** (+ a **barcode** fast-path, see
-> `barcode-lookup.md`). Both reuse the unified entry screen from Phase 0 and the
-> provider abstraction in `ai-providers.md`.
+> Status: Phase 2 (**typed description**) and Phase 3 **photo** are **built** — text
+> via DeepSeek, photo via Claude (vision), behind the composite estimator. The
+> **barcode** fast-path (see `barcode-lookup.md`) is still spec. Live-camera capture
+> needs a secure context (HTTPS/localhost); on plain-HTTP LAN staging the upload
+> fallback is used (see §Capture). All paths reuse the unified entry screen from
+> Phase 0 and the provider abstraction in `ai-providers.md`.
 
 ## Goal
 Let the user log food without doing the lookup: **type** a description, **snap a

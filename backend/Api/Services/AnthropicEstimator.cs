@@ -2,20 +2,32 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Api.Config;
 
 namespace Api.Services;
 
 /// <summary>
-/// Claude nutrition estimator over the Anthropic Messages API (Anthropic.SDK not
-/// used — the API is simple enough to call directly). Primary role is image/photo
-/// estimation (Phase 3); text support is included for completeness and provider
-/// comparison. Resilience (timeout + one retry) is on the typed client pipeline.
+/// One connection to an Anthropic Messages API endpoint: the API key, the model id, and
+/// whether that model can actually see images. The endpoint (base URL), timeout and retry
+/// live on the injected <see cref="HttpClient"/> (configured in Program.cs). A "connection"
+/// is the only thing that differs between our providers — DeepSeek's Anthropic-compatible
+/// endpoint for text vs. Anthropic's own for vision — so it's the unit we swap.
 /// </summary>
-public class ClaudeEstimator(HttpClient http, AiOptions options, ILogger<ClaudeEstimator> logger)
+public record AnthropicConnection(string ApiKey, string Model, bool SupportsImages);
+
+/// <summary>
+/// Nutrition estimator over the Anthropic Messages API (v1/messages). ONE implementation
+/// drives BOTH shipping providers — Claude for vision and DeepSeek for text — because
+/// DeepSeek exposes an Anthropic-compatible endpoint (api.deepseek.com/anthropic) that
+/// accepts the exact same request shape. The provider difference collapses to the injected
+/// <see cref="AnthropicConnection"/> (key + model + capability) plus the HttpClient's base
+/// URL. Resilience (timeout + one retry) is on the typed client pipeline; the caller's
+/// CancellationToken threads through for user-cancel/timeout. (Anthropic.SDK not used — the
+/// API is simple enough to call directly.)
+/// </summary>
+public class AnthropicEstimator(HttpClient http, AnthropicConnection connection, ILogger<AnthropicEstimator> logger)
     : INutritionEstimator
 {
-    public bool SupportsImages => true;
+    public bool SupportsImages => connection.SupportsImages;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -48,7 +60,7 @@ public class ClaudeEstimator(HttpClient http, AiOptions options, ILogger<ClaudeE
         var sw = Stopwatch.StartNew();
         var reqBody = new
         {
-            model = options.ClaudeModel,
+            model = connection.Model,
             max_tokens = 1024,
             system = SystemPrompt,
             messages = new[]
@@ -60,7 +72,7 @@ public class ClaudeEstimator(HttpClient http, AiOptions options, ILogger<ClaudeE
         {
             Content = new StringContent(JsonSerializer.Serialize(reqBody), Encoding.UTF8, "application/json"),
         };
-        req.Headers.Add("x-api-key", options.ClaudeApiKey);
+        req.Headers.Add("x-api-key", connection.ApiKey);
         req.Headers.Add("anthropic-version", "2023-06-01");
 
         using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
@@ -68,27 +80,29 @@ public class ClaudeEstimator(HttpClient http, AiOptions options, ILogger<ClaudeE
         var body = await resp.Content.ReadAsStringAsync(ct);
         var estimate = Parse(body);
         logger.LogInformation(
-            "Claude estimate ok: {Items} items, overall conf {Conf}, {Ms}ms, model {Model}",
-            estimate.Items.Count, estimate.OverallConfidence, sw.ElapsedMilliseconds, options.ClaudeModel);
+            "Anthropic estimate ok: {Items} items, overall conf {Conf}, {Ms}ms, model {Model}",
+            estimate.Items.Count, estimate.OverallConfidence, sw.ElapsedMilliseconds, connection.Model);
         return estimate;
     }
 
     private NutritionEstimate Parse(string body)
     {
         var msg = JsonSerializer.Deserialize<MessageResponse>(body, Json)
-                  ?? throw new AiUnavailableException("Empty Claude response.");
-        var content = msg.Content?.FirstOrDefault()?.Text;
+                  ?? throw new AiUnavailableException("Empty AI response.");
+        // The reply may carry several content blocks — DeepSeek's reasoner prepends a
+        // "thinking" block before the answer — so take the first block that has text.
+        var content = msg.Content?.FirstOrDefault(c => !string.IsNullOrWhiteSpace(c.Text))?.Text;
         if (string.IsNullOrWhiteSpace(content))
-            throw new AiUnavailableException("Empty Claude response text.");
+            throw new AiUnavailableException("Empty AI response text.");
 
-        // Claude sometimes wraps JSON in ``` fences — strip them.
+        // The model sometimes wraps JSON in ``` fences — strip them.
         var json = content;
         if (json.StartsWith("```"))
             json = json.Split("\n", 2)[1..].Aggregate("", (a, b) => a + b).Split("\n```")[0];
 
         EstimatePayload? payload;
         try { payload = JsonSerializer.Deserialize<EstimatePayload>(json, Json); }
-        catch (JsonException) { throw new AiUnavailableException("Unparseable Claude response."); }
+        catch (JsonException) { throw new AiUnavailableException("Unparseable AI response."); }
 
         var items = (payload?.Items ?? [])
             .Where(i => !string.IsNullOrWhiteSpace(i.Name))
@@ -106,7 +120,7 @@ public class ClaudeEstimator(HttpClient http, AiOptions options, ILogger<ClaudeE
             .ToList();
 
         if (items.Count == 0)
-            throw new AiUnavailableException("Claude returned no usable items.");
+            throw new AiUnavailableException("AI returned no usable items.");
 
         return new NutritionEstimate { Items = items, OverallConfidence = payload!.OverallConfidence };
     }

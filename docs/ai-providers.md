@@ -1,25 +1,46 @@
 # AI providers — deploy-time, swappable (design)
 
-> Status: **spec, not yet built** (Phase 2+). The AI provider that estimates
+> Status: **built** (Phase 2 text + Phase 3 photo). The AI provider that estimates
 > calories/macros from text and photos — and later generates food icons — is
-> chosen by the **operator at deploy time**, never a user setting. It must be
-> **easily swappable**. **Starting provider: DeepSeek.**
+> chosen by the **operator at deploy time**, never a user setting, and is
+> **easily swappable**. **Text: DeepSeek. Photo: Claude (Haiku).**
 
 ## Principle
 - **One seam:** `INutritionEstimator`. The rest of the app depends only on it.
 - **Selected at startup** from flat `AI_*` env vars (same style as `SMTP_*` /
   `DB_*`), read in `Program.cs`.
-- **Adding a provider = a new class + a factory case.** No caller changes.
+- **Both shipping providers speak the Anthropic Messages API**, so a single
+  implementation — `AnthropicEstimator` — serves both. They differ *only by
+  connection*: endpoint + key + model (`AnthropicConnection`). DeepSeek exposes an
+  Anthropic-compatible endpoint at `api.deepseek.com/anthropic`; Claude uses its own.
+- **A composite** routes text→DeepSeek, photo→Claude (photo needs Claude because
+  DeepSeek's v4 models are text-only — see below). If only one connection is
+  configured it serves both directions.
+- **Adding a same-format provider = a new connection** (env values), no code.
+  **Adding an OpenAI-format provider** = wire the parked `OpenAiEstimator`
+  (chat/completions) — kept ready for OpenAI / Azure OpenAI / vLLM / etc.
 
 ## Configuration (flat env vars)
 | Key | Purpose |
 |---|---|
-| `AI_PROVIDER` | which implementation (e.g. `deepseek`) |
-| `AI_API_KEY` | **secret** — only in `/opt/fuel/.env.*`, never committed |
-| `AI_BASE_URL` | provider endpoint |
-| `AI_MODEL` | model id |
+| `AI_PROVIDER` | informational label for the text connection (e.g. `deepseek`) |
+| `AI_API_KEY` | **secret** — text connection key; only in `/opt/fuel/.env.*` |
+| `AI_BASE_URL` | text endpoint — DeepSeek's Anthropic-compatible `…/anthropic` |
+| `AI_MODEL` | text model id (e.g. `deepseek-v4-flash`) |
 | `AI_ENABLED` | off → app runs manual-only |
 | `AI_TIMEOUT_SECONDS` | guard for the slow external call |
+| `AI_CLAUDE_ENABLED` | enable the photo (vision) connection |
+| `AI_CLAUDE_API_KEY` | **secret** — Anthropic key for the photo connection |
+| `AI_CLAUDE_BASE_URL` | photo endpoint (default `https://api.anthropic.com`) |
+| `AI_CLAUDE_MODEL` | vision model id (e.g. `claude-haiku-4-5-20251001`) |
+
+### Why photo ≠ DeepSeek
+DeepSeek's `/anthropic` endpoint *accepts* an image block (HTTP 200) but the v4
+models are text-only: the API substitutes the image with `[Unsupported Image]`
+before the model sees it, so it returns nothing usable (or hallucinates a generic
+plate). Verified directly against `deepseek-v4-flash`/`-pro`. Hence photos route to
+Claude. The day DeepSeek ships a vision model, flip `SupportsImages` on its
+connection — no other change.
 
 Wire in `Program.cs`; pass through the `app` service in `deploy/docker-compose.yml`;
 add the **non-secret** keys to `deploy/.env.*.example`. The key itself is handled
@@ -62,20 +83,23 @@ NutritionEstimate {
   `barcode-lookup.md`) — it is a database lookup, not an AI estimate.
 
 ## Providers
-- **`DeepSeekEstimator` (built)** — text (Phase 2) via DeepSeek's OpenAI-compatible
-  `/chat/completions` in JSON mode. Image support (Phase 3) is stubbed; DeepSeek
-  supports image input natively.
-- **Default model: `deepseek-v4-flash`** — chosen after benchmarking v4-flash,
-  v4-pro, v3-chat, Claude Haiku/Sonnet/Opus against multilingual food descriptions
-  (SR/DE/RU). V4-flash matched or beat v4-pro on Latin-script accuracy at 7–18× lower
-  cost than Claude Haiku (~$0.14/M input, $0.28/M output) and ~4× faster latency
-  than v4-pro. For this structured-JSON food-estimation task, reasoning models add
-  cost and latency without accuracy gains.
-- **Claude models** (Haiku/Sonnet/Opus) were benchmarked as candidates via the
-  Anthropic API; Haiku-4.5 was competitive on accuracy (slightly better on obscure
-  regional terms like "kajmak") but 7× pricier per input token. A `ClaudeEstimator`
-  implementing the same `INutritionEstimator` seam is a future option.
-- **Registry/factory** keyed by `AI_PROVIDER` → DI registration in `Program.cs`.
+- **`AnthropicEstimator` (built)** — the single implementation behind both shipping
+  connections, over the Anthropic Messages API (`v1/messages`). One quirk it handles:
+  DeepSeek's endpoint is a *reasoner* and prepends a `thinking` content block before
+  the answer, so the parser takes the first **text** block, not the first block.
+- **Text connection → DeepSeek, `deepseek-v4-flash`** via its Anthropic-compatible
+  `/anthropic` endpoint. Model chosen after benchmarking v4-flash, v4-pro, v3-chat,
+  Claude Haiku/Sonnet/Opus on multilingual food descriptions (SR/DE/RU): v4-flash
+  matched or beat v4-pro on Latin-script accuracy at far lower cost (~$0.14/M in,
+  $0.28/M out). (Via the `/anthropic` endpoint the reasoning step adds ~3–4s latency
+  vs. the OpenAI endpoint — still well inside the timeout.)
+- **Photo connection → Claude, `claude-haiku-4-5`** — required, because DeepSeek's v4
+  models are text-only (see §"Why photo ≠ DeepSeek"). Haiku is competitive on accuracy
+  and the cheapest vision-capable Claude.
+- **`OpenAiEstimator` (parked)** — generic OpenAI-compatible `/chat/completions` impl,
+  not wired; kept ready for a future OpenAI-format provider.
+- **Wiring** lives in `Program.cs`: two named `HttpClient`s (`ai-text`, `ai-image`)
+  with resilience pipelines, two `AnthropicEstimator`s, one composite.
 
 ## Resilience
 The estimator is a slow, fallible **external** call — treat every call as
