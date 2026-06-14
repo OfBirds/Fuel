@@ -11,9 +11,12 @@ public class AuthController(IAuthService authService) : ControllerBase
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request)
     {
+        if (!await authService.ValidatePasswordAsync(request.Password))
+            return BadRequest(new { error = AuthService.PasswordPolicyMessage });
+
         var user = await authService.RegisterAsync(request.Email, request.Password);
         if (user == null)
-            return BadRequest(new { error = "Registration failed" });
+            return BadRequest(new { error = "An account with that email already exists." });
 
         var token = GenerateSimpleToken(user.Id);
         return Ok(new AuthResponse
@@ -45,9 +48,12 @@ public class AuthController(IAuthService authService) : ControllerBase
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
+        if (!await authService.ValidatePasswordAsync(request.NewPassword))
+            return BadRequest(new { error = AuthService.PasswordPolicyMessage });
+
         var success = await authService.ResetPasswordAsync(request.Email, request.NewPassword);
         if (!success)
-            return BadRequest(new { error = "Password reset failed. Check your email and ensure password is at least 8 characters." });
+            return BadRequest(new { error = "No account found with that email." });
 
         return Ok(new { message = "Password reset successful" });
     }

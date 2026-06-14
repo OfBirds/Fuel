@@ -276,7 +276,7 @@ function CataloguePage() {
 
           <div className="food-form-row">
             <div className="food-form-section">
-              <label>Default UoM</label>
+              <label>Default unit</label>
               <select value={form.defaultUoM} onChange={(e) => setForm((f) => ({ ...f, defaultUoM: e.target.value }))}>
                 {UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
               </select>

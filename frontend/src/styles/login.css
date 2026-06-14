@@ -86,7 +86,26 @@
 
 .form-group input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
+.pw-reqs {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.15rem 0.75rem;
+}
+
+.pw-req {
+  font-size: 0.8rem;
+  color: var(--text-light);
+  transition: color 0.15s ease;
+}
+
+.pw-req.met {
+  color: var(--success);
 }
 
 .error-message {
@@ -128,7 +147,7 @@
 .submit-button:hover:not(:disabled) {
   opacity: 0.9;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
 }
 
 .submit-button:disabled {

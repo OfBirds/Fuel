@@ -139,8 +139,8 @@ function HomePage() {
         <p className="settings-muted" style={{ textAlign: 'center', marginTop: '2rem' }}>Loading…</p>
       ) : entries.length === 0 ? (
         <div className="empty-state">
-          <h2>Log your first meal</h2>
-          <p>Tap any "Add" button below to get started — no food has been logged today.</p>
+          <h2>Nothing logged yet</h2>
+          <p>Use an “+ Add” button below to log your first meal of the day.</p>
         </div>
       ) : (
         grouped.map(({ meal, entries: mealEntries, mealTotal }) => (

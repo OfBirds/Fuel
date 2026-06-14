@@ -33,7 +33,7 @@ describe('HomePage', () => {
 
     renderHomePage();
     await waitFor(() => {
-      const el = screen.getAllByText('Log your first meal');
+      const el = screen.getAllByText('Nothing logged yet');
       expect(el.length).toBeGreaterThan(0);
     });
   });

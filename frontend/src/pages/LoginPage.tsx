@@ -23,6 +23,35 @@ interface LoginPageProps {
 
 type View = 'login' | 'register' | 'forgot';
 
+// Kept in sync with the backend policy in AuthService.IsPasswordValid.
+const PASSWORD_RULES: { label: string; test: (p: string) => boolean }[] = [
+  { label: 'At least 8 characters', test: (p) => p.length >= 8 },
+  { label: 'One letter', test: (p) => /[a-zA-Z]/.test(p) },
+  { label: 'One number', test: (p) => /[0-9]/.test(p) },
+  { label: 'One special character', test: (p) => /[^a-zA-Z0-9]/.test(p) },
+];
+
+function PasswordRequirements({ value }: { value: string }) {
+  return (
+    <ul className="pw-reqs" aria-label="Password requirements">
+      {PASSWORD_RULES.map((rule) => {
+        const met = rule.test(value);
+        return (
+          <li key={rule.label} className={met ? 'pw-req met' : 'pw-req'}>
+            <span aria-hidden="true">{met ? '✓' : '○'}</span> {rule.label}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+const SUBTITLES: Record<View, string> = {
+  login: 'Welcome back',
+  register: 'Create your account',
+  forgot: 'Reset your password',
+};
+
 function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -88,7 +117,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
     <div className="login-page">
       <div className="login-container">
         <h1>Fuel</h1>
-        <p className="login-subtitle">Sign in to continue</p>
+        <p className="login-subtitle">{SUBTITLES[view]}</p>
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
@@ -119,6 +148,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
                   <EyeIcon visible={showPassword} />
                 </button>
               </div>
+              {view === 'register' && <PasswordRequirements value={password} />}
             </div>
           )}
 
@@ -132,13 +162,14 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
-                  placeholder="Min. 8 characters"
+                  placeholder="Your new password"
                   minLength={8}
                 />
                 <button type="button" className="eye-button" onClick={() => setShowNewPassword(v => !v)} aria-label="Toggle password visibility">
                   <EyeIcon visible={showNewPassword} />
                 </button>
               </div>
+              <PasswordRequirements value={newPassword} />
             </div>
           )}
 
@@ -194,7 +225,8 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
 
         <div className="disclaimer">
           <p>
-            <strong>Welcome.</strong> Create an account or sign in. Your data is private and stored securely.
+            <strong>Self-hosted &amp; private.</strong> Fuel runs on your own server — your food
+            log and weigh-ins never leave it.
           </p>
         </div>
       </div>

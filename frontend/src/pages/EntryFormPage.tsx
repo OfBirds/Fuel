@@ -292,7 +292,7 @@ function EntryFormPage() {
               </div>
               <div className="entry-form-row">
                 <div className="form-section">
-                  <label>Default UoM</label>
+                  <label>Default unit</label>
                   <select value={inlineUoM} onChange={(e) => setInlineUoM(e.target.value)}>
                     {UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
                   </select>

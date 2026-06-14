@@ -15,6 +15,16 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** Pull the API's `{ error }` message out of a failed response, falling back to a default. */
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const data = await res.json();
+    return typeof data?.error === 'string' && data.error ? data.error : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
     const stored = localStorage.getItem('user');
@@ -30,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (!res.ok) {
-      throw new Error('Login failed');
+      throw new Error(await errorMessage(res, 'Invalid email or password'));
     }
 
     const data = await res.json();
@@ -48,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (!res.ok) {
-      throw new Error('Registration failed');
+      throw new Error(await errorMessage(res, 'Registration failed'));
     }
 
     const data = await res.json();
