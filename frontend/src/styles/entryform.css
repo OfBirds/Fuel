@@ -24,6 +24,28 @@
   position: relative;
 }
 
+.food-search-toolbar {
+  margin-bottom: 0.35rem;
+}
+
+.search-sort {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  min-width: 105px;
+}
+
+.search-result-ponder {
+  font-size: 0.75rem;
+  color: var(--text-light);
+  font-weight: 400;
+  margin-left: 0.4rem;
+}
+
 .food-search-input {
   width: 100%;
   padding: 0.6rem 0.75rem;

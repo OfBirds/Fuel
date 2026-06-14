@@ -169,7 +169,7 @@ public class FoodControllerTests : IDisposable
     [Fact]
     public async Task GetFoods_ReturnsAll()
     {
-        var result = await _controller.GetFoods(null, CancellationToken.None);
+        var result = await _controller.GetFoods(search: null, ct: CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var list = Assert.IsType<List<FoodListItemResponse>>(ok.Value);
@@ -179,7 +179,7 @@ public class FoodControllerTests : IDisposable
     [Fact]
     public async Task GetFoods_WithSearch_Filters()
     {
-        var result = await _controller.GetFoods("chicken", CancellationToken.None);
+        var result = await _controller.GetFoods(search: "chicken", ct: CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var list = Assert.IsType<List<FoodListItemResponse>>(ok.Value);

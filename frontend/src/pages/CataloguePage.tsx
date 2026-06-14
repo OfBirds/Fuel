@@ -9,7 +9,19 @@ interface FoodItem {
   caloriesPerUnit: number;
   ingredientCount: number;
   isComposite: boolean;
+  ponder: number | null;
+  usageCount: number | null;
+  lastUsedAtUtc: string | null;
 }
+
+type SortMode = 'priority' | 'alphabetical' | 'most-used' | 'recent';
+
+const SORT_LABELS: Record<SortMode, string> = {
+  priority: 'Priority',
+  alphabetical: 'A–Z',
+  'most-used': 'Most-used',
+  recent: 'Recent',
+};
 
 interface IngredientResponse {
   childFoodId: string;
@@ -56,6 +68,7 @@ function CataloguePage() {
   const { user } = useAuth();
   const [foods, setFoods] = useState<FoodItem[]>([]);
   const [search, setSearch] = useState('');
+  const [sortMode, setSortMode] = useState<SortMode>('priority');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,7 +88,11 @@ function CataloguePage() {
   const fetchFoods = useCallback(async () => {
     setLoading(true);
     try {
-      const url = search ? `/api/foods?search=${encodeURIComponent(search)}` : '/api/foods';
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      if (user?.id) { params.set('userId', user.id); params.set('sort', sortMode); }
+      const qs = params.toString();
+      const url = qs ? `/api/foods?${qs}` : '/api/foods';
       const res = await fetch(url);
       if (res.ok) setFoods((await res.json()) as FoodItem[]);
     } catch {
@@ -83,7 +100,7 @@ function CataloguePage() {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [search, sortMode, user?.id]);
 
   useEffect(() => { fetchFoods(); }, [fetchFoods]);
 
@@ -162,12 +179,14 @@ function CataloguePage() {
     if (!ingSearchTerm.trim()) { setIngSearchResults([]); return; }
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/foods?search=${encodeURIComponent(ingSearchTerm)}`);
+        const params = new URLSearchParams({ search: ingSearchTerm });
+        if (user?.id) { params.set('userId', user.id); params.set('sort', sortMode); }
+        const res = await fetch(`/api/foods?${params.toString()}`);
         if (res.ok) setIngSearchResults((await res.json()) as FoodItem[]);
       } catch { /* ignore */ }
     }, 200);
     return () => clearTimeout(timer);
-  }, [ingSearchTerm]);
+  }, [ingSearchTerm, sortMode, user?.id]);
 
   const saveFood = async () => {
     if (!form.name.trim()) { setFormError('Name is required.'); return; }
@@ -224,6 +243,18 @@ function CataloguePage() {
     }
   };
 
+  const setPonder = async (foodId: string, ponder: number) => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(`/api/foods/${foodId}/priority?userId=${encodeURIComponent(user.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ponder }),
+      });
+      if (res.ok) fetchFoods();
+    } catch { /* ignore */ }
+  };
+
   const deleteFood = async (id: string) => {
     if (!confirm('Delete this food? Any entries that used it will keep their snapshotted values.')) return;
     try {
@@ -255,6 +286,15 @@ function CataloguePage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <select
+          className="catalogue-sort"
+          value={sortMode}
+          onChange={(e) => setSortMode(e.target.value as SortMode)}
+        >
+          {(['priority', 'alphabetical', 'most-used', 'recent'] as SortMode[]).map((m) => (
+            <option key={m} value={m}>{SORT_LABELS[m]}</option>
+          ))}
+        </select>
         <button className="catalogue-add-btn" onClick={startAdd}>+ Add Food</button>
       </div>
 
@@ -408,13 +448,32 @@ function CataloguePage() {
         <ul className="food-list">
           {foods.map((f) => (
             <li key={f.id}>
-              <div className="food-card" onClick={() => startEdit(f.id)}>
-                <div className="food-card-main">
+              <div className="food-card">
+                <div className="food-card-main" onClick={() => startEdit(f.id)}>
                   <div className="food-card-name">{f.name}</div>
                   <div className="food-card-detail">
                     {f.caloriesPerUnit} cal/{f.defaultUoM}
                     {f.isComposite ? ` · ${f.ingredientCount} ingredient${f.ingredientCount !== 1 ? 's' : ''}` : ''}
+                    {f.usageCount != null ? ` · ${f.usageCount}×` : ''}
                   </div>
+                </div>
+                <div
+                  className="food-ponder"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    className="ponder-btn"
+                    aria-label={`Lower priority of ${f.name}`}
+                    onClick={() => setPonder(f.id, Math.max(0, (f.ponder ?? 100) - 10))}
+                  >−</button>
+                  <span className="ponder-value" title="Priority (lower = sooner)">
+                    {f.ponder ?? 100}
+                  </span>
+                  <button
+                    className="ponder-btn"
+                    aria-label={`Raise priority of ${f.name}`}
+                    onClick={() => setPonder(f.id, (f.ponder ?? 100) + 10)}
+                  >+</button>
                 </div>
                 {f.isComposite && <span className="food-card-badge">composite</span>}
                 <button

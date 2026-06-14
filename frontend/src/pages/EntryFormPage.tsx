@@ -11,7 +11,19 @@ interface FoodItem {
   caloriesPerUnit: number;
   ingredientCount: number;
   isComposite: boolean;
+  ponder: number | null;
+  usageCount: number | null;
+  lastUsedAtUtc: string | null;
 }
+
+type SortMode = 'priority' | 'alphabetical' | 'most-used' | 'recent';
+
+const SORT_LABELS: Record<SortMode, string> = {
+  priority: 'Priority',
+  alphabetical: 'A–Z',
+  'most-used': 'Most-used',
+  recent: 'Recent',
+};
 
 interface FoodDetail extends FoodItem {
   proteinPerUnit: number | null;
@@ -56,6 +68,7 @@ function EntryFormPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<FoodItem[]>([]);
   const [searching, setSearching] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>('priority');
   const [selectedFood, setSelectedFood] = useState<FoodDetail | null>(null);
   const [showInlineForm, setShowInlineForm] = useState(false);
 
@@ -115,6 +128,7 @@ function EntryFormPage() {
             caloriesPerUnit: entry.calories / (entry.quantity || 1),
             proteinPerUnit: null, carbsPerUnit: null, fatPerUnit: null,
             ingredientCount: 0, isComposite: false,
+            ponder: null, usageCount: null, lastUsedAtUtc: null,
           } : null);
         }
       } catch {
@@ -147,14 +161,16 @@ function EntryFormPage() {
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await fetch(`/api/foods?search=${encodeURIComponent(searchTerm)}`);
+        const params = new URLSearchParams({ search: searchTerm });
+        if (user?.id) { params.set('userId', user.id); params.set('sort', sortMode); }
+        const res = await fetch(`/api/foods?${params.toString()}`);
         if (res.ok) setSearchResults((await res.json()) as FoodItem[]);
       } finally {
         setSearching(false);
       }
     }, 200);
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchTerm, sortMode, user?.id]);
 
   const selectFood = useCallback(async (food: FoodItem) => {
     try {
@@ -304,6 +320,17 @@ function EntryFormPage() {
         <>
           <div className="form-section">
             <label>Search foods</label>
+            <div className="food-search-toolbar">
+              <select
+                className="search-sort"
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as SortMode)}
+              >
+                {(['priority', 'alphabetical', 'most-used', 'recent'] as SortMode[]).map((m) => (
+                  <option key={m} value={m}>{SORT_LABELS[m]}</option>
+                ))}
+              </select>
+            </div>
             <div className="food-search">
               <input
                 className="food-search-input"
@@ -316,9 +343,14 @@ function EntryFormPage() {
                 <div className="search-results">
                   {searchResults.map((f) => (
                     <div key={f.id} className="search-result-item" onClick={() => selectFood(f)}>
-                      <div className="search-result-name">{f.name}</div>
+                      <div className="search-result-name">
+                        {f.name}
+                        <span className="search-result-ponder" title="Priority"> {f.ponder ?? 100}</span>
+                      </div>
                       <div className="search-result-detail">
-                        {f.caloriesPerUnit} cal/{f.defaultUoM}{f.isComposite ? ' · composite' : ''}
+                        {f.caloriesPerUnit} cal/{f.defaultUoM}
+                        {f.isComposite ? ' · composite' : ''}
+                        {f.usageCount != null ? ` · ${f.usageCount}×` : ''}
                       </div>
                     </div>
                   ))}

@@ -11,27 +11,102 @@ namespace Api.Controllers;
 [Route("api/foods")]
 public class FoodController(AppDbContext db, IFoodService foodService) : ControllerBase
 {
-    /// <summary>List/search foods. Pass ?search= to filter by name.</summary>
+    /// <summary>List/search foods with optional per-user sort and priority data.</summary>
     [HttpGet]
     public async Task<ActionResult<List<FoodListItemResponse>>> GetFoods(
-        [FromQuery] string? search, CancellationToken ct)
+        [FromQuery] string? search = null,
+        [FromQuery] Guid? userId = null,
+        [FromQuery] string? sort = null,
+        CancellationToken ct = default)
     {
         var query = db.Foods.AsQueryable();
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(f => f.Name.ToLower().Contains(search.ToLower()));
 
-        var foods = await query
-            .OrderBy(f => f.Name)
-            .Select(f => new FoodListItemResponse
-            {
-                Id = f.Id,
-                Name = f.Name,
-                DefaultUoM = f.DefaultUoM,
-                CaloriesPerUnit = f.CaloriesPerUnit,
-                IngredientCount = f.Ingredients.Count,
-                IsComposite = f.Ingredients.Count > 0
-            })
-            .ToListAsync(ct);
+        // Determine sort mode: priority requires userId; without userId, fall back to alphabetical.
+        var sortMode = !string.IsNullOrWhiteSpace(sort) ? sort : (userId.HasValue ? "priority" : "alphabetical");
+
+        List<FoodListItemResponse> foods;
+
+        switch (sortMode)
+        {
+            case "priority" when userId.HasValue:
+                foods = await query
+                    .GroupJoin(db.UserFoodPriorities.Where(p => p.UserId == userId.Value),
+                        f => f.Id, p => p.FoodId,
+                        (f, ps) => new { Food = f, Ponder = ps.Select(p => (int?)p.Ponder).FirstOrDefault() })
+                    .OrderBy(x => x.Ponder ?? 100)
+                    .ThenBy(x => x.Food.Name)
+                    .Select(x => new FoodListItemResponse
+                    {
+                        Id = x.Food.Id,
+                        Name = x.Food.Name,
+                        DefaultUoM = x.Food.DefaultUoM,
+                        CaloriesPerUnit = x.Food.CaloriesPerUnit,
+                        IngredientCount = x.Food.Ingredients.Count,
+                        IsComposite = x.Food.Ingredients.Count > 0,
+                        Ponder = x.Ponder,
+                    })
+                    .ToListAsync(ct);
+                break;
+
+            case "most-used" when userId.HasValue:
+                foods = await query
+                    .GroupJoin(db.FoodEntries.Where(e => e.UserId == userId.Value && e.FoodId != null),
+                        f => f.Id, e => e.FoodId!.Value,
+                        (f, entries) => new { Food = f, Count = entries.Count(), MaxIntake = entries.Max(e => (DateTime?)e.IntakeAtUtc) })
+                    .OrderByDescending(x => x.Count)
+                    .ThenBy(x => x.Food.Name)
+                    .Select(x => new FoodListItemResponse
+                    {
+                        Id = x.Food.Id,
+                        Name = x.Food.Name,
+                        DefaultUoM = x.Food.DefaultUoM,
+                        CaloriesPerUnit = x.Food.CaloriesPerUnit,
+                        IngredientCount = x.Food.Ingredients.Count,
+                        IsComposite = x.Food.Ingredients.Count > 0,
+                        UsageCount = x.Count > 0 ? x.Count : null,
+                        LastUsedAtUtc = x.MaxIntake,
+                    })
+                    .ToListAsync(ct);
+                break;
+
+            case "recent" when userId.HasValue:
+                foods = await query
+                    .GroupJoin(db.FoodEntries.Where(e => e.UserId == userId.Value && e.FoodId != null),
+                        f => f.Id, e => e.FoodId!.Value,
+                        (f, entries) => new { Food = f, MaxIntake = entries.Max(e => (DateTime?)e.IntakeAtUtc) })
+                    .OrderByDescending(x => x.MaxIntake ?? DateTime.MinValue)
+                    .ThenBy(x => x.Food.Name)
+                    .Select(x => new FoodListItemResponse
+                    {
+                        Id = x.Food.Id,
+                        Name = x.Food.Name,
+                        DefaultUoM = x.Food.DefaultUoM,
+                        CaloriesPerUnit = x.Food.CaloriesPerUnit,
+                        IngredientCount = x.Food.Ingredients.Count,
+                        IsComposite = x.Food.Ingredients.Count > 0,
+                        LastUsedAtUtc = x.MaxIntake,
+                    })
+                    .ToListAsync(ct);
+                break;
+
+            default:
+                // Alphabetical (or fallback when userId missing for per-user sorts)
+                foods = await query
+                    .OrderBy(f => f.Name)
+                    .Select(f => new FoodListItemResponse
+                    {
+                        Id = f.Id,
+                        Name = f.Name,
+                        DefaultUoM = f.DefaultUoM,
+                        CaloriesPerUnit = f.CaloriesPerUnit,
+                        IngredientCount = f.Ingredients.Count,
+                        IsComposite = f.Ingredients.Count > 0,
+                    })
+                    .ToListAsync(ct);
+                break;
+        }
 
         return Ok(foods);
     }
@@ -234,6 +309,50 @@ public class FoodController(AppDbContext db, IFoodService foodService) : Control
         db.Foods.Remove(food);
         await db.SaveChangesAsync(ct);
 
+        return NoContent();
+    }
+
+    /// <summary>Set per-user priority (ponder) for a food. Upsert — lower = higher priority.</summary>
+    [HttpPut("{foodId:guid}/priority")]
+    public async Task<ActionResult> SetPriority(
+        Guid foodId, [FromQuery] Guid userId, [FromBody] SetPriorityRequest request, CancellationToken ct)
+    {
+        if (request.Ponder < 0)
+            return BadRequest(new { error = "Ponder must be >= 0." });
+
+        var foodExists = await db.Foods.AnyAsync(f => f.Id == foodId, ct);
+        if (!foodExists)
+            return NotFound();
+
+        var existing = await db.UserFoodPriorities
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.FoodId == foodId, ct);
+
+        if (existing is not null)
+        {
+            if (request.Ponder == 100)
+            {
+                db.UserFoodPriorities.Remove(existing);
+            }
+            else
+            {
+                existing.Ponder = request.Ponder;
+            }
+        }
+        else
+        {
+            if (request.Ponder != 100)
+            {
+                db.UserFoodPriorities.Add(new UserFoodPriority
+                {
+                    UserId = userId,
+                    FoodId = foodId,
+                    Ponder = request.Ponder,
+                });
+            }
+            // Ponder == 100 and no row → no-op (already default)
+        }
+
+        await db.SaveChangesAsync(ct);
         return NoContent();
     }
 

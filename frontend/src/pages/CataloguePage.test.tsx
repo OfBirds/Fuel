@@ -78,4 +78,22 @@ describe('CataloguePage', () => {
       expect(screen.getAllByText('composite').length).toBeGreaterThan(0);
     });
   });
+
+  it('renders sort mode selector and changes order on selection', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
+
+    const { container } = renderCatalogue();
+    await waitFor(() => {
+      expect(screen.getAllByText('No foods in the catalogue yet.').length).toBeGreaterThan(0);
+    });
+
+    // Sort selector should be in the document
+    const select = container.querySelector('.catalogue-sort') as HTMLSelectElement;
+    expect(select).toBeInTheDocument();
+    expect(select.value).toBe('priority');
+
+    // Change sort mode
+    await userEvent.selectOptions(select, 'alphabetical');
+    expect(select.value).toBe('alphabetical');
+  });
 });

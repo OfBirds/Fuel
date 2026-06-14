@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     public DbSet<Food> Foods { get; set; }
     public DbSet<FoodIngredient> FoodIngredients { get; set; }
     public DbSet<FoodEntry> FoodEntries { get; set; }
+    public DbSet<UserFoodPriority> UserFoodPriorities { get; set; }
     public DbSet<WeightEntry> WeightEntries { get; set; }
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
@@ -90,6 +91,21 @@ public class AppDbContext : DbContext
                 .HasDefaultValue(EntrySource.Manual);
 
             entity.HasIndex(e => new { e.UserId, e.IntakeAtUtc });
+        });
+
+        modelBuilder.Entity<UserFoodPriority>(entity =>
+        {
+            entity.HasKey(e => new { e.UserId, e.FoodId });
+
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Food)
+                .WithMany()
+                .HasForeignKey(e => e.FoodId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<WeightEntry>(entity =>

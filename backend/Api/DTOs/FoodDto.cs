@@ -8,6 +8,12 @@ public class FoodListItemResponse
     public double CaloriesPerUnit { get; set; }
     public int IngredientCount { get; set; }
     public bool IsComposite { get; set; }
+    /// <summary>Current user's ponder value (null when no user context provided, or default 100).</summary>
+    public int? Ponder { get; set; }
+    /// <summary>Per-user usage count (null when no user context).</summary>
+    public int? UsageCount { get; set; }
+    /// <summary>Per-user last-used timestamp (null when no user context).</summary>
+    public DateTime? LastUsedAtUtc { get; set; }
 }
 
 public class FoodResponse
@@ -76,4 +82,10 @@ public class InlineChildRequest
     public double? ProteinPerUnit { get; set; }
     public double? CarbsPerUnit { get; set; }
     public double? FatPerUnit { get; set; }
+}
+
+public class SetPriorityRequest
+{
+    /// <summary>Ponder value to set (0-10_000). Floor 0, default 100.</summary>
+    public int Ponder { get; set; }
 }

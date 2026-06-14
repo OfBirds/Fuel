@@ -8,14 +8,29 @@
 > that shared, growing list navigable.
 
 ## Manual priority — "ponder"
-A per-food integer **`Ponder`** on `Food` (global, shared, editable on add *and* edit).
-- **Default `0`. Sort ascending — lower = stronger** (ponder 20 outranks ponder 40).
-- The model is **demotion**: every food starts prime (0); you *raise* a food's ponder
-  to push it down the list (rarely-used items, duplicates, joke entries). Favourites
-  are simply the ones left low.
-- **Open question:** allow **negative** ponder (to *promote* a few favourites above the
-  default crowd), or keep `0` as the floor (demote-only)? Leaning: allow negatives —
-  cheap, and it makes "favourite" expressive rather than only "demote everything else."
+A **per-user** integer **`Ponder`** for a food — each household member ranks the shared
+catalogue their own way (the food *data* is shared; the *ordering* is personal).
+- **Default `100`. Sort ascending — lower = stronger** (ponder 20 outranks ponder 40).
+- **Positive integers only (natural numbers): floor `0`, no negatives.** The `100`
+  default leaves headroom in both directions — promote a favourite by lowering it toward
+  `0`, demote an item by raising it well above `100`.
+- The model is **demotion/promotion around a mid-point**: every food starts at `100`;
+  *lower* its ponder to promote (favourites, staples), *raise* it to push it down the list
+  (rarely-used items, duplicates, joke entries).
+- **Decided:** no negative ponder — `0` is the floor. Negatives looked odd; a `100`
+  default with a `0` floor keeps values to plain natural numbers while staying expressive
+  both ways.
+
+### Storage — a per-user join table
+`Food` is intentionally global (no `UserId`), so ponder **can't be a column on `Food`**.
+Instead a small table holds only the per-user overrides:
+
+- **`UserFoodPriority(UserId, FoodId, Ponder)`**, composite PK `(UserId, FoodId)`.
+- **Default `100` = absence of a row.** Only rows that deviate from `100` are stored — no
+  backfill, no row-per-(user×food) explosion. Setting a ponder is an **upsert**; setting
+  it back to `100` can simply delete the row.
+- Priority sort: `LEFT JOIN UserFoodPriority fp ON fp.FoodId = f.Id AND fp.UserId = me`,
+  then `ORDER BY COALESCE(fp.Ponder, 100) ASC, f.Name`.
 
 ## Selectable sort modes (food picker + catalogue page)
 When choosing foods for **meals** or **ingredients**, and on the catalogue page, the
@@ -32,16 +47,15 @@ user picks the order:
 
 ## No new tracking table — derive from `FoodEntry`
 Usage and recency are **already in the data**: `FoodEntry(UserId, FoodId, IntakeAtUtc)`.
-- **Most-used** = `COUNT(FoodEntry WHERE FoodId = f [AND UserId = me])`
-- **Recent** = `MAX(FoodEntry.IntakeAtUtc WHERE FoodId = f [AND UserId = me])`
+- **Most-used** = `COUNT(FoodEntry WHERE FoodId = f AND UserId = me)`
+- **Recent** = `MAX(FoodEntry.IntakeAtUtc WHERE FoodId = f AND UserId = me)`
 
-So the **only schema change is the `Ponder` column** (plus supporting indexes). No
-counters to maintain, nothing to keep in sync.
+So the **only schema change is the `UserFoodPriority` table** (plus supporting indexes).
+No usage counters to maintain, nothing to keep in sync.
 
-- **Open question — scope of Most-used / Recent: per-user or global/household?** One-line
-  filter difference. Leaning: **Recent = per-user** (recency is personal — "what *I*
-  just logged"), **Most-used = global** (surfaces the household staples). Trivial to do
-  either or both.
+- **Decided — scope of Most-used / Recent: both per-user.** Each is filtered
+  `AND UserId = me` — Most-used = "what *I* log most", Recent = "what *I* just logged".
+  Keeps ranking personal rather than household-wide.
 
 ## Where it shows up
 - The manual food picker on the unified entry screen (choosing a food for a meal).
