@@ -28,13 +28,18 @@ function mockMealPauseNotConfigured() {
   return { ok: true, json: async () => ({ isWithinPause: false, hoursSinceLast: null, mealPauseHours: null }) };
 }
 
+// EntryFormPage checks AI availability first on mount; default it to off.
+function mockAiStatus(enabled = false) {
+  return { ok: true, json: async () => ({ enabled, supportsImages: false }) };
+}
+
 describe('EntryFormPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders the add entry form', async () => {
-    mockFetch.mockResolvedValueOnce(mockMealPauseNotConfigured());
+    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
       const headings = screen.getAllByText('Add Entry');
@@ -44,6 +49,7 @@ describe('EntryFormPage', () => {
 
   it('searches foods on input', async () => {
     mockFetch
+      .mockResolvedValueOnce(mockAiStatus())                // ai status (mount)
       .mockResolvedValueOnce(mockMealPauseNotConfigured())  // meal-pause check
       .mockResolvedValueOnce({                               // food search
         ok: true,
@@ -54,9 +60,10 @@ describe('EntryFormPage', () => {
 
     renderEntryForm();
 
-    // Wait for meal-pause check to resolve
+    // Wait for both mount fetches (ai-status + meal-pause) so the search fetch is
+    // the next call and lines up with its queued mock.
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalled();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
     const inputs = screen.getAllByPlaceholderText('Type a food name…');
@@ -69,7 +76,7 @@ describe('EntryFormPage', () => {
   });
 
   it('shows inline food define link', async () => {
-    mockFetch.mockResolvedValueOnce(mockMealPauseNotConfigured());
+    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
       const links = screen.getAllByText("Can't find it? Define a new food");
@@ -78,7 +85,7 @@ describe('EntryFormPage', () => {
   });
 
   it('does not show save button without food selected', async () => {
-    mockFetch.mockResolvedValueOnce(mockMealPauseNotConfigured());
+    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
       expect(screen.queryByText('Save Entry')).toBeNull();

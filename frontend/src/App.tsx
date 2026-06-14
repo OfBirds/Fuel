@@ -7,6 +7,7 @@ import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import SettingsPage from './pages/SettingsPage';
 import EntryFormPage from './pages/EntryFormPage';
+import AiEntryPage from './pages/AiEntryPage';
 import CataloguePage from './pages/CataloguePage';
 import WeightPage from './pages/WeightPage';
 import OnboardingPage from './pages/OnboardingPage';
@@ -116,6 +117,7 @@ function AppContent() {
           <Route path="/catalogue" element={<CataloguePage />} />
           <Route path="/weight" element={<WeightPage />} />
           <Route path="/entry/new" element={<EntryFormPage />} />
+          <Route path="/entry/ai" element={<AiEntryPage />} />
           <Route path="/entry/:entryId/edit" element={<EntryFormPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>

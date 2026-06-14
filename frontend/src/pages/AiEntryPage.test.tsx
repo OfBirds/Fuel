@@ -1,0 +1,145 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'test-user-id', email: 'test@example.com' }, token: 'fake' }),
+  AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+import AiEntryPage from './AiEntryPage';
+
+const mockFetch = vi.fn();
+globalThis.fetch = mockFetch;
+
+function renderPage(route = '/entry/ai?meal=Lunch&date=2026-06-14') {
+  return render(
+    <MemoryRouter initialEntries={[route]}>
+      <Routes>
+        <Route path="/entry/ai" element={<AiEntryPage />} />
+        <Route path="/" element={<div>Home</div>} />
+        <Route path="/entry/new" element={<div>Manual</div>} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+
+const aiOn = () => ({ ok: true, json: async () => ({ enabled: true, supportsImages: true }) });
+
+function estimateOk(items: unknown[], overall = 0.7) {
+  return { ok: true, json: async () => ({ ok: true, error: null, overallConfidence: overall, source: 'AiText', items }) };
+}
+
+const row = (over: Record<string, unknown> = {}) => ({
+  name: 'Chicken Breast', quantity: 200, uom: 'g', calories: 330,
+  protein: 62, carbs: 0, fat: 7, confidence: 0.9,
+  matchedFoodId: 'food-1', matchedDefaultUoM: 'g', isNew: false, ...over,
+});
+
+describe('AiEntryPage', () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => cleanup());
+
+  it('estimate populates multiple review rows', async () => {
+    mockFetch
+      .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(estimateOk([
+        row({ name: 'Chicken Breast' }),
+        row({ name: 'Broccoli', matchedFoodId: null, isNew: true, confidence: 0.4 }),
+      ]));
+
+    renderPage();
+    await screen.findByText('What did you eat?');
+    await userEvent.type(screen.getByLabelText('What did you eat?'), 'chicken and broccoli');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    await waitFor(() => expect(screen.getByDisplayValue('Chicken Breast')).toBeInTheDocument());
+    expect(screen.getByDisplayValue('Broccoli')).toBeInTheDocument();
+    expect(screen.getByText('new')).toBeInTheDocument(); // unmatched row badged
+  });
+
+  it('deletes a row', async () => {
+    mockFetch
+      .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(estimateOk([row({ name: 'Rice' }), row({ name: 'Beans' })]));
+
+    renderPage();
+    await screen.findByText('What did you eat?');
+    await userEvent.type(screen.getByLabelText('What did you eat?'), 'rice and beans');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    await screen.findByDisplayValue('Rice');
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Beans' }));
+
+    expect(screen.queryByDisplayValue('Beans')).toBeNull();
+    expect(screen.getByDisplayValue('Rice')).toBeInTheDocument();
+  });
+
+  it('edits override AI values and are sent on save', async () => {
+    mockFetch
+      .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(estimateOk([row({ name: 'Rice', quantity: 150, calories: 205 })]))
+      .mockResolvedValueOnce({ ok: true, json: async () => [] }); // batch save
+
+    renderPage();
+    await screen.findByText('What did you eat?');
+    await userEvent.type(screen.getByLabelText('What did you eat?'), 'rice');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    const calInput = await screen.findByDisplayValue('205');
+    await userEvent.clear(calInput);
+    await userEvent.type(calInput, '255');
+
+    await userEvent.click(screen.getByRole('button', { name: /Save 1 item/ }));
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
+    const [, opts] = mockFetch.mock.calls[2];
+    const body = JSON.parse((opts as RequestInit).body as string);
+    expect(body.items[0].calories).toBe(255);
+    expect(body.items[0].source).toBe('AiText');
+    expect(body.items[0].foodId).toBe('food-1');
+  });
+
+  it('refine re-requests with the accumulated note', async () => {
+    mockFetch
+      .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(estimateOk([row({ name: 'Toast' })]))
+      .mockResolvedValueOnce(estimateOk([row({ name: 'Wholemeal Toast' })]));
+
+    renderPage();
+    await screen.findByText('What did you eat?');
+    await userEvent.type(screen.getByLabelText('What did you eat?'), 'toast');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    await screen.findByDisplayValue('Toast');
+    await userEvent.type(screen.getByLabelText(/Add a clarification/), "it's wholemeal");
+    await userEvent.click(screen.getByRole('button', { name: 'Refine' }));
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
+    const [, opts] = mockFetch.mock.calls[2];
+    const body = JSON.parse((opts as RequestInit).body as string);
+    expect(body.notes).toEqual(["it's wholemeal"]);
+  });
+
+  it('shows the manual fallback when estimation is unavailable', async () => {
+    mockFetch
+      .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: false, error: "Couldn't estimate — enter it manually.", overallConfidence: 0, source: 'AiText', items: [] }) });
+
+    renderPage();
+    await screen.findByText('What did you eat?');
+    await userEvent.type(screen.getByLabelText('What did you eat?'), 'something');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/enter it manually/i));
+  });
+
+  it('shows a disabled notice when AI is off', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ enabled: false, supportsImages: false }) });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText(/turned off/i)).toBeInTheDocument());
+    expect(screen.queryByLabelText('What did you eat?')).toBeNull();
+  });
+});

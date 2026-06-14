@@ -87,6 +87,7 @@ function EntryFormPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(isEdit);
+  const [aiEnabled, setAiEnabled] = useState(false);
 
   // Meal-pause warning
   const [mealPauseWarning, setMealPauseWarning] = useState<{ hoursSinceLast: number; mealPauseHours: number } | null>(null);
@@ -124,6 +125,18 @@ function EntryFormPage() {
     })();
     return () => { alive = false; };
   }, [entryId, user]);
+
+  // Offer the AI "describe it" path only when the operator has AI enabled.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/ai/status');
+        if (alive && res.ok) setAiEnabled((await res.json()).enabled === true);
+      } catch { /* leave AI off */ }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   // Debounced food search
   useEffect(() => {
@@ -275,6 +288,15 @@ function EntryFormPage() {
         <p className="meal-pause-warning" role="alert">
           ⏱ Only {mealPauseWarning.hoursSinceLast}h since your last intake (pause: {mealPauseWarning.mealPauseHours}h). Just a heads-up!
         </p>
+      )}
+
+      {!isEdit && aiEnabled && !selectedFood && (
+        <button
+          className="ai-describe-link"
+          onClick={() => navigate(`/entry/ai?meal=${encodeURIComponent(mealType)}&date=${queryDate}`)}
+        >
+          ✨ Describe it with AI instead
+        </button>
       )}
 
       {/* Food search */}

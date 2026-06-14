@@ -79,6 +79,26 @@
   font-size: 0.85rem;
 }
 
+.ai-describe-link {
+  display: block;
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.6rem;
+  background: none;
+  border: 1px dashed var(--primary);
+  color: var(--primary);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ai-describe-link:hover {
+  background: var(--primary);
+  color: white;
+}
+
 .inline-define-link {
   display: block;
   margin-top: 0.4rem;
