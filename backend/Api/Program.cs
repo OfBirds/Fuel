@@ -1,6 +1,8 @@
 using Api.Data;
 using Api.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http.Resilience;
+using Polly;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -112,9 +114,23 @@ if (aiOptions.Enabled
     builder.Services.AddHttpClient<INutritionEstimator, DeepSeekEstimator>(c =>
     {
         c.BaseAddress = new Uri(aiOptions.BaseUrl.TrimEnd('/') + "/");
-        // The estimator owns per-call timeout/cancellation (linked CTS) so it can tell a
-        // user-cancel from a timeout — disable HttpClient's own blanket timeout.
-        c.Timeout = Timeout.InfiniteTimeSpan;
+        c.Timeout = Timeout.InfiniteTimeSpan; // the resilience pipeline owns timing
+    })
+    .AddResilienceHandler("ai-estimator", b =>
+    {
+        // Total budget for the whole call (incl. the retry) = AI_TIMEOUT_SECONDS. The
+        // caller's CancellationToken is linked in, so a user Cancel cancels the request;
+        // a user-cancel surfaces as OperationCanceledException (never retried), a timeout
+        // as TimeoutRejectedException (→ manual fallback) — the two stay distinguishable.
+        b.AddTimeout(TimeSpan.FromSeconds(Math.Max(1, aiOptions.TimeoutSeconds)));
+        // One retry on transient HTTP (5xx / 408 / network). Default ShouldHandle.
+        b.AddRetry(new HttpRetryStrategyOptions
+        {
+            MaxRetryAttempts = 1,
+            BackoffType = DelayBackoffType.Constant,
+            Delay = TimeSpan.FromMilliseconds(250),
+            UseJitter = true,
+        });
     });
 }
 else

@@ -9,16 +9,15 @@ namespace Api.Services;
 
 /// <summary>
 /// DeepSeek nutrition estimator over its OpenAI-compatible chat/completions API in
-/// JSON mode. Best-effort external call (docs/ai-providers.md §Resilience):
-/// time-boxed to AI_TIMEOUT_SECONDS with one retry on transient errors, threading the
-/// caller's CancellationToken so a user "Cancel" — or the timeout — tears down the
-/// in-flight request. A user cancel is never retried; malformed/odd JSON is a failure.
+/// JSON mode. Best-effort external call (docs/ai-providers.md §Resilience): timeout +
+/// one retry on transient errors are applied by the Microsoft.Extensions.Http.Resilience
+/// pipeline on the typed client (see Program.cs). The caller's CancellationToken threads
+/// through so a user "Cancel" — or the timeout — tears down the in-flight request; a user
+/// cancel surfaces as OperationCanceledException, malformed/odd JSON as a failure.
 /// </summary>
 public class DeepSeekEstimator(HttpClient http, AiOptions options, ILogger<DeepSeekEstimator> logger)
     : INutritionEstimator
 {
-    private const int MaxAttempts = 2; // initial + one retry
-
     public bool SupportsImages => true; // DeepSeek supports image input (wired in Phase 3)
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -33,54 +32,19 @@ public class DeepSeekEstimator(HttpClient http, AiOptions options, ILogger<DeepS
 
     private async Task<NutritionEstimate> CallAsync(string userContent, CancellationToken ct)
     {
-        for (var attempt = 1; ; attempt++)
-        {
-            // Per-call timeout linked to the caller's token: whichever trips first
-            // (user Cancel via RequestAborted, or the timeout) cancels the request.
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds)));
-            var sw = Stopwatch.StartNew();
-            try
-            {
-                using var resp = await SendAsync(userContent, timeoutCts.Token);
-                if ((int)resp.StatusCode >= 500 && attempt < MaxAttempts)
-                {
-                    logger.LogWarning("DeepSeek {Status} (attempt {Attempt}) — retrying",
-                        (int)resp.StatusCode, attempt);
-                    continue;
-                }
-                resp.EnsureSuccessStatusCode();
-                var body = await resp.Content.ReadAsStringAsync(timeoutCts.Token);
-                var estimate = Parse(body);
-                logger.LogInformation(
-                    "DeepSeek estimate ok: {Items} items, overall conf {Conf}, {Ms}ms, model {Model}",
-                    estimate.Items.Count, estimate.OverallConfidence, sw.ElapsedMilliseconds, options.Model);
-                return estimate;
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                // Caller aborted (user Cancel / request abort) — propagate, never retry.
-                throw;
-            }
-            catch (Exception ex) when (attempt < MaxAttempts && IsTransient(ex))
-            {
-                logger.LogWarning(ex, "DeepSeek transient failure (attempt {Attempt}) — retrying", attempt);
-            }
-            catch (AiUnavailableException)
-            {
-                throw; // already a clean failure (bad/empty JSON) — don't double-wrap
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "DeepSeek estimate failed after {Attempt} attempt(s)", attempt);
-                throw new AiUnavailableException("Estimation failed.");
-            }
-        }
+        // Timeout + retry are handled by the resilience pipeline; on exhaustion it
+        // surfaces a transient HttpRequestException / TimeoutRejectedException, which the
+        // controller maps to the manual fallback. A user cancel raises OperationCanceledException.
+        var sw = Stopwatch.StartNew();
+        using var resp = await SendAsync(userContent, ct);
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadAsStringAsync(ct);
+        var estimate = Parse(body);
+        logger.LogInformation(
+            "DeepSeek estimate ok: {Items} items, overall conf {Conf}, {Ms}ms, model {Model}",
+            estimate.Items.Count, estimate.OverallConfidence, sw.ElapsedMilliseconds, options.Model);
+        return estimate;
     }
-
-    // A timeout (not the caller's token) and network blips are transient → one retry.
-    private static bool IsTransient(Exception ex)
-        => ex is HttpRequestException or TaskCanceledException or OperationCanceledException;
 
     private async Task<HttpResponseMessage> SendAsync(string userContent, CancellationToken ct)
     {
