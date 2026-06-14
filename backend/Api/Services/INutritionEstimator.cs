@@ -40,6 +40,26 @@ public class EstimatedItem
 }
 
 /// <summary>
+/// Thin composite that delegates text→DeepSeek, image→Claude. Both implement
+/// both methods, so if only one provider is configured it handles both directions
+/// (DeepSeek images currently fail at the API level — v4-flash is text-only — but
+/// future models or providers plug in with no code changes).
+/// </summary>
+public class CompositeNutritionEstimator(
+    INutritionEstimator textProvider, INutritionEstimator imageProvider) : INutritionEstimator
+{
+    public bool SupportsImages => imageProvider.SupportsImages;
+
+    public Task<NutritionEstimate> EstimateFromTextAsync(
+        string description, IReadOnlyList<string> notes, CancellationToken ct)
+        => textProvider.EstimateFromTextAsync(description, notes, ct);
+
+    public Task<NutritionEstimate> EstimateFromImageAsync(
+        byte[] image, string contentType, IReadOnlyList<string> notes, CancellationToken ct)
+        => imageProvider.EstimateFromImageAsync(image, contentType, notes, ct);
+}
+
+/// <summary>
 /// Raised when AI is disabled or the provider call fails after retry. The controller
 /// catches it and returns a "couldn't estimate — enter it manually" response so
 /// logging is never blocked (docs/ai-providers.md §Resilience).

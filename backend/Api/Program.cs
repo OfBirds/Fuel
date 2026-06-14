@@ -104,40 +104,91 @@ var aiOptions = new Api.Config.AiOptions
     Model = builder.Configuration["AI_MODEL"] ?? "deepseek-v4-flash",
     Enabled = string.Equals(builder.Configuration["AI_ENABLED"], "true", StringComparison.OrdinalIgnoreCase),
     TimeoutSeconds = int.TryParse(builder.Configuration["AI_TIMEOUT_SECONDS"], out var aiTimeout) ? aiTimeout : 30,
+    ClaudeEnabled = string.Equals(builder.Configuration["AI_CLAUDE_ENABLED"], "true", StringComparison.OrdinalIgnoreCase),
+    ClaudeApiKey = builder.Configuration["AI_CLAUDE_API_KEY"] ?? "",
+    ClaudeModel = builder.Configuration["AI_CLAUDE_MODEL"] ?? "claude-haiku-4-5-20251001",
 };
 builder.Services.AddSingleton(aiOptions);
 
-if (aiOptions.Enabled
-    && aiOptions.Provider.Equals("deepseek", StringComparison.OrdinalIgnoreCase)
-    && !string.IsNullOrWhiteSpace(aiOptions.ApiKey))
-{
-    builder.Services.AddHttpClient<INutritionEstimator, DeepSeekEstimator>(c =>
-    {
-        c.BaseAddress = new Uri(aiOptions.BaseUrl.TrimEnd('/') + "/");
-        c.Timeout = Timeout.InfiniteTimeSpan; // the resilience pipeline owns timing
-    })
-    .AddResilienceHandler("ai-estimator", b =>
-    {
-        // Total budget for the whole call (incl. the retry) = AI_TIMEOUT_SECONDS. The
-        // caller's CancellationToken is linked in, so a user Cancel cancels the request;
-        // a user-cancel surfaces as OperationCanceledException (never retried), a timeout
-        // as TimeoutRejectedException (→ manual fallback) — the two stay distinguishable.
-        b.AddTimeout(TimeSpan.FromSeconds(Math.Max(1, aiOptions.TimeoutSeconds)));
-        // One retry on transient HTTP (5xx / 408 / network). Default ShouldHandle.
-        b.AddRetry(new HttpRetryStrategyOptions
-        {
-            MaxRetryAttempts = 1,
-            BackoffType = DelayBackoffType.Constant,
-            Delay = TimeSpan.FromMilliseconds(250),
-            UseJitter = true,
-        });
-    });
-}
-else
+// Multiprovider: DeepSeek for text (cheap, $0.14/M) → Claude Haiku for images ($1/M).
+// Each provider gets its own typed client with resilience; a composite estimator
+// delegates text→DeepSeek, image→Claude. If only one is on, it handles both methods
+// (DeepSeek images fail at the API level — 400 — because v4-flash is text-only, but
+// the abstraction allows a future text+vision DeepSeek model to plug in with no
+// code changes).
+
+var hasDs = aiOptions.Enabled && !string.IsNullOrWhiteSpace(aiOptions.ApiKey);
+var hasCl = aiOptions.ClaudeEnabled && !string.IsNullOrWhiteSpace(aiOptions.ClaudeApiKey);
+
+if (!hasDs && !hasCl)
 {
     builder.Services.AddSingleton<INutritionEstimator, DisabledNutritionEstimator>();
     if (aiOptions.Enabled)
-        Log.Warning("AI_ENABLED is true but provider/key is missing — AI estimation disabled.");
+        Log.Warning("AI_ENABLED is true but no provider/key is configured — AI estimation disabled.");
+}
+else
+{
+    // DeepSeek for text
+    INutritionEstimator? textEst = null;
+    INutritionEstimator? imageEst = null;
+
+    if (hasDs)
+    {
+        builder.Services.AddHttpClient<DeepSeekEstimator>(c =>
+        {
+            c.BaseAddress = new Uri(aiOptions.BaseUrl.TrimEnd('/') + "/");
+            c.Timeout = Timeout.InfiniteTimeSpan;
+        })
+        .AddResilienceHandler("ai-ds", b =>
+        {
+            b.AddTimeout(TimeSpan.FromSeconds(Math.Max(1, aiOptions.TimeoutSeconds)));
+            b.AddRetry(new HttpRetryStrategyOptions
+            {
+                MaxRetryAttempts = 1,
+                BackoffType = DelayBackoffType.Constant,
+                Delay = TimeSpan.FromMilliseconds(250),
+                UseJitter = true,
+            });
+        });
+        builder.Services.AddSingleton(sp =>
+            sp.GetRequiredService<DeepSeekEstimator>() as INutritionEstimator);
+    }
+
+    // Claude for images (Phase 3) — separate key, separate client, separate pipeline
+    if (hasCl)
+    {
+        builder.Services.AddHttpClient<ClaudeEstimator>(c =>
+        {
+            c.BaseAddress = new Uri("https://api.anthropic.com/");
+            c.Timeout = Timeout.InfiniteTimeSpan;
+        })
+        .AddResilienceHandler("ai-cl", b =>
+        {
+            b.AddTimeout(TimeSpan.FromSeconds(Math.Max(1, aiOptions.TimeoutSeconds)));
+            b.AddRetry(new HttpRetryStrategyOptions
+            {
+                MaxRetryAttempts = 1,
+                BackoffType = DelayBackoffType.Constant,
+                Delay = TimeSpan.FromMilliseconds(250),
+                UseJitter = true,
+            });
+        });
+        builder.Services.AddSingleton(sp =>
+            sp.GetRequiredService<ClaudeEstimator>() as INutritionEstimator);
+    }
+
+    // Composite: text→DeepSeek (or Claude if only Claude is on), image→Claude (or
+    // DeepSeek if only DeepSeek is on — will fail at the API level for now, but the
+    // abstraction allows a future DeepSeek vision model with no code changes).
+    builder.Services.AddSingleton<INutritionEstimator>(sp =>
+    {
+        INutritionEstimator? t = null, i = null;
+        if (hasDs) t = sp.GetRequiredService<DeepSeekEstimator>();
+        if (hasCl) i = sp.GetRequiredService<ClaudeEstimator>();
+        return new CompositeNutritionEstimator(
+            textProvider: t ?? i!,       // fall back to the other if only one is configured
+            imageProvider: i ?? t!);
+    });
 }
 
 var app = builder.Build();

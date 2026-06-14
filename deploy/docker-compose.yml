@@ -59,6 +59,10 @@ services:
       AI_MODEL: ${AI_MODEL}
       AI_API_KEY: ${AI_API_KEY}
       AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS}
+      # Claude for photo estimation (Phase 3). Separate key, separate model.
+      AI_CLAUDE_ENABLED: ${AI_CLAUDE_ENABLED}
+      AI_CLAUDE_API_KEY: ${AI_CLAUDE_API_KEY}
+      AI_CLAUDE_MODEL: ${AI_CLAUDE_MODEL}
       # Structured logs -> Seq (internal). UI is published below per stack.
       SEQ_URL: http://seq
     ports:
