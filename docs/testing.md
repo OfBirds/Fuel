@@ -6,7 +6,8 @@
 
 | Suite | Location | Framework | Type |
 |-------|----------|-----------|------|
-| Backend | `backend/Api.Tests/` | xUnit + EF Core InMemory | Unit + service-level integration |
+| Backend (unit) | `backend/Api.Tests/` | xUnit + EF Core InMemory | Unit + service-level integration |
+| Backend (integration) | `backend/Api.IntegrationTests/` | xUnit + Testcontainers (Postgres) | Real-database integration |
 | Frontend | `frontend/src/**/*.test.{ts,tsx}` | Vitest + Testing Library | Unit + component render |
 
 Both stacks run in CI on every push to `main` and `release` before the image is built or
@@ -21,9 +22,11 @@ deployed (`.github/workflows/deploy.yml`, `test` job).
 dotnet test backend/Fuel.slnx -c Release
 ```
 
-The solution file (`backend/Fuel.slnx`) references both `Api` and `Api.Tests`, so a
-single `dotnet test` discovers everything. EF Core InMemory is used for database tests —
-no real PostgreSQL needed.
+The solution file (`backend/Fuel.slnx`) references `Api`, `Api.Tests`, and
+`Api.IntegrationTests`. A single `dotnet test` discovers everything. EF Core
+InMemory is used for unit tests — no real PostgreSQL needed for `Api.Tests`.
+`Api.IntegrationTests` spins up a real Postgres container via Testcontainers
+(Docker required).
 
 ### Frontend
 
@@ -62,39 +65,38 @@ alongside them as the product is built out.
 |------|---------------|
 | `lib/storage.test.ts` | localStorage helpers: the `app:` key prefix, `getAutoUpdate`/`getFontScale` defaults, font-scale round-trip, malformed-JSON resilience, and theme save/read. |
 
-## Planned — real-dependency integration tier (deferred)
+### Integration — `Api.IntegrationTests`
 
-> **Sequencing:** scaffold this *after* the AI-text and AI-photo features **and the
-> food sorting/ranking step** (`docs/food-sorting-and-ranking.md`) land — it is the
-> last step before this tier. The AI features add the first external dependency (the
-> DeepSeek nutrition estimator) and sorting adds provider-specific sort/aggregation
-> SQL; this suite is where both the real-Postgres and the provider-call tests live, so
-> it's cheaper to stand it up once, then.
+| File | What it tests |
+|------|---------------|
+| `EntryIntegrationTests.cs` | `GET entries?from=&to=` timestamptz range round-trip on real Postgres (the exact case InMemory missed); ordering within a window. |
+| `FoodIntegrationTests.cs` | Composite-food `IngredientCount` / `IsComposite` on real Postgres — catches EF-translation regressions InMemory silently accepts. |
+| `EstimatorIntegrationTests.cs` | Full HTTP round-trips for OpenAI and Anthropic estimators via WireMock.Net: successful text/image parsing, auth headers, thinking-block skipping, malformed inner JSON → `AiUnavailableException`, server errors → `HttpRequestException`, empty-item filtering, connection refusal. |
+| `PostgresFixture.cs` | xUnit collection fixture: spins one Testcontainers Postgres container, applies migrations, yields fresh `AppDbContext` per test. |
+| `WireMockFixture.cs` | xUnit collection fixture: starts one WireMock.Net server on a random port; provides a convenience `Connection()` helper. |
 
-**Why it's needed (two reasons):**
+## Real-dependency integration tier
+
+Now built as `backend/Api.IntegrationTests/`. The two reasons it exists:
 
 1. **EF InMemory is not Postgres.** It silently ignores provider-specific rules, so a
-   green unit suite can still ship a persistence bug. Concrete example already hit:
+   green unit suite can still ship a persistence bug. Concrete examples already hit:
    `GetEntries` passed a `DateTimeKind.Unspecified` value, which Npgsql *rejects*
-   against a `timestamptz` column — InMemory accepted it, real Postgres would not.
-   InMemory also won't enforce real unique constraints, migrations, or LINQ-translation
-   limits.
-2. **External calls (`INutritionEstimator` → DeepSeek).** The AI add-methods make
-   outbound HTTP we'll want to test against a stub/recorded server (capability flags,
-   timeouts, malformed responses, the text-only vs multimodal split) — without hitting
-   the real provider or spending tokens in CI.
+   against a `timestamptz` column (InMemory accepted it); `ToListItem(…)` inside a
+   LINQ `Select` projection broke ingredient-count translation on real Npgsql while
+   InMemory hid the regression.
+2. **External calls (`INutritionEstimator` → AI providers).** The AI add-methods make
+   outbound HTTP that should be tested against a stub/recorded server (capability
+   flags, timeouts, malformed responses, the text-only vs multimodal split) —
+   without hitting the real provider or spending tokens in CI. (WireMock.Net is
+   included as a dependency for this.)
 
-**Shape (keep it thin — a second tier, not a rewrite):**
-
-- A separate `Api.IntegrationTests` project (or a `[Trait("Category","Integration")]`
-  filter) so local `dotnet test` stays fast and these run as their own CI step.
-- Real Postgres via **Testcontainers**, or just point at the `docker compose` Postgres
-  the deploy workflow already has up for the migration step.
-- External HTTP via a stub server (e.g. WireMock.Net) or recorded fixtures behind the
-  `INutritionEstimator` abstraction — never the live provider.
-- **First regression test:** `GET entries?from=&to=` round-trips a `timestamptz` range
-  on real Postgres (includes an in-window instant, excludes an out-of-window one). This
-  is the exact case InMemory missed.
+Shape:
+- Separate `Api.IntegrationTests` project in the same solution — `dotnet test`
+  discovers it alongside unit tests.
+- Real Postgres via **Testcontainers** (`postgres:15-alpine`).
+- External HTTP stubs via **WireMock.Net** (ready, no estimator tests written yet).
+- No `[Trait]` filter by default — the CI runner has Docker and runs both tiers.
 
 ## InternalsVisibleTo convention
 
