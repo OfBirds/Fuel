@@ -33,7 +33,7 @@ function OnboardingPage({ onComplete }: { onComplete?: () => void }) {
   const [yearOfBirth, setYearOfBirth] = useState('');
   const [activityLevel, setActivityLevel] = useState('sedentary');
   const [weight, setWeight] = useState('');
-  const [goal, setGoal] = useState('');
+  const [goal, setGoal] = useState('2100');
 
   // "Help me decide" constitution
   const [showHelp, setShowHelp] = useState(false);

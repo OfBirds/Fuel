@@ -72,9 +72,12 @@ function EntryFormPage() {
   const [uom, setUom] = useState('g');
   const [mealType, setMealType] = useState(queryMeal);
   const [intakeAtUtc, setIntakeAtUtc] = useState(() => {
+    // Default to the day being viewed (queryDate) at the current time — so logging
+    // for a past/other day lands on that day. The time stays fully editable below,
+    // letting you record when you actually ate (e.g. half an hour earlier).
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    return `${queryDate}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   });
   const [calories, setCalories] = useState(0);
   const [protein, setProtein] = useState<number | undefined>();

@@ -14,8 +14,8 @@ public class User
     /// <summary>Opaque token for one-click unsubscribe links.</summary>
     public Guid UnsubscribeToken { get; set; } = Guid.NewGuid();
 
-    /// <summary>Daily calorie goal, set by the user. Null if not configured.</summary>
-    public double? DailyCalorieGoal { get; set; }
+    /// <summary>Daily calorie goal. Defaults to 2100; user can change or clear it.</summary>
+    public double? DailyCalorieGoal { get; set; } = 2100;
 
     // ── Profile (null = onboarding not completed) ──
     public double? Height { get; set; }
@@ -25,7 +25,8 @@ public class User
     public string? ActivityLevel { get; set; }
 
     // ── Meal pause ──
-    public double? MealPauseHours { get; set; }
+    /// <summary>Hours to wait between meals. 0 (the default) or negative turns the feature off.</summary>
+    public double? MealPauseHours { get; set; } = 0;
     public string? MealPauseScope { get; set; }
 
     // ── Display ──

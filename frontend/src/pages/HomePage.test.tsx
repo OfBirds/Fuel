@@ -85,10 +85,10 @@ describe('HomePage', () => {
 
     renderHomePage();
     await waitFor(() => {
-      expect(screen.getAllByText('+ Add Breakfast').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('+ Add Lunch').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('+ Add Dinner').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('+ Add Snack').length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText('Add Breakfast').length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText('Add Lunch').length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText('Add Dinner').length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText('Add Snack').length).toBeGreaterThan(0);
     });
   });
 });

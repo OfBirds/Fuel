@@ -142,14 +142,21 @@ function HomePage() {
           {entries.length === 0 && (
             <div className="empty-state">
               <h2>Nothing logged yet</h2>
-              <p>Use an "+ Add" button below to log your first meal of the day.</p>
+              <p>Tap the + on any meal below to log your first meal of the day.</p>
             </div>
           )}
           {grouped.map(({ meal, entries: mealEntries, mealTotal }) => (
             <section key={meal} className="meal-section" aria-labelledby={`meal-${meal}`}>
               <div className="meal-section-header">
                 <h2 id={`meal-${meal}`} className="meal-section-title">{meal}</h2>
-                <span className="meal-section-calories">{mealTotal} cal</span>
+                <div className="meal-section-header-right">
+                  <span className="meal-section-calories">{mealTotal} cal</span>
+                  <button
+                    className="meal-add-btn"
+                    onClick={() => addEntry(meal)}
+                    aria-label={`Add ${meal}`}
+                  >+</button>
+                </div>
               </div>
               {mealEntries.map((entry) => (
                 <div key={entry.id} className="entry-row">
@@ -172,7 +179,6 @@ function HomePage() {
                   </div>
                 </div>
               ))}
-              <button className="add-entry-btn" onClick={() => addEntry(meal)}>+ Add {meal}</button>
             </section>
           ))}
         </>

@@ -338,7 +338,7 @@ function SettingsPage() {
                 </select>
               </SettingsField>
             </div>
-            <span className="settings-row-help">Warns when you log a meal too soon after the last one. Won't block, just a heads-up.</span>
+            <span className="settings-row-help">Warns when you log a meal too soon after the last one. Won't block, just a heads-up. Set to 0 (or leave blank) to turn this off.</span>
           </Section>
 
           {/* Metabolism */}
