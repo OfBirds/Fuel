@@ -10,6 +10,7 @@ interface Prefs {
 function SettingsPage() {
   const { user } = useAuth();
   const [prefs, setPrefs] = useState<Prefs | null>(null);
+  const [goalDraft, setGoalDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +23,10 @@ function SettingsPage() {
         const res = await fetch(`/api/user/${user.id}/prefs`);
         if (!res.ok) throw new Error('load failed');
         const data = (await res.json()) as Prefs;
-        if (alive) setPrefs(data);
+        if (alive) {
+          setPrefs(data);
+          setGoalDraft(data.dailyCalorieGoal?.toString() ?? '');
+        }
       } catch {
         if (alive) setError("Couldn't load your settings. Please try again.");
       } finally {
@@ -54,6 +58,20 @@ function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Persist the goal only when the user finishes editing (blur / Enter) — saving on
+  // every keystroke would disable the field mid-typing and drop characters.
+  const commitGoal = () => {
+    if (!prefs) return;
+    const trimmed = goalDraft.trim();
+    const val = trimmed === '' ? null : Number(trimmed);
+    if (val !== null && (Number.isNaN(val) || val < 0)) {
+      setGoalDraft(prefs.dailyCalorieGoal?.toString() ?? ''); // revert invalid input
+      return;
+    }
+    if (val === prefs.dailyCalorieGoal) return; // nothing changed
+    update({ ...prefs, dailyCalorieGoal: val });
   };
 
   if (!user) return null;
@@ -110,12 +128,11 @@ function SettingsPage() {
               type="number"
               min="0"
               step="50"
-              value={prefs?.dailyCalorieGoal ?? ''}
-              disabled={saving || !prefs}
-              onChange={(e) => {
-                const val = e.target.value ? Number(e.target.value) : null;
-                prefs && update({ ...prefs, dailyCalorieGoal: val });
-              }}
+              value={goalDraft}
+              disabled={!prefs}
+              onChange={(e) => setGoalDraft(e.target.value)}
+              onBlur={commitGoal}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
               style={{ width: '100px', textAlign: 'right' }}
               placeholder="e.g. 2000"
             />
