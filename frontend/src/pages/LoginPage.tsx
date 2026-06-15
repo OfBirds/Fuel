@@ -52,13 +52,20 @@ const SUBTITLES: Record<View, string> = {
   forgot: 'Reset your password',
 };
 
+function viewFromHash(): View {
+  const h = window.location.hash;
+  if (h === '#register') return 'register';
+  if (h === '#forgot') return 'forgot';
+  return 'login';
+}
+
 function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
-  const [view, setView] = useState<View>('login');
+  const [view, setView] = useState<View>(viewFromHash);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -74,6 +81,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const switchView = (v: View) => {
     resetForm();
     setView(v);
+    window.location.hash = v === 'login' ? '' : v;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

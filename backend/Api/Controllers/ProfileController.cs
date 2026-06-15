@@ -11,6 +11,12 @@ namespace Api.Controllers;
 [Route("api/user/{userId}")]
 public class ProfileController(AppDbContext db, IProfileService profileService) : ControllerBase
 {
+    private static readonly HashSet<string> ValidActivityLevels =
+        ["sedentary", "light", "moderate", "active", "very_active"];
+
+    private static readonly HashSet<string> ValidMealPauseScopes =
+        ["all", "non-snack"];
+
     /// <summary>Get profile fields. Returns nulls if onboarding hasn't been completed.</summary>
     [HttpGet("profile")]
     public async Task<ActionResult<ProfileResponse>> GetProfile(Guid userId, CancellationToken ct)
@@ -42,9 +48,21 @@ public class ProfileController(AppDbContext db, IProfileService profileService) 
             user.Constitution = con;
         }
         if (request.YearOfBirth.HasValue) user.YearOfBirth = request.YearOfBirth;
-        if (request.ActivityLevel is not null) user.ActivityLevel = request.ActivityLevel;
+        if (request.ActivityLevel is not null)
+        {
+            var al = request.ActivityLevel.Trim().ToLowerInvariant();
+            if (!ValidActivityLevels.Contains(al))
+                return BadRequest(new { error = $"Invalid activityLevel '{request.ActivityLevel}'. Valid values: {string.Join(", ", ValidActivityLevels)}." });
+            user.ActivityLevel = al;
+        }
         if (request.MealPauseHours.HasValue) user.MealPauseHours = request.MealPauseHours;
-        if (request.MealPauseScope is not null) user.MealPauseScope = request.MealPauseScope;
+        if (request.MealPauseScope is not null)
+        {
+            var ms = request.MealPauseScope.Trim().ToLowerInvariant();
+            if (!ValidMealPauseScopes.Contains(ms))
+                return BadRequest(new { error = $"Invalid mealPauseScope '{request.MealPauseScope}'. Valid values: {string.Join(", ", ValidMealPauseScopes)}." });
+            user.MealPauseScope = ms;
+        }
         if (request.ShowMacros.HasValue) user.ShowMacros = request.ShowMacros.Value;
 
         await db.SaveChangesAsync(ct);
