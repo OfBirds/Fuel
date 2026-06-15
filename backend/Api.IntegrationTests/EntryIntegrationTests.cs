@@ -15,14 +15,18 @@ public class EntryIntegrationTests(PostgresFixture db)
     public async Task GetEntries_TimestamptzRange_RoundTrips()
     {
         // ── Arrange ────────────────────────────────────────────────
+        await db.ResetAsync();
         var userId = Guid.NewGuid();
         var ctx = db.CreateContext();
 
         // The bug InMemory missed: DateTimeKind.Unspecified was accepted by InMemory
         // but Npgsql rejects it against a timestamptz column.  We store Utc values
-        // and query with an Unspecified range — real Npgsql must survive the
-        // round-trip and return Utc values.
-        var inWindowUtc = new DateTime(2026, 6, 14, 12, 0, 0, DateTimeKind.Utc);
+        // and the controller queries a UTC range — real Npgsql must survive the
+        // round-trip and return Utc-kind values.  The in-window entry sits strictly
+        // INSIDE the window (not on a boundary) so the result is independent of the
+        // runner's local timezone — the controller does `.ToUniversalTime()`, which
+        // is a no-op only when the inputs are already Utc-kind (as below).
+        var inWindowUtc = new DateTime(2026, 6, 14, 6, 0, 0, DateTimeKind.Utc);
         var outOfWindowUtc = new DateTime(2026, 6, 14, 23, 0, 0, DateTimeKind.Utc);
 
         ctx.Users.Add(new User
@@ -40,11 +44,11 @@ public class EntryIntegrationTests(PostgresFixture db)
 
         // ── Act ────────────────────────────────────────────────────
         var controller = new EntryController(ctx);
-        var from = new DateTime(2026, 6, 14, 0,  0, 0, DateTimeKind.Unspecified);
-        var to   = new DateTime(2026, 6, 14, 12, 0, 0, DateTimeKind.Unspecified);
+        // Utc-kind inputs mirror what the controller works with after normalizing a
+        // query-string 'Z' timestamp, and keep the assertion timezone-independent.
+        var from = new DateTime(2026, 6, 14, 0,  0, 0, DateTimeKind.Utc);
+        var to   = new DateTime(2026, 6, 14, 18, 0, 0, DateTimeKind.Utc);
 
-        // NOTE: query-string binding would parse the trailing 'Z' to local time,
-        // so the controller calls .ToUniversalTime().  Simulate that here:
         var result = await controller.GetEntries(userId, from, to, date: null, CancellationToken.None);
 
         // ── Assert ─────────────────────────────────────────────────
@@ -61,6 +65,7 @@ public class EntryIntegrationTests(PostgresFixture db)
     [Fact]
     public async Task GetEntries_MultipleInWindow_ReturnsAllOrdered()
     {
+        await db.ResetAsync();
         var userId = Guid.NewGuid();
         var ctx = db.CreateContext();
         ctx.Users.Add(new User

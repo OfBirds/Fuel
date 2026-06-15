@@ -69,11 +69,12 @@ alongside them as the product is built out.
 
 | File | What it tests |
 |------|---------------|
-| `EntryIntegrationTests.cs` | `GET entries?from=&to=` timestamptz range round-trip on real Postgres (the exact case InMemory missed); ordering within a window. |
-| `FoodIntegrationTests.cs` | Composite-food `IngredientCount` / `IsComposite` on real Postgres — catches EF-translation regressions InMemory silently accepts. |
+| `EntryIntegrationTests.cs` | `GET entries?from=&to=` timestamptz range round-trip on real Postgres (the exact case InMemory missed); ordering within a window. Inputs are Utc-kind and the in-window entry sits strictly inside the range, so the result is timezone-independent. |
+| `FoodIntegrationTests.cs` | Composite-food `IngredientCount` / `IsComposite`; the three per-user **sort modes** (`priority` / `most-used` / `recent`) — the `GroupJoin` + aggregate + null-coalescing `OrderBy` SQL InMemory translates differently from Npgsql; and **cycle detection** (`FoodService.WouldCreateCycle`) over a real ingredient graph. |
 | `EstimatorIntegrationTests.cs` | Full HTTP round-trips for OpenAI and Anthropic estimators via WireMock.Net: successful text/image parsing, auth headers, thinking-block skipping, malformed inner JSON → `AiUnavailableException`, server errors → `HttpRequestException`, empty-item filtering, connection refusal. |
-| `PostgresFixture.cs` | xUnit collection fixture: spins one Testcontainers Postgres container, applies migrations, yields fresh `AppDbContext` per test. |
-| `WireMockFixture.cs` | xUnit collection fixture: starts one WireMock.Net server on a random port; provides a convenience `Connection()` helper. |
+| `EstimatorChainIntegrationTests.cs` | The ordered multi-provider registry (`EstimatorChain`) over real HTTP: fall-through when the first provider is unreachable, `Order` precedence, all-providers-fail → `AiUnavailableException`, capability filtering (text-only providers reject a vision request without calling upstream), and disabled-provider skipping. |
+| `PostgresFixture.cs` | xUnit collection fixture: spins one Testcontainers Postgres container, applies migrations, yields fresh `AppDbContext` per test. `ResetAsync()` truncates all data tables so a test can assert on whole-table counts/ordering without cross-test pollution (the collection runs sequentially). |
+| `WireMockFixture.cs` | xUnit collection fixture: starts one WireMock.Net server on a random port; provides a convenience `Connection()` helper. Estimator test classes call `Server.Reset()` in their constructor so per-test mappings don't accumulate on the shared server. |
 
 ## Real-dependency integration tier
 
@@ -95,7 +96,7 @@ Shape:
 - Separate `Api.IntegrationTests` project in the same solution — `dotnet test`
   discovers it alongside unit tests.
 - Real Postgres via **Testcontainers** (`postgres:15-alpine`).
-- External HTTP stubs via **WireMock.Net** (ready, no estimator tests written yet).
+- External HTTP stubs via **WireMock.Net** (estimator + provider-chain tests).
 - No `[Trait]` filter by default — the CI runner has Docker and runs both tiers.
 
 ## InternalsVisibleTo convention

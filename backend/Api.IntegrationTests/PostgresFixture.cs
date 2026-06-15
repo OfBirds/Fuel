@@ -47,6 +47,31 @@ public class PostgresFixture : IAsyncLifetime
             .Options;
         return new AppDbContext(options);
     }
+
+    /// <summary>
+    /// Truncate every data table (keeping the schema + migrations history) so a test starts
+    /// from a clean slate. Tests in the "Postgres" collection run sequentially, so calling
+    /// this at the top of a test is safe and lets it assert on whole-table counts/ordering
+    /// without cross-test pollution. Name-agnostic: it discovers tables from the catalog.
+    /// </summary>
+    public async Task ResetAsync()
+    {
+        await using var db = CreateContext();
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            DO $$
+            DECLARE r RECORD;
+            BEGIN
+              FOR r IN (
+                SELECT tablename FROM pg_tables
+                WHERE schemaname = 'public' AND tablename <> '__EFMigrationsHistory'
+              )
+              LOOP
+                EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' RESTART IDENTITY CASCADE';
+              END LOOP;
+            END $$;
+            """);
+    }
 }
 
 /// <summary>

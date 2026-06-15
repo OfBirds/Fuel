@@ -12,8 +12,20 @@ namespace Api.IntegrationTests;
 /// HTTP call, and deserialization pipeline, not just in-memory stubs.
 /// </summary>
 [Collection("WireMock")]
-public class EstimatorIntegrationTests(WireMockFixture wire)
+public class EstimatorIntegrationTests
 {
+    private readonly WireMockFixture wire;
+
+    public EstimatorIntegrationTests(WireMockFixture wire)
+    {
+        this.wire = wire;
+        // xUnit builds a fresh test-class instance per test, but the WireMock server is a
+        // shared collection fixture — without this, mappings (and log entries) accumulate
+        // across tests and overlapping same-path stubs (200 vs 500 vs 422 on
+        // /chat/completions) resolve order-dependently.  Reset() clears mappings + logs.
+        wire.Server.Reset();
+    }
+
     // ── Shared helpers ────────────────────────────────────────────
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -79,7 +91,6 @@ public class EstimatorIntegrationTests(WireMockFixture wire)
     [Fact]
     public async Task OpenAiEstimator_Text_WithApiKey_SendsBearer()
     {
-        wire.Server.ResetLogEntries();
         wire.Server
             .Given(Request.Create().WithPath("/chat/completions").UsingPost())
             .RespondWith(Response.Create()
@@ -100,7 +111,6 @@ public class EstimatorIntegrationTests(WireMockFixture wire)
     [Fact]
     public async Task OpenAiEstimator_Text_NoApiKey_OmitsAuth()
     {
-        wire.Server.ResetLogEntries();
         wire.Server
             .Given(Request.Create().WithPath("/chat/completions").UsingPost())
             .RespondWith(Response.Create()
@@ -121,7 +131,6 @@ public class EstimatorIntegrationTests(WireMockFixture wire)
     [Fact]
     public async Task OpenAiEstimator_Image_SendsImagePayload()
     {
-        wire.Server.ResetLogEntries();
         wire.Server
             .Given(Request.Create().WithPath("/chat/completions").UsingPost())
             .RespondWith(Response.Create()
@@ -187,7 +196,6 @@ public class EstimatorIntegrationTests(WireMockFixture wire)
     [Fact]
     public async Task AnthropicEstimator_Image_SendsImageBlock()
     {
-        wire.Server.ResetLogEntries();
         wire.Server
             .Given(Request.Create().WithPath("/v1/messages").UsingPost())
             .RespondWith(Response.Create()
@@ -211,7 +219,6 @@ public class EstimatorIntegrationTests(WireMockFixture wire)
     [Fact]
     public async Task AnthropicEstimator_SendsApiKeyAndVersion()
     {
-        wire.Server.ResetLogEntries();
         wire.Server
             .Given(Request.Create().WithPath("/v1/messages").UsingPost())
             .RespondWith(Response.Create()
