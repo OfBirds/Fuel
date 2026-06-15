@@ -48,8 +48,10 @@ These rails come from the project's self-hosted full-stack base and are in place
 - **Observability** — Serilog structured logs (rolling JSON file + console),
   shipped to [Seq](https://datalust.co/seq) with OpenTelemetry traces, every event
   tagged with the app version.
-- **Auth** — register / login / reset-password with PBKDF2 password hashing.
-  ⚠️ **The token is a demo placeholder — see [Before you ship](#before-you-ship).**
+- **Auth** — register / login / reset-password with PBKDF2 password hashing and
+  signed-JWT bearer tokens; every API endpoint requires auth by default and is
+  scoped to the token's own user. Set `JWT_SIGNING_KEY` before deploying — see
+  [Before you ship](#before-you-ship).
 - **Email** — MailKit `SmtpEmailSender` (port-based TLS), configured from `SMTP_*`
   env keys.
 - **Release notifications** — on deploy, email opted-in users that a new version is
@@ -103,16 +105,17 @@ self-hosted runner and env files. After that, push to `main` (staging) or
 A few things are deliberately left as first tasks before any real or public
 deployment:
 
-1. **🔒 Harden authentication.** The login token is a demo placeholder —
-   `Base64(userId:ticks)`, unsigned and unverified, and there is **no
-   `[Authorize]` / validation middleware**, so the API is effectively open.
-   Replace it with real auth (e.g. `AddAuthentication().AddJwtBearer()` + a signed
-   JWT and `[Authorize]` on protected controllers). See the `TODO(SECURITY)` in
-   `backend/Api/Controllers/AuthController.cs`. Password hashing (PBKDF2) is fine.
+1. **🔒 Set `JWT_SIGNING_KEY`.** Auth now uses signed JWTs (HMAC-SHA256) with a
+   default-deny authorization policy and per-user resource scoping. The signing key
+   comes from `JWT_SIGNING_KEY`; if it's unset the app mints an *ephemeral* key and
+   logs every user out on each restart. Set a real random secret (≥32 chars, e.g.
+   `openssl rand -base64 48`) in each deploy env file. Consider whether you also need
+   token revocation/refresh and roles — the current model is one account = one user.
 2. **TLS / reverse proxy.** The default access model is plain HTTP on the LAN. Put
    a reverse proxy with TLS in front before exposing anything publicly.
 3. **Secrets.** Fill real values into `/opt/fuel/.env.staging` and `.env.prod` on
-   the host (never commit them). Add a `LICENSE`.
+   the host (`DB_PASSWORD`, `JWT_SIGNING_KEY`, SMTP, `PUBLIC_BASE_URL`; never commit
+   them). Add a `LICENSE`.
 4. **Review the env-gated features** (Seq, email/notifications, backups) and turn
    on what you want per environment.
 

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getLastMealType, saveLastMealType } from '../lib/storage';
@@ -90,7 +91,7 @@ function AiEntryPage() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch('/api/ai/status');
+        const res = await apiFetch('/api/ai/status');
         if (alive && res.ok) {
           const status = await res.json();
           setAiEnabled(status.enabled === true);
@@ -191,11 +192,11 @@ function AiEntryPage() {
         const fd = new FormData();
         fd.append('image', imageBlob!, 'meal.jpg');
         accumNotes.forEach((n) => fd.append('notes', n));
-        res = await fetch(`/api/user/${user.id}/estimate/image`, {
+        res = await apiFetch(`/api/user/${user.id}/estimate/image`, {
           method: 'POST', body: fd, signal: controller.signal,
         });
       } else {
-        res = await fetch(`/api/user/${user.id}/estimate/text`, {
+        res = await apiFetch(`/api/user/${user.id}/estimate/text`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ description: description.trim(), notes: accumNotes }),
@@ -263,7 +264,7 @@ function AiEntryPage() {
       })),
     };
     try {
-      const res = await fetch(`/api/user/${user.id}/entries/batch`, {
+      const res = await apiFetch(`/api/user/${user.id}/entries/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

@@ -21,6 +21,20 @@ function write<T>(key: string, value: T): void {
   }
 }
 
+// --- Auth session ---
+// The bearer token + user are persisted by AuthContext under bare (unprefixed) keys so
+// the session survives reloads. These accessors are the single read/clear point for the
+// token (used by apiFetch) and for tearing the session down on a 401.
+export const getToken = (): string | null => {
+  try { return localStorage.getItem('token'); } catch { return null; }
+};
+export const clearSession = (): void => {
+  try {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  } catch { /* ignore */ }
+};
+
 // --- Theme ---
 export type Theme = 'light' | 'dark';
 export const getTheme = () => read<Theme>('theme');

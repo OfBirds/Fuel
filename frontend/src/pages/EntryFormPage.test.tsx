@@ -35,7 +35,10 @@ function mockAiStatus(enabled = false) {
 
 describe('EntryFormPage', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // resetAllMocks (not clearAllMocks) so each test starts with an empty
+    // mockResolvedValueOnce queue — a prior test's debounced fetch may not have
+    // consumed its queued response, which would shift this test's mock sequence.
+    vi.resetAllMocks();
   });
 
   it('renders the add entry form', async () => {

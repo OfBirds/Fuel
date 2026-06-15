@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { saveOnboardingCompleted } from '../lib/storage';
@@ -79,7 +80,7 @@ function OnboardingPage({ onComplete }: { onComplete?: () => void }) {
 
     try {
       // 1. Save profile
-      const profileRes = await fetch(`/api/user/${user.id}/profile`, {
+      const profileRes = await apiFetch(`/api/user/${user.id}/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ height: h, sex, constitution, yearOfBirth: y, activityLevel }),
@@ -87,7 +88,7 @@ function OnboardingPage({ onComplete }: { onComplete?: () => void }) {
       if (!profileRes.ok) throw new Error('Failed to save profile');
 
       // 2. Save starting weight
-      const weightRes = await fetch(`/api/user/${user.id}/weights`, {
+      const weightRes = await apiFetch(`/api/user/${user.id}/weights`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ weight: w }),
@@ -101,10 +102,10 @@ function OnboardingPage({ onComplete }: { onComplete?: () => void }) {
         if (g > 0) {
           let notifyReleases = true;
           try {
-            const cur = await fetch(`/api/user/${user.id}/prefs`);
+            const cur = await apiFetch(`/api/user/${user.id}/prefs`);
             if (cur.ok) notifyReleases = (await cur.json()).notifyReleases ?? true;
           } catch { /* fall back to default */ }
-          await fetch(`/api/user/${user.id}/prefs`, {
+          await apiFetch(`/api/user/${user.id}/prefs`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ notifyReleases, dailyCalorieGoal: g }),

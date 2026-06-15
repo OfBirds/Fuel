@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { apiFetch } from '../lib/api';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import '../styles/dayview.css';
@@ -64,8 +65,8 @@ function HomePage() {
     try {
       const { from, to } = localDayRangeUtc(currentDate);
       const [entriesRes, prefsRes] = await Promise.all([
-        fetch(`/api/user/${user.id}/entries?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
-        fetch(`/api/user/${user.id}/prefs`),
+        apiFetch(`/api/user/${user.id}/entries?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+        apiFetch(`/api/user/${user.id}/prefs`),
       ]);
       if (!entriesRes.ok) throw new Error('Failed to load entries');
       const entriesData = (await entriesRes.json()) as EntryItem[];
@@ -107,7 +108,7 @@ function HomePage() {
     const previous = entries;
     setEntries((prev) => prev.filter((e) => e.id !== entryId));
     try {
-      const res = await fetch(`/api/user/${user.id}/entries/${entryId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/user/${user.id}/entries/${entryId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
     } catch {
       setEntries(previous);

@@ -47,9 +47,13 @@ Build/run gotcha: `dotnet build`/`run` fails if the app is already running and h
 
 **Versioning.** `VERSION` (MAJOR.MINOR, hand-bumped) + `github.run_number` → full version, baked into the image (`APP_VERSION`), exposed at `GET /api/version`, read into the SPA bundle via `__APP_VERSION__` (vite `define`), and tagged onto every log event.
 
-## ⚠️ Auth is a demo placeholder
+## Auth
 
-The login token is `Base64(userId:ticks)` — unsigned, unverified, and there is **no `[Authorize]` or validation middleware anywhere**, so every API endpoint is effectively open (e.g. `UserController` trusts the `{userId}` in the route). See `TODO(SECURITY)` in `AuthController.cs`. Don't assume requests are authenticated. PBKDF2 password hashing in `AuthService` is real and fine. Replace with signed-JWT auth before any real deployment.
+Login issues a **signed JWT** (`JwtTokenService`, HMAC-SHA256; `sub`=userId, `email`, exp). The signing key is the flat `JWT_SIGNING_KEY` env var — when unset, the app mints an *ephemeral* random key at startup and logs a warning (so local dev needs zero setup; tokens just don't survive a restart). `JWT_EXPIRY_DAYS` (default 30) sets login lifetime. Deploy stacks **must** set a real `JWT_SIGNING_KEY` (≥32 chars).
+
+`Program.cs` wires `AddJwtBearer` + a **fallback authorization policy**, so every endpoint requires a valid token unless it opts out with `[AllowAnonymous]` (`auth/*`, `version`, `unsubscribe`, and the SPA `MapFallbackToFile`). Routes are shaped `api/user/{userId}/...`; a global `ResourceOwnershipFilter` (`backend/Api/Authorization`) rejects (403) any request whose route/query `userId` ≠ the token's `sub`, so a valid token for one user can't reach another's data. PBKDF2 password hashing in `AuthService` is real and fine.
+
+Frontend: all API calls go through `apiFetch` (`src/lib/api.ts`), which attaches `Authorization: Bearer <token>` and, on a 401, clears the session and bounces to login. Auth endpoints (login/register/reset) call `fetch` directly since no token exists yet. **Note:** the JWT carries identity but the app is still single-user-per-account with no roles/refresh — add those if the threat model needs them.
 
 ## Deploy
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from './lib/api';
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
@@ -66,7 +67,7 @@ function AppContent() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`/api/user/${user.id}/profile`);
+        const res = await apiFetch(`/api/user/${user.id}/profile`);
         if (alive && res.ok) {
           const p = await res.json();
           const skipped = getOnboardingCompleted();

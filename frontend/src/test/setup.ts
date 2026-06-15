@@ -1,4 +1,13 @@
 import '@testing-library/jest-dom/vitest';
+import { afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
+
+// Globals aren't enabled, so Testing Library's auto-cleanup never registers. Unmount
+// after every test explicitly — otherwise mounted components leak across files and their
+// effect-driven fetches resolve after the jsdom env is torn down ("window is not defined").
+afterEach(() => {
+  cleanup();
+});
 
 // Polyfill localStorage for Node v26+ where it's experimental and undefined in jsdom.
 if (typeof globalThis.localStorage === 'undefined') {

@@ -1,4 +1,5 @@
 using Api.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,6 +7,7 @@ namespace Api.Controllers;
 
 [ApiController]
 [Route("api/unsubscribe")]
+[AllowAnonymous] // clicked straight from an email link, scoped by its own token
 public class UnsubscribeController(AppDbContext db) : ControllerBase
 {
     // GET because it's clicked straight from an email link. Idempotent and

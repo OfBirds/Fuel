@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import '../styles/settings.css';
 
@@ -62,8 +63,8 @@ function SettingsPage() {
     (async () => {
       try {
         const [prefsRes, profileRes] = await Promise.all([
-          fetch(`/api/user/${user.id}/prefs`),
-          fetch(`/api/user/${user.id}/profile`),
+          apiFetch(`/api/user/${user.id}/prefs`),
+          apiFetch(`/api/user/${user.id}/profile`),
         ]);
         if (alive) {
           if (prefsRes.ok) {
@@ -95,7 +96,7 @@ function SettingsPage() {
     setMetaLoading(true);
     (async () => {
       try {
-        const res = await fetch(`/api/user/${user.id}/metabolism`);
+        const res = await apiFetch(`/api/user/${user.id}/metabolism`);
         if (alive && res.ok) setMetabolism((await res.json()) as MetabolismData);
       } catch { /* metabolism is optional display */ }
       finally { if (alive) setMetaLoading(false); }
@@ -132,7 +133,7 @@ function SettingsPage() {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/user/${user.id}/prefs`, {
+      const res = await apiFetch(`/api/user/${user.id}/prefs`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next),
       });
       if (!res.ok) throw new Error('save failed');
@@ -153,7 +154,7 @@ function SettingsPage() {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/user/${user.id}/profile`, {
+      const res = await apiFetch(`/api/user/${user.id}/profile`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next),
       });
       if (!res.ok) throw new Error('save failed');

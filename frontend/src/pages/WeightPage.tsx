@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import '../styles/weight.css';
 
@@ -34,7 +35,7 @@ function WeightPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/user/${user.id}/weights`);
+      const res = await apiFetch(`/api/user/${user.id}/weights`);
       if (res.ok) setWeights((await res.json()) as WeightEntry[]);
     } catch {
       setError("Couldn't load weight history.");
@@ -52,7 +53,7 @@ function WeightPage() {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/user/${user.id}/weights`, {
+      const res = await apiFetch(`/api/user/${user.id}/weights`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,7 +77,7 @@ function WeightPage() {
     const previous = weights;
     setWeights((prev) => prev.filter((w) => w.id !== id));
     try {
-      const res = await fetch(`/api/user/${user.id}/weights/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/user/${user.id}/weights/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
     } catch {
       setWeights(previous);

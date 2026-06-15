@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import '../styles/catalogue.css';
 
@@ -93,7 +94,7 @@ function CataloguePage() {
       if (user?.id) { params.set('userId', user.id); params.set('sort', sortMode); }
       const qs = params.toString();
       const url = qs ? `/api/foods?${qs}` : '/api/foods';
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       if (res.ok) setFoods((await res.json()) as FoodItem[]);
     } catch {
       setError("Couldn't load foods.");
@@ -114,7 +115,7 @@ function CataloguePage() {
 
   const startEdit = async (id: string) => {
     try {
-      const res = await fetch(`/api/foods/${id}`);
+      const res = await apiFetch(`/api/foods/${id}`);
       if (!res.ok) return;
       const f = (await res.json()) as FoodDetail;
       setEditingId(id);
@@ -181,7 +182,7 @@ function CataloguePage() {
       try {
         const params = new URLSearchParams({ search: ingSearchTerm });
         if (user?.id) { params.set('userId', user.id); params.set('sort', sortMode); }
-        const res = await fetch(`/api/foods?${params.toString()}`);
+        const res = await apiFetch(`/api/foods?${params.toString()}`);
         if (res.ok) setIngSearchResults((await res.json()) as FoodItem[]);
       } catch { /* ignore */ }
     }, 200);
@@ -224,7 +225,7 @@ function CataloguePage() {
     try {
       const url = editingId ? `/api/foods/${editingId}` : '/api/foods';
       const method = editingId ? 'PUT' : 'POST';
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -246,7 +247,7 @@ function CataloguePage() {
   const setPonder = async (foodId: string, ponder: number) => {
     if (!user?.id) return;
     try {
-      const res = await fetch(`/api/foods/${foodId}/priority?userId=${encodeURIComponent(user.id)}`, {
+      const res = await apiFetch(`/api/foods/${foodId}/priority?userId=${encodeURIComponent(user.id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ponder }),
@@ -258,7 +259,7 @@ function CataloguePage() {
   const deleteFood = async (id: string) => {
     if (!confirm('Delete this food? Any entries that used it will keep their snapshotted values.')) return;
     try {
-      const res = await fetch(`/api/foods/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/foods/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Delete failed' }));
         setError(err.error || 'Delete failed');

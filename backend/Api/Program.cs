@@ -1,6 +1,13 @@
+using Api.Authorization;
 using Api.Data;
 using Api.Services;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
 using OpenTelemetry.Exporter;
@@ -63,7 +70,56 @@ if (!string.IsNullOrWhiteSpace(otlpEndpoint))
 }
 
 builder.Services.AddOpenApi();
-builder.Services.AddControllers();
+builder.Services.AddControllers(o => o.Filters.Add<ResourceOwnershipFilter>());
+
+// Signed-JWT auth. The signing key follows the flat-env convention (JWT_SIGNING_KEY);
+// when unset we mint an ephemeral random key so local dev needs no setup — tokens just
+// don't survive a restart, and a warning fires. A real key MUST be set in deploy stacks.
+var jwtKeyRaw = builder.Configuration["JWT_SIGNING_KEY"];
+byte[] jwtKeyBytes;
+if (string.IsNullOrWhiteSpace(jwtKeyRaw))
+{
+    jwtKeyBytes = RandomNumberGenerator.GetBytes(32);
+    Log.Warning("JWT_SIGNING_KEY not set — using an ephemeral signing key. Tokens are " +
+        "invalidated on restart; set JWT_SIGNING_KEY (>=32 chars) before deploying.");
+}
+else
+{
+    jwtKeyBytes = Encoding.UTF8.GetBytes(jwtKeyRaw);
+    if (jwtKeyBytes.Length < 32)
+        throw new InvalidOperationException(
+            "JWT_SIGNING_KEY must be at least 32 bytes (256 bits) for HMAC-SHA256.");
+}
+var jwtSigningKey = new SymmetricSecurityKey(jwtKeyBytes);
+var jwtExpiryDays = int.TryParse(builder.Configuration["JWT_EXPIRY_DAYS"], out var ed) && ed > 0 ? ed : 30;
+builder.Services.AddSingleton<ITokenService>(
+    new JwtTokenService(jwtSigningKey, TimeSpan.FromDays(jwtExpiryDays)));
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MapInboundClaims = false; // keep `sub` as `sub`, don't remap to NameIdentifier
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = JwtTokenService.Issuer,
+            ValidateAudience = true,
+            ValidAudience = JwtTokenService.Audience,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = jwtSigningKey,
+            ValidateLifetime = true,
+            NameClaimType = JwtRegisteredClaimNames.Sub,
+        };
+    });
+
+// Locked-down by default: every endpoint requires auth unless it opts out with
+// [AllowAnonymous] (auth, version, unsubscribe) or .AllowAnonymous() (SPA fallback).
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 
 var connectionString = $"Host={builder.Configuration["DB_HOST"] ?? "localhost"};" +
     $"Port={builder.Configuration["DB_PORT"] ?? "5432"};" +
@@ -136,15 +192,17 @@ app.UseSerilogRequestLogging();
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.MapOpenApi().AllowAnonymous();
 }
 
 // Serve the bundled SPA (built frontend copied into wwwroot) and fall back to
 // index.html for client-side routes. API controllers are matched first; the
 // fallback only handles non-/api, non-file requests.
 app.UseStaticFiles();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
-app.MapFallbackToFile("index.html");
+app.MapFallbackToFile("index.html").AllowAnonymous();
 
 try
 {

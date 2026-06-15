@@ -40,6 +40,10 @@ services:
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      # Signed-JWT auth. JWT_SIGNING_KEY is REQUIRED in deploy stacks (>=32 chars);
+      # without it the app mints an ephemeral key and logs every user out on restart.
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+      JWT_EXPIRY_DAYS: ${JWT_EXPIRY_DAYS}
       # Release-notification settings (see docs/notifications.md).
       NOTIFY_ON_DEPLOY: ${NOTIFY_ON_DEPLOY}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}

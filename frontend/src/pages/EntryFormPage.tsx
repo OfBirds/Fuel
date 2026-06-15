@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { apiFetch } from '../lib/api';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getLastMealType, saveLastMealType } from '../lib/storage';
@@ -111,7 +112,7 @@ function EntryFormPage() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`/api/user/${user.id}/entries/${entryId}`);
+        const res = await apiFetch(`/api/user/${user.id}/entries/${entryId}`);
         if (!res.ok) throw new Error('load failed');
         const entry = (await res.json()) as EntryDetail;
         if (alive) {
@@ -145,7 +146,7 @@ function EntryFormPage() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch('/api/ai/status');
+        const res = await apiFetch('/api/ai/status');
         if (alive && res.ok) setAiEnabled((await res.json()).enabled === true);
       } catch { /* leave AI off */ }
     })();
@@ -163,7 +164,7 @@ function EntryFormPage() {
       try {
         const params = new URLSearchParams({ search: searchTerm });
         if (user?.id) { params.set('userId', user.id); params.set('sort', sortMode); }
-        const res = await fetch(`/api/foods?${params.toString()}`);
+        const res = await apiFetch(`/api/foods?${params.toString()}`);
         if (res.ok) setSearchResults((await res.json()) as FoodItem[]);
       } finally {
         setSearching(false);
@@ -174,7 +175,7 @@ function EntryFormPage() {
 
   const selectFood = useCallback(async (food: FoodItem) => {
     try {
-      const res = await fetch(`/api/foods/${food.id}`);
+      const res = await apiFetch(`/api/foods/${food.id}`);
       if (!res.ok) return;
       const detail = (await res.json()) as FoodDetail;
       setSelectedFood(detail);
@@ -202,7 +203,7 @@ function EntryFormPage() {
   const submitInlineFood = async () => {
     if (!inlineName.trim()) return;
     try {
-      const res = await fetch('/api/foods', {
+      const res = await apiFetch('/api/foods', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -232,7 +233,7 @@ function EntryFormPage() {
     const timer = setTimeout(async () => {
       try {
         const dt = new Date(intakeAtUtc).toISOString();
-        const res = await fetch(`/api/user/${user.id}/meal-pause-check?intakeAtUtc=${encodeURIComponent(dt)}&mealType=${encodeURIComponent(mealType)}`);
+        const res = await apiFetch(`/api/user/${user.id}/meal-pause-check?intakeAtUtc=${encodeURIComponent(dt)}&mealType=${encodeURIComponent(mealType)}`);
         if (res.ok) {
           const check = await res.json();
           if (check.isWithinPause) {
@@ -274,7 +275,7 @@ function EntryFormPage() {
       const url = isEdit
         ? `/api/user/${user.id}/entries/${entryId}`
         : `/api/user/${user.id}/entries`;
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: isEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

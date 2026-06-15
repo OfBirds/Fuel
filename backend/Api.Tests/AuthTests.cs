@@ -4,6 +4,8 @@ using Api.DTOs;
 using Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 namespace Api.Tests;
 
@@ -24,7 +26,10 @@ public class AuthTests : IDisposable
             .Options;
         _db = new AppDbContext(options);
         _service = new AuthService(_db);
-        _controller = new AuthController(_service);
+        var tokenService = new JwtTokenService(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes("test-signing-key-at-least-32-bytes!!")),
+            TimeSpan.FromDays(30));
+        _controller = new AuthController(_service, tokenService);
     }
 
     public void Dispose() => _db.Dispose();
