@@ -178,6 +178,26 @@ builder.Services.AddHttpClient("ai", c => c.Timeout = Timeout.InfiniteTimeSpan) 
 
 builder.Services.AddSingleton<IEstimatorChain, EstimatorChain>();
 
+// Barcode / EAN lookup — a numeric barcode → Open Food Facts → catalogue Food.
+// Docs: docs/barcode-lookup.md. No API key needed (OFF is free); the named HttpClient
+// carries a descriptive User-Agent + timeout. Config is flat env vars: BARCODE_ENABLED,
+// BARCODE_BASE_URL, BARCODE_TIMEOUT_SECONDS.
+builder.Services.Configure<Api.Config.BarcodeOptions>(o =>
+{
+    o.Enabled = string.Equals(builder.Configuration["BARCODE_ENABLED"], "true",
+        StringComparison.OrdinalIgnoreCase);
+    o.BaseUrl = builder.Configuration["BARCODE_BASE_URL"] ?? "https://world.openfoodfacts.org";
+    o.TimeoutSeconds = int.TryParse(builder.Configuration["BARCODE_TIMEOUT_SECONDS"], out var bt) ? bt : 10;
+});
+var barcodeTimeout = int.TryParse(
+    builder.Configuration["BARCODE_TIMEOUT_SECONDS"], out var bt2) ? bt2 : 10;
+builder.Services.AddHttpClient("barcode", c => c.Timeout = Timeout.InfiniteTimeSpan)
+    .AddResilienceHandler("barcode-resilience", b =>
+    {
+        b.AddTimeout(TimeSpan.FromSeconds(Math.Max(1, barcodeTimeout)));
+    });
+builder.Services.AddSingleton<IBarcodeFoodLookup, OpenFoodFactsLookup>();
+
 var app = builder.Build();
 
 // Apply any pending EF Core migrations on startup. CI applies them as an

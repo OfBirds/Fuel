@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiFetch } from '../lib/api';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -102,6 +102,14 @@ function EntryFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(isEdit);
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [barcodeEnabled, setBarcodeEnabled] = useState(false);
+  const [showBarcode, setShowBarcode] = useState(false);
+  const [barcodeCode, setBarcodeCode] = useState('');
+  const [barcodeScanning, setBarcodeScanning] = useState(false);
+  const [barcodeResult, setBarcodeResult] = useState<{ found: boolean; isNew?: boolean; message?: string } | null>(null);
+  const barcodeVideoRef = useRef<HTMLVideoElement>(null);
+  const barcodeStreamRef = useRef<MediaStream | null>(null);
+  const barcodeControlRef = useRef<AbortController | null>(null);
 
   // Meal-pause warning
   const [mealPauseWarning, setMealPauseWarning] = useState<{ hoursSinceLast: number; mealPauseHours: number } | null>(null);
@@ -152,6 +160,38 @@ function EntryFormPage() {
     })();
     return () => { alive = false; };
   }, []);
+
+  // Check whether barcode lookup is enabled.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await apiFetch('/api/barcode/status');
+        if (alive && res.ok) setBarcodeEnabled((await res.json()).enabled === true);
+      } catch { /* leave off */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  // Preselect a food by foodId (query param — barcode scan result links here).
+  useEffect(() => {
+    if (isEdit || !user) return;
+    const foodId = searchParams.get('foodId');
+    if (!foodId) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/foods/${foodId}`);
+        if (alive && res.ok) {
+          const detail = (await res.json()) as FoodDetail;
+          setSelectedFood(detail);
+          setUom(detail.defaultUoM);
+          recomputeNutrition(detail.caloriesPerUnit, detail.proteinPerUnit, detail.carbsPerUnit, detail.fatPerUnit, quantity);
+        }
+      } catch { /* ignore */ }
+    })();
+    return () => { alive = false; };
+  }, [isEdit, user, searchParams]);
 
   // Debounced food search
   useEffect(() => {
@@ -226,6 +266,90 @@ function EntryFormPage() {
       setError('Failed to create food.');
     }
   };
+
+  // ── Barcode scan ──────────────────────────────────────────────
+
+  const stopBarcode = useCallback(() => {
+    if (barcodeControlRef.current) { barcodeControlRef.current.abort(); barcodeControlRef.current = null; }
+    if (barcodeStreamRef.current) {
+      barcodeStreamRef.current.getTracks().forEach(t => t.stop());
+      barcodeStreamRef.current = null;
+    }
+    setBarcodeScanning(false);
+  }, []);
+
+  const lookupBarcode = useCallback(async (code: string) => {
+    const clean = code.replace(/[^0-9]/g, '');
+    if (!clean) return;
+    setBarcodeScanning(true);
+    setBarcodeResult(null);
+    try {
+      const res = await apiFetch(`/api/barcode/lookup/${encodeURIComponent(clean)}`);
+      const data = await res.json();
+      if (res.ok) {
+        setBarcodeResult(data);
+        if (data.found && data.food) {
+          // Prefill — same shape as selecting from search
+          setSelectedFood(data.food as FoodDetail);
+          setUom(data.food.defaultUoM);
+          setSearchTerm('');
+          setSearchResults([]);
+          recomputeNutrition(
+            data.food.caloriesPerUnit,
+            data.food.proteinPerUnit ?? null,
+            data.food.carbsPerUnit ?? null,
+            data.food.fatPerUnit ?? null,
+            quantity,
+          );
+          stopBarcode();
+          setShowBarcode(false);
+        }
+      } else {
+        setBarcodeResult({ found: false, message: (await res.json().catch(() => ({ error: 'Lookup failed' }))).error || 'Lookup failed' });
+      }
+    } catch {
+      setBarcodeResult({ found: false, message: 'Lookup failed — try again or enter manually.' });
+    } finally {
+      setBarcodeScanning(false);
+    }
+  }, [quantity, recomputeNutrition, stopBarcode]);
+
+  const startBarcodeScan = useCallback(async () => {
+    if (barcodeScanning) { stopBarcode(); setShowBarcode(false); return; }
+    setShowBarcode(true);
+    setBarcodeResult(null);
+    setBarcodeCode('');
+    const hasCamera = !!navigator.mediaDevices?.getUserMedia;
+    if (!hasCamera) return;
+    try {
+      const { BrowserMultiFormatReader } = await import('@zxing/browser');
+      const reader = new BrowserMultiFormatReader();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+      barcodeStreamRef.current = stream;
+      const video = barcodeVideoRef.current;
+      if (!video) { stream.getTracks().forEach(t => t.stop()); return; }
+      video.srcObject = stream;
+      // Wait for video to be ready before decoding
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => { video.play().then(() => resolve(), reject); };
+        video.onerror = () => reject(new Error('video'));
+      });
+      setBarcodeScanning(true);
+      const result = await reader.decodeOnceFromVideoElement(video);
+      if (result) await lookupBarcode(result.getText());
+    } catch {
+      // Camera denied / no barcode in frame — manual entry works
+    } finally {
+      if (barcodeStreamRef.current) { barcodeStreamRef.current.getTracks().forEach(t => t.stop()); barcodeStreamRef.current = null; }
+      setBarcodeScanning(false);
+    }
+  }, [barcodeScanning, stopBarcode, lookupBarcode]);
+
+  // Stop camera on unmount
+  useEffect(() => () => { stopBarcode(); }, [stopBarcode]);
 
   // Check meal-pause when meal or intake time changes
   useEffect(() => {
@@ -314,6 +438,51 @@ function EntryFormPage() {
         >
           ✨ Describe it with AI instead
         </button>
+      )}
+
+      {!isEdit && barcodeEnabled && !selectedFood && (
+        <button className="barcode-toggle-btn" onClick={startBarcodeScan}>
+          {barcodeScanning ? '⏹ Stop scanner' : '📷 Scan barcode'}
+        </button>
+      )}
+
+      {showBarcode && !isEdit && !selectedFood && (
+        <div className="barcode-panel">
+          <div className="barcode-panel-header">
+            <h3>Scan barcode</h3>
+            <button onClick={() => { stopBarcode(); setShowBarcode(false); }} className="entry-row-btn">✕</button>
+          </div>
+          <p className="barcode-hint">Camera scans product barcodes (EAN/UPC). Enter digits manually if no camera.</p>
+          <div className="barcode-video-wrap">
+            <video ref={barcodeVideoRef} autoPlay playsInline muted />
+          </div>
+          <div className="barcode-manual">
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="Barcode digits (8–14)"
+              value={barcodeCode}
+              onChange={(e) => setBarcodeCode(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && lookupBarcode(barcodeCode)}
+            />
+            <button onClick={() => lookupBarcode(barcodeCode)} disabled={barcodeScanning || !barcodeCode.trim()}>
+              Look up
+            </button>
+          </div>
+          {barcodeResult && !barcodeResult.found && (
+            <div className="barcode-result-msg error">
+              <p>{barcodeResult.message}</p>
+              <div className="barcode-result-actions">
+                <button onClick={() => navigate(`/entry/ai?meal=${encodeURIComponent(mealType)}&date=${queryDate}`)}>
+                  ✨ Describe / photo it
+                </button>
+                <button onClick={() => { setBarcodeResult(null); setBarcodeCode(''); }}>
+                  Enter manually
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Food search */}

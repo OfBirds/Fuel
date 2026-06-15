@@ -41,7 +41,7 @@ Build/run gotcha: `dotnet build`/`run` fails if the app is already running and h
 
 **Backend layering.** Controllers (`backend/Api/Controllers`) → services (`backend/Api/Services`) → `AppDbContext` (EF Core / Npgsql). Auth logic lives in `AuthService` (PBKDF2 hashing); controllers stay thin. DTOs in `backend/Api/DTOs`, EF entities in `backend/Api/Models`. To add a persisted entity: add a model, a `DbSet` + `OnModelCreating` config in `AppDbContext`, then a migration.
 
-**Env-gated hosted services.** `ReleaseNotifier` (emails opted-in users on a new version) and `BackupService` (periodic JSON snapshots) are registered unconditionally but no-op unless their env keys are set. Serilog ships to Seq only when `SEQ_URL` is set; OpenTelemetry traces likewise. Locally these stay dark — that's expected.
+**Env-gated hosted services.** `ReleaseNotifier` (emails opted-in users on a new version) and `BackupService` (periodic JSON snapshots) are registered unconditionally but no-op unless their env keys are set. Barcode lookup (Open Food Facts → catalogue) is gated by `BARCODE_ENABLED`. Serilog ships to Seq only when `SEQ_URL` is set; OpenTelemetry traces likewise. Locally these stay dark — that's expected.
 
 **Frontend state.** Two React contexts wrap the app: `AuthProvider` (login/register/logout, persists `user`+`token` to `localStorage`, talks to `/api/auth/*` via `fetch`) and `ThemeProvider`. There's no router-level auth guard — `AppContent` just renders `LoginPage` when `user` is null. All `localStorage` access goes through `src/lib/storage.ts` (prefixed, typed getters/setters) so it can be swapped for IndexedDB later — add new persisted prefs there, don't call `localStorage` directly.
 

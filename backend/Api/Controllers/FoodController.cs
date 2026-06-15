@@ -356,7 +356,7 @@ public class FoodController(AppDbContext db, IFoodService foodService) : Control
         return NoContent();
     }
 
-    private static FoodResponse ToResponse(Food f) => new()
+    internal static FoodResponse ToResponse(Food f) => new()
     {
         Id = f.Id,
         Name = f.Name,

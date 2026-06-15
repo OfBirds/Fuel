@@ -10,6 +10,12 @@ public class Food
     public double? CarbsPerUnit { get; set; }
     public double? FatPerUnit { get; set; }
     public string? IconRef { get; set; }
+
+    /// <summary>Product barcode (EAN-13/UPC/etc.) when resolved from Open Food Facts.
+    /// Unique so repeat-scans hit the local catalogue cache instantly. Null for
+    /// hand-entered / AI-created foods.</summary>
+    public string? Barcode { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 

@@ -63,6 +63,11 @@ services:
       AI_CONFIG_FILE: /app/ai-providers.json
       AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS}
       AI_KEY_DEEPSEEK: ${AI_KEY_DEEPSEEK}
+      # Barcode / EAN lookup (docs/barcode-lookup.md). Open Food Facts is free and
+      # needs no API key. BARCODE_ENABLED=true shows the scan affordance.
+      BARCODE_ENABLED: ${BARCODE_ENABLED}
+      BARCODE_BASE_URL: ${BARCODE_BASE_URL}
+      BARCODE_TIMEOUT_SECONDS: ${BARCODE_TIMEOUT_SECONDS}
       AI_KEY_CLAUDE: ${AI_KEY_CLAUDE}
       # Structured logs -> Seq (internal). UI is published below per stack.
       SEQ_URL: http://seq

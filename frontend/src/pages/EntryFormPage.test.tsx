@@ -32,6 +32,9 @@ function mockMealPauseNotConfigured() {
 function mockAiStatus(enabled = false) {
   return { ok: true, json: async () => ({ enabled, supportsImages: false }) };
 }
+function mockBarcodeStatus(enabled = false) {
+  return { ok: true, json: async () => ({ enabled }) };
+}
 
 describe('EntryFormPage', () => {
   beforeEach(() => {
@@ -42,7 +45,7 @@ describe('EntryFormPage', () => {
   });
 
   it('renders the add entry form', async () => {
-    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
+    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockBarcodeStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
       const headings = screen.getAllByText('Add Entry');
@@ -53,6 +56,7 @@ describe('EntryFormPage', () => {
   it('searches foods on input', async () => {
     mockFetch
       .mockResolvedValueOnce(mockAiStatus())                // ai status (mount)
+      .mockResolvedValueOnce(mockBarcodeStatus())           // barcode status
       .mockResolvedValueOnce(mockMealPauseNotConfigured())  // meal-pause check
       .mockResolvedValueOnce({                               // food search
         ok: true,
@@ -80,7 +84,7 @@ describe('EntryFormPage', () => {
   });
 
   it('shows inline food define link', async () => {
-    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
+    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockBarcodeStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
       const links = screen.getAllByText("Can't find it? Define a new food");
@@ -89,7 +93,7 @@ describe('EntryFormPage', () => {
   });
 
   it('does not show save button without food selected', async () => {
-    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
+    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockBarcodeStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
       expect(screen.queryByText('Save Entry')).toBeNull();

@@ -1,6 +1,6 @@
 # Barcode / EAN lookup (Phase 3) — design
 
-> Status: **spec, not yet built**. A grocery-packaging **barcode scan** that
+> Status: **built**. A grocery-packaging **barcode scan** that
 > resolves to an official food definition when one exists. It is a **database
 > lookup, not an AI estimate** — its own seam, separate from `INutritionEstimator`
 > (`ai-providers.md`). It feeds the same unified entry screen as the AI paths

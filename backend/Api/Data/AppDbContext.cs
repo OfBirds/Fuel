@@ -48,6 +48,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.DefaultUoM).IsRequired();
             entity.Property(e => e.CaloriesPerUnit).IsRequired();
             entity.HasIndex(e => e.Name);
+            entity.HasIndex(e => e.Barcode).IsUnique();
         });
 
         modelBuilder.Entity<FoodIngredient>(entity =>
