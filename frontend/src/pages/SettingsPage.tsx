@@ -243,7 +243,7 @@ function SettingsPage() {
                 onChange={(e) => setGoalDraft(e.target.value)}
                 onBlur={commitGoal}
                 onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                style={{ width: '100px', textAlign: 'right' }}
+                style={{ width: '100px', textAlign: 'right', marginLeft: 'auto' }}
                 placeholder="e.g. 2000"
               />
             </label>
