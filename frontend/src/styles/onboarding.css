@@ -8,7 +8,10 @@
 }
 
 .onboarding-container {
-  background: white;
+  /* Theme-aware surface — was hardcoded white, leaving labels/subtitle
+     (var(--text)/--text-light, light in dark mode) unreadable on the card. */
+  background: var(--surface);
+  color: var(--text);
   border-radius: 12px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
   padding: 2.5rem;
@@ -57,6 +60,8 @@
   border: 2px solid var(--border);
   border-radius: 6px;
   font-size: 0.95rem;
+  background: var(--bg);
+  color: var(--text);
   transition: border-color 0.2s;
 }
 

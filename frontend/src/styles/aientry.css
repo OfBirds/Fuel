@@ -170,7 +170,9 @@
 
 .ai-row-fields {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* minmax(0,1fr) — plain 1fr lets the number inputs' intrinsic min-width win,
+     blowing the grid past its container (the out-of-bounds review row). */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.4rem;
 }
 
@@ -180,6 +182,7 @@
   gap: 0.15rem;
   font-size: 0.7rem;
   color: var(--text-light);
+  min-width: 0;
 }
 
 .ai-row-fields input,
@@ -288,4 +291,96 @@
   font-size: 0.8rem;
   color: var(--text-light);
   margin-top: 0.5rem;
+}
+
+/* ── Barcode scan (inside Photo mode) ── */
+.ai-barcode {
+  margin-top: 0.75rem;
+}
+
+/* "or" divider between the photo actions and the barcode option */
+.ai-barcode-sep {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.9rem 0;
+  color: var(--text-light);
+  font-size: 0.8rem;
+}
+.ai-barcode-sep::before,
+.ai-barcode-sep::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.ai-scan-btn {
+  display: block;
+  width: 100%;
+  padding: 0.65rem;
+  background: none;
+  border: 1px dashed var(--primary);
+  color: var(--primary);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.ai-scan-btn:hover:not(:disabled) {
+  background: var(--primary);
+  color: #fff;
+}
+.ai-scan-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ai-barcode-panel {
+  margin-top: 0.6rem;
+  padding: 0.75rem;
+  background: var(--neutral);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.ai-barcode-hint {
+  font-size: 0.8rem;
+  color: var(--text-light);
+  margin-bottom: 0.5rem;
+}
+.ai-barcode-video {
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto 0.6rem;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #000;
+}
+.ai-barcode-video video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.ai-barcode-manual {
+  display: flex;
+  gap: 0.5rem;
+}
+.ai-barcode-manual input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  background: var(--surface);
+  color: var(--text);
+}
+.ai-barcode-manual .save-btn {
+  white-space: nowrap;
+}
+.ai-barcode-msg {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--error);
 }

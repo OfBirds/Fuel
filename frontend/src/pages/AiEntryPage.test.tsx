@@ -8,6 +8,10 @@ vi.mock('../context/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+// Image normalization decodes via <img>/canvas, which jsdom can't do — pass the
+// blob through unchanged here; the real re-encode is exercised in the browser.
+vi.mock('../lib/image', () => ({ normalizeImage: async (b: Blob) => b }));
+
 import AiEntryPage from './AiEntryPage';
 
 const _realFetch = globalThis.fetch;
@@ -27,6 +31,9 @@ function renderPage(route = '/entry/ai?meal=Lunch&date=2026-06-14') {
 }
 
 const aiOn = () => ({ ok: true, json: async () => ({ enabled: true, supportsText: true, supportsImages: true }) });
+// The page fetches /api/ai/status and /api/barcode/status together at mount;
+// barcode is call #2, so each test queues this right after the AI-status mock.
+const bcOff = () => ({ ok: true, json: async () => ({ enabled: false }) });
 
 function estimateOk(items: unknown[], overall = 0.7) {
   return { ok: true, json: async () => ({ ok: true, error: null, overallConfidence: overall, source: 'AiText', items }) };
@@ -46,6 +53,7 @@ describe('AiEntryPage', () => {
   it('estimate populates multiple review rows', async () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(bcOff())
       .mockResolvedValueOnce(estimateOk([
         row({ name: 'Chicken Breast' }),
         row({ name: 'Broccoli', matchedFoodId: null, isNew: true, confidence: 0.4 }),
@@ -64,6 +72,7 @@ describe('AiEntryPage', () => {
   it('deletes a row', async () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(bcOff())
       .mockResolvedValueOnce(estimateOk([row({ name: 'Rice' }), row({ name: 'Beans' })]));
 
     renderPage();
@@ -81,6 +90,7 @@ describe('AiEntryPage', () => {
   it('edits override AI values and are sent on save', async () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(bcOff())
       .mockResolvedValueOnce(estimateOk([row({ name: 'Rice', quantity: 150, calories: 205 })]))
       .mockResolvedValueOnce({ ok: true, json: async () => [] }); // batch save
 
@@ -95,8 +105,8 @@ describe('AiEntryPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Save 1 item/ }));
 
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
-    const [, opts] = mockFetch.mock.calls[2];
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+    const [, opts] = mockFetch.mock.calls[3];
     const body = JSON.parse((opts as RequestInit).body as string);
     expect(body.items[0].calories).toBe(255);
     expect(body.items[0].source).toBe('AiText');
@@ -106,6 +116,7 @@ describe('AiEntryPage', () => {
   it('refine re-requests with the accumulated note', async () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(bcOff())
       .mockResolvedValueOnce(estimateOk([row({ name: 'Toast' })]))
       .mockResolvedValueOnce(estimateOk([row({ name: 'Wholemeal Toast' })]));
 
@@ -118,8 +129,8 @@ describe('AiEntryPage', () => {
     await userEvent.type(screen.getByLabelText(/Add a clarification/), "it's wholemeal");
     await userEvent.click(screen.getByRole('button', { name: 'Refine' }));
 
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
-    const [, opts] = mockFetch.mock.calls[2];
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+    const [, opts] = mockFetch.mock.calls[3];
     const body = JSON.parse((opts as RequestInit).body as string);
     expect(body.notes).toEqual(["it's wholemeal"]);
   });
@@ -127,6 +138,7 @@ describe('AiEntryPage', () => {
   it('photo tab: chosen file is sent to estimate/image and saved as AiPhoto', async () => {
     mockFetch
       .mockResolvedValueOnce(aiOn()) // supportsImages: true
+      .mockResolvedValueOnce(bcOff())
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ ok: true, error: null, overallConfidence: 0.6, source: 'AiPhoto', items: [row({ name: 'Pizza', matchedFoodId: null, isNew: true })] }),
@@ -143,19 +155,21 @@ describe('AiEntryPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
     await screen.findByDisplayValue('Pizza');
-    const [url, opts] = mockFetch.mock.calls[1];
+    const [url, opts] = mockFetch.mock.calls[2];
     expect(url).toBe('/api/user/test-user-id/estimate/image');
     expect((opts as RequestInit).body).toBeInstanceOf(FormData);
-    expect(((opts as RequestInit).body as FormData).get('image')).toBeInstanceOf(File);
+    expect(((opts as RequestInit).body as FormData).get('image')).toBeInstanceOf(Blob);
 
     await userEvent.click(screen.getByRole('button', { name: /Save 1 item/ }));
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
-    const saveBody = JSON.parse((mockFetch.mock.calls[2][1] as RequestInit).body as string);
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
+    const saveBody = JSON.parse((mockFetch.mock.calls[3][1] as RequestInit).body as string);
     expect(saveBody.items[0].source).toBe('AiPhoto');
   });
 
   it('hides the photo tab when the provider cannot do images', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ enabled: true, supportsText: true, supportsImages: false }) });
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ enabled: true, supportsText: true, supportsImages: false }) })
+      .mockResolvedValueOnce(bcOff());
 
     renderPage();
     await screen.findByRole('textbox', { name: /what did you eat/i });
@@ -165,6 +179,7 @@ describe('AiEntryPage', () => {
   it('shows the manual fallback when estimation is unavailable', async () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(bcOff())
       .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: false, error: "Couldn't estimate — enter it manually.", overallConfidence: 0, source: 'AiText', items: [] }) });
 
     renderPage();
@@ -176,7 +191,9 @@ describe('AiEntryPage', () => {
   });
 
   it('shows a disabled notice when AI is off', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ enabled: false, supportsText: false, supportsImages: false }) });
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ enabled: false, supportsText: false, supportsImages: false }) })
+      .mockResolvedValueOnce(bcOff());
 
     renderPage();
     await waitFor(() => expect(screen.getByText(/isn't configured/i)).toBeInTheDocument());

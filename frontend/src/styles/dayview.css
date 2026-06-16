@@ -15,9 +15,10 @@
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 0.4rem 0.8rem;
+  padding: 0.45rem 0.9rem;
   border-radius: 6px;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
+  line-height: 1.2;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -37,12 +38,14 @@
 .day-today-btn {
   background: var(--primary);
   color: white;
-  padding: 0.4rem 0.7rem;
+  /* Match .day-nav-btn's box so it isn't visibly smaller than the arrows beside it. */
+  padding: 0.45rem 0.9rem;
   border-radius: 6px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
+  line-height: 1.2;
   font-weight: 600;
   cursor: pointer;
-  border: none;
+  border: 1px solid var(--primary);
   transition: all 0.2s;
 }
 

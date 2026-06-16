@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -69,6 +69,7 @@ function EntryFormPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<FoodItem[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>('priority');
   const [selectedFood, setSelectedFood] = useState<FoodDetail | null>(null);
   const [showInlineForm, setShowInlineForm] = useState(false);
@@ -102,14 +103,6 @@ function EntryFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(isEdit);
   const [aiEnabled, setAiEnabled] = useState(false);
-  const [barcodeEnabled, setBarcodeEnabled] = useState(false);
-  const [showBarcode, setShowBarcode] = useState(false);
-  const [barcodeCode, setBarcodeCode] = useState('');
-  const [barcodeScanning, setBarcodeScanning] = useState(false);
-  const [barcodeResult, setBarcodeResult] = useState<{ found: boolean; isNew?: boolean; message?: string } | null>(null);
-  const barcodeVideoRef = useRef<HTMLVideoElement>(null);
-  const barcodeStreamRef = useRef<MediaStream | null>(null);
-  const barcodeControlRef = useRef<AbortController | null>(null);
 
   // Meal-pause warning
   const [mealPauseWarning, setMealPauseWarning] = useState<{ hoursSinceLast: number; mealPauseHours: number } | null>(null);
@@ -161,19 +154,7 @@ function EntryFormPage() {
     return () => { alive = false; };
   }, []);
 
-  // Check whether barcode lookup is enabled.
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await apiFetch('/api/barcode/status');
-        if (alive && res.ok) setBarcodeEnabled((await res.json()).enabled === true);
-      } catch { /* leave off */ }
-    })();
-    return () => { alive = false; };
-  }, []);
-
-  // Preselect a food by foodId (query param — barcode scan result links here).
+  // Preselect a food by foodId (query param — e.g. linked from elsewhere).
   useEffect(() => {
     if (isEdit || !user) return;
     const foodId = searchParams.get('foodId');
@@ -193,25 +174,25 @@ function EntryFormPage() {
     return () => { alive = false; };
   }, [isEdit, user, searchParams]);
 
-  // Debounced food search
+  // Food search. Focusing the field lists the whole catalogue (empty query →
+  // all foods, debounce-free); typing narrows it. Blur hides the dropdown.
   useEffect(() => {
-    if (!searchTerm.trim()) {
-      setSearchResults([]);
-      return;
-    }
+    if (!searchFocused) return;
+    const term = searchTerm.trim();
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const params = new URLSearchParams({ search: searchTerm });
+        const params = new URLSearchParams();
+        if (term) params.set('search', term);
         if (user?.id) { params.set('userId', user.id); params.set('sort', sortMode); }
         const res = await apiFetch(`/api/foods?${params.toString()}`);
         if (res.ok) setSearchResults((await res.json()) as FoodItem[]);
       } finally {
         setSearching(false);
       }
-    }, 200);
+    }, term ? 200 : 0);
     return () => clearTimeout(timer);
-  }, [searchTerm, sortMode, user?.id]);
+  }, [searchTerm, sortMode, user?.id, searchFocused]);
 
   const selectFood = useCallback(async (food: FoodItem) => {
     try {
@@ -222,6 +203,7 @@ function EntryFormPage() {
       setUom(detail.defaultUoM);
       setSearchTerm('');
       setSearchResults([]);
+      setSearchFocused(false);
       recomputeNutrition(detail.caloriesPerUnit, detail.proteinPerUnit, detail.carbsPerUnit, detail.fatPerUnit, quantity);
     } catch { /* ignore */ }
   }, [quantity]);
@@ -267,89 +249,8 @@ function EntryFormPage() {
     }
   };
 
-  // ── Barcode scan ──────────────────────────────────────────────
-
-  const stopBarcode = useCallback(() => {
-    if (barcodeControlRef.current) { barcodeControlRef.current.abort(); barcodeControlRef.current = null; }
-    if (barcodeStreamRef.current) {
-      barcodeStreamRef.current.getTracks().forEach(t => t.stop());
-      barcodeStreamRef.current = null;
-    }
-    setBarcodeScanning(false);
-  }, []);
-
-  const lookupBarcode = useCallback(async (code: string) => {
-    const clean = code.replace(/[^0-9]/g, '');
-    if (!clean) return;
-    setBarcodeScanning(true);
-    setBarcodeResult(null);
-    try {
-      const res = await apiFetch(`/api/barcode/lookup/${encodeURIComponent(clean)}`);
-      const data = await res.json();
-      if (res.ok) {
-        setBarcodeResult(data);
-        if (data.found && data.food) {
-          // Prefill — same shape as selecting from search
-          setSelectedFood(data.food as FoodDetail);
-          setUom(data.food.defaultUoM);
-          setSearchTerm('');
-          setSearchResults([]);
-          recomputeNutrition(
-            data.food.caloriesPerUnit,
-            data.food.proteinPerUnit ?? null,
-            data.food.carbsPerUnit ?? null,
-            data.food.fatPerUnit ?? null,
-            quantity,
-          );
-          stopBarcode();
-          setShowBarcode(false);
-        }
-      } else {
-        setBarcodeResult({ found: false, message: (await res.json().catch(() => ({ error: 'Lookup failed' }))).error || 'Lookup failed' });
-      }
-    } catch {
-      setBarcodeResult({ found: false, message: 'Lookup failed — try again or enter manually.' });
-    } finally {
-      setBarcodeScanning(false);
-    }
-  }, [quantity, recomputeNutrition, stopBarcode]);
-
-  const startBarcodeScan = useCallback(async () => {
-    if (barcodeScanning) { stopBarcode(); setShowBarcode(false); return; }
-    setShowBarcode(true);
-    setBarcodeResult(null);
-    setBarcodeCode('');
-    const hasCamera = !!navigator.mediaDevices?.getUserMedia;
-    if (!hasCamera) return;
-    try {
-      const { BrowserMultiFormatReader } = await import('@zxing/browser');
-      const reader = new BrowserMultiFormatReader();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
-      });
-      barcodeStreamRef.current = stream;
-      const video = barcodeVideoRef.current;
-      if (!video) { stream.getTracks().forEach(t => t.stop()); return; }
-      video.srcObject = stream;
-      // Wait for video to be ready before decoding
-      await new Promise<void>((resolve, reject) => {
-        video.onloadedmetadata = () => { video.play().then(() => resolve(), reject); };
-        video.onerror = () => reject(new Error('video'));
-      });
-      setBarcodeScanning(true);
-      const result = await reader.decodeOnceFromVideoElement(video);
-      if (result) await lookupBarcode(result.getText());
-    } catch {
-      // Camera denied / no barcode in frame — manual entry works
-    } finally {
-      if (barcodeStreamRef.current) { barcodeStreamRef.current.getTracks().forEach(t => t.stop()); barcodeStreamRef.current = null; }
-      setBarcodeScanning(false);
-    }
-  }, [barcodeScanning, stopBarcode, lookupBarcode]);
-
-  // Stop camera on unmount
-  useEffect(() => () => { stopBarcode(); }, [stopBarcode]);
+  // Barcode/EAN scanning now lives in the AI entry screen's Photo mode
+  // (camera / upload / scan), so the manual entry form no longer carries it.
 
   // Check meal-pause when meal or intake time changes
   useEffect(() => {
@@ -440,51 +341,6 @@ function EntryFormPage() {
         </button>
       )}
 
-      {!isEdit && barcodeEnabled && !selectedFood && (
-        <button className="barcode-toggle-btn" onClick={startBarcodeScan}>
-          {barcodeScanning ? '⏹ Stop scanner' : '📷 Scan barcode'}
-        </button>
-      )}
-
-      {showBarcode && !isEdit && !selectedFood && (
-        <div className="barcode-panel">
-          <div className="barcode-panel-header">
-            <h3>Scan barcode</h3>
-            <button onClick={() => { stopBarcode(); setShowBarcode(false); }} className="entry-row-btn">✕</button>
-          </div>
-          <p className="barcode-hint">Camera scans product barcodes (EAN/UPC). Enter digits manually if no camera.</p>
-          <div className="barcode-video-wrap">
-            <video ref={barcodeVideoRef} autoPlay playsInline muted />
-          </div>
-          <div className="barcode-manual">
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="Barcode digits (8–14)"
-              value={barcodeCode}
-              onChange={(e) => setBarcodeCode(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && lookupBarcode(barcodeCode)}
-            />
-            <button onClick={() => lookupBarcode(barcodeCode)} disabled={barcodeScanning || !barcodeCode.trim()}>
-              Look up
-            </button>
-          </div>
-          {barcodeResult && !barcodeResult.found && (
-            <div className="barcode-result-msg error">
-              <p>{barcodeResult.message}</p>
-              <div className="barcode-result-actions">
-                <button onClick={() => navigate(`/entry/ai?meal=${encodeURIComponent(mealType)}&date=${queryDate}`)}>
-                  ✨ Describe / photo it
-                </button>
-                <button onClick={() => { setBarcodeResult(null); setBarcodeCode(''); }}>
-                  Enter manually
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Food search */}
       {!selectedFood ? (
         <>
@@ -505,11 +361,14 @@ function EntryFormPage() {
               <input
                 className="food-search-input"
                 type="text"
-                placeholder="Type a food name…"
+                placeholder="Search foods, or tap to see all…"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                // Delay so a click on a result registers before the list unmounts.
+                onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
               />
-              {searchResults.length > 0 && (
+              {searchFocused && searchResults.length > 0 && (
                 <div className="search-results">
                   {searchResults.map((f) => (
                     <div key={f.id} className="search-result-item" onClick={() => selectFood(f)}>
@@ -526,9 +385,11 @@ function EntryFormPage() {
                   ))}
                 </div>
               )}
-              {searchTerm && !searching && searchResults.length === 0 && (
+              {searchFocused && !searching && searchResults.length === 0 && (
                 <div className="search-results">
-                  <div className="search-no-results">No foods found.</div>
+                  <div className="search-no-results">
+                    {searchTerm ? 'No foods found.' : 'No foods in your catalogue yet.'}
+                  </div>
                 </div>
               )}
             </div>

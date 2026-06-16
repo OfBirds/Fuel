@@ -86,6 +86,39 @@ function CataloguePage() {
   const [ingSearchResults, setIngSearchResults] = useState<FoodItem[]>([]);
   const [addingIngToIndex, setAddingIngToIndex] = useState<number | null>(null);
 
+  // Composite-food ingredients (lazy-loaded once, then cached). Shown two ways:
+  // a hover popover (desktop) and a click-to-expand caret that lists them inline
+  // underneath the row (works on touch). Both are composite-only.
+  const [openIngredients, setOpenIngredients] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [ingCache, setIngCache] = useState<Record<string, IngredientResponse[]>>({});
+
+  const loadIngredients = useCallback(async (f: FoodItem) => {
+    if (!f.isComposite || ingCache[f.id]) return;
+    try {
+      const res = await apiFetch(`/api/foods/${f.id}`);
+      if (res.ok) {
+        const d = (await res.json()) as FoodDetail;
+        setIngCache((c) => ({ ...c, [f.id]: d.ingredients }));
+      }
+    } catch { /* ignore — preview is best-effort */ }
+  }, [ingCache]);
+
+  const previewIngredients = useCallback((f: FoodItem) => {
+    if (!f.isComposite) return;
+    setOpenIngredients(f.id);
+    loadIngredients(f);
+  }, [loadIngredients]);
+
+  const toggleExpand = useCallback((f: FoodItem) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(f.id)) next.delete(f.id); else next.add(f.id);
+      return next;
+    });
+    loadIngredients(f);
+  }, [loadIngredients]);
+
   const fetchFoods = useCallback(async () => {
     setLoading(true);
     try {
@@ -449,7 +482,11 @@ function CataloguePage() {
         <ul className="food-list">
           {foods.map((f) => (
             <li key={f.id}>
-              <div className="food-card">
+              <div
+                className="food-card"
+                onMouseEnter={() => previewIngredients(f)}
+                onMouseLeave={() => setOpenIngredients(null)}
+              >
                 <div className="food-card-main" onClick={() => startEdit(f.id)}>
                   <div className="food-card-name">{f.name}</div>
                   <div className="food-card-detail">
@@ -458,18 +495,28 @@ function CataloguePage() {
                     {f.usageCount != null ? ` · ${f.usageCount}×` : ''}
                   </div>
                 </div>
+                {f.isComposite && (
+                  <button
+                    className="food-expander"
+                    aria-expanded={expandedIds.has(f.id)}
+                    aria-label={`${expandedIds.has(f.id) ? 'Hide' : 'Show'} ingredients of ${f.name}`}
+                    onClick={(e) => { e.stopPropagation(); toggleExpand(f); }}
+                  >
+                    <span className={`food-expander-caret${expandedIds.has(f.id) ? ' open' : ''}`}>▾</span>
+                  </button>
+                )}
                 <div
                   className="food-ponder"
                   onClick={(e) => e.stopPropagation()}
+                  title="Priority — lower shows sooner in lists"
                 >
+                  <span className="ponder-label">Priority</span>
                   <button
                     className="ponder-btn"
                     aria-label={`Lower priority of ${f.name}`}
                     onClick={() => setPonder(f.id, Math.max(0, (f.ponder ?? 100) - 10))}
                   >−</button>
-                  <span className="ponder-value" title="Priority (lower = sooner)">
-                    {f.ponder ?? 100}
-                  </span>
+                  <span className="ponder-value">{f.ponder ?? 100}</span>
                   <button
                     className="ponder-btn"
                     aria-label={`Raise priority of ${f.name}`}
@@ -481,6 +528,50 @@ function CataloguePage() {
                   className="food-card-delete"
                   onClick={(e) => { e.stopPropagation(); deleteFood(f.id); }}
                 >Delete</button>
+
+                {f.isComposite && openIngredients === f.id && !expandedIds.has(f.id) && (
+                  <div className="food-ingredients-pop" role="tooltip">
+                    <div className="food-ingredients-title">Ingredients</div>
+                    {ingCache[f.id] ? (
+                      ingCache[f.id].length > 0 ? (
+                        <ul className="food-ingredients-list">
+                          {ingCache[f.id].map((ing) => (
+                            <li key={ing.childFoodId}>
+                              <span>{ing.childFoodName}</span>
+                              <span className="food-ingredients-qty">{ing.quantity} {ing.uoM}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="settings-muted">No ingredients listed.</div>
+                      )
+                    ) : (
+                      <div className="settings-muted">Loading…</div>
+                    )}
+                  </div>
+                )}
+
+                {f.isComposite && expandedIds.has(f.id) && (
+                  <div className="food-ingredients-inline">
+                    <div className="food-ingredients-title">Ingredients</div>
+                    {ingCache[f.id] ? (
+                      ingCache[f.id].length > 0 ? (
+                        <ul className="food-ingredients-list">
+                          {ingCache[f.id].map((ing) => (
+                            <li key={ing.childFoodId}>
+                              <span>{ing.childFoodName}</span>
+                              <span className="food-ingredients-qty">{ing.quantity} {ing.uoM}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="settings-muted">No ingredients listed.</div>
+                      )
+                    ) : (
+                      <div className="settings-muted">Loading…</div>
+                    )}
+                  </div>
+                )}
               </div>
             </li>
           ))}

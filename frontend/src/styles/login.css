@@ -8,7 +8,10 @@
 }
 
 .login-container {
-  background: white;
+  /* Theme-aware surface — was hardcoded white, which left the label/subtitle
+     text (var(--text)/--text-light, light in dark mode) unreadable on the card. */
+  background: var(--surface);
+  color: var(--text);
   border-radius: 12px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
   padding: 3rem;
@@ -81,7 +84,13 @@
   border: 2px solid var(--border);
   border-radius: 6px;
   font-size: 1rem;
+  background: var(--bg);
+  color: var(--text);
   transition: border-color 0.2s;
+}
+
+.form-group input::placeholder {
+  color: var(--text-light);
 }
 
 .form-group input:focus {

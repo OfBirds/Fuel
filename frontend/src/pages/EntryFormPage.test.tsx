@@ -32,10 +32,6 @@ function mockMealPauseNotConfigured() {
 function mockAiStatus(enabled = false) {
   return { ok: true, json: async () => ({ enabled, supportsImages: false }) };
 }
-function mockBarcodeStatus(enabled = false) {
-  return { ok: true, json: async () => ({ enabled }) };
-}
-
 describe('EntryFormPage', () => {
   beforeEach(() => {
     // resetAllMocks (not clearAllMocks) so each test starts with an empty
@@ -45,7 +41,7 @@ describe('EntryFormPage', () => {
   });
 
   it('renders the add entry form', async () => {
-    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockBarcodeStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
+    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
       const headings = screen.getAllByText('Add Entry');
@@ -55,15 +51,17 @@ describe('EntryFormPage', () => {
 
   it('searches foods on input', async () => {
     mockFetch
-      .mockResolvedValueOnce(mockAiStatus())                // ai status (mount)
-      .mockResolvedValueOnce(mockBarcodeStatus())           // barcode status
-      .mockResolvedValueOnce(mockMealPauseNotConfigured())  // meal-pause check
-      .mockResolvedValueOnce({                               // food search
+      // Default: any food-search call (focus shows all, then typing narrows) returns this.
+      .mockResolvedValue({
         ok: true,
         json: async () => [
           { id: '1', name: 'Chicken Breast', defaultUoM: 'g', caloriesPerUnit: 1.65, ingredientCount: 0, isComposite: false },
         ],
       });
+    // Mount calls consumed first, in order.
+    mockFetch
+      .mockResolvedValueOnce(mockAiStatus())                // ai status (mount)
+      .mockResolvedValueOnce(mockMealPauseNotConfigured());  // meal-pause check
 
     renderEntryForm();
 
@@ -74,7 +72,7 @@ describe('EntryFormPage', () => {
     // Give the meal-pause debounce (300ms) time to fire and consume its mock.
     await new Promise(r => setTimeout(r, 350));
 
-    const inputs = screen.getAllByPlaceholderText('Type a food name…');
+    const inputs = screen.getAllByPlaceholderText('Search foods, or tap to see all…');
     await userEvent.type(inputs[0], 'chicken');
 
     await waitFor(() => {
@@ -84,7 +82,7 @@ describe('EntryFormPage', () => {
   });
 
   it('shows inline food define link', async () => {
-    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockBarcodeStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
+    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
       const links = screen.getAllByText("Can't find it? Define a new food");
@@ -93,7 +91,7 @@ describe('EntryFormPage', () => {
   });
 
   it('does not show save button without food selected', async () => {
-    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockBarcodeStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
+    mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
       expect(screen.queryByText('Save Entry')).toBeNull();

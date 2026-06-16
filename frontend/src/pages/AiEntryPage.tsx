@@ -3,6 +3,7 @@ import { apiFetch } from '../lib/api';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getLastMealType, saveLastMealType } from '../lib/storage';
+import { normalizeImage } from '../lib/image';
 import '../styles/entryform.css';
 import '../styles/aientry.css';
 
@@ -35,6 +36,19 @@ interface EstimateApiResponse {
 interface Row extends ApiRow {
   key: string;
 }
+
+// Shape of the catalogue food returned by /api/barcode/lookup (FoodResponse).
+interface BarcodeFood {
+  id: string;
+  name: string;
+  defaultUoM: string;
+  caloriesPerUnit: number;
+  proteinPerUnit: number | null;
+  carbsPerUnit: number | null;
+  fatPerUnit: number | null;
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
 
 let keySeq = 0;
 const nextKey = () => `row-${keySeq++}`;
@@ -77,6 +91,17 @@ function AiEntryPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Barcode (EAN/UPC) scan — lives inside Photo mode alongside camera/upload.
+  // It's a precise digit decode (ZXing) + Open Food Facts lookup, not an AI guess,
+  // so it stays a dedicated path; a hit becomes a matched review row.
+  const [barcodeEnabled, setBarcodeEnabled] = useState(false);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
+  const [barcodeCode, setBarcodeCode] = useState('');
+  const [barcodeBusy, setBarcodeBusy] = useState(false);
+  const [barcodeMsg, setBarcodeMsg] = useState<string | null>(null);
+  const barcodeVideoRef = useRef<HTMLVideoElement | null>(null);
+  const barcodeStreamRef = useRef<MediaStream | null>(null);
+
   const [mealType, setMealType] = useState(queryMeal);
   const [intakeAt, setIntakeAt] = useState(() => `${queryDate}T${nowTime()}`);
 
@@ -90,27 +115,37 @@ function AiEntryPage() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      try {
-        const res = await apiFetch('/api/ai/status');
-        if (alive && res.ok) {
-          const status = await res.json();
-          setAiEnabled(status.enabled === true);
-          setSupportsText(status.supportsText === true);
-          setSupportsImages(status.supportsImages === true);
-          // If only photo is configured, start on the photo input.
-          if (status.supportsText !== true && status.supportsImages === true) setMode('photo');
-        } else if (alive) setAiEnabled(false);
-      } catch {
-        if (alive) setAiEnabled(false);
+      const [aiRes, bcRes] = await Promise.allSettled([
+        apiFetch('/api/ai/status'),
+        apiFetch('/api/barcode/status'),
+      ]);
+      if (!alive) return;
+      let aiOn = false, sText = false, sImg = false, bcOn = false;
+      if (aiRes.status === 'fulfilled' && aiRes.value?.ok) {
+        const s = await aiRes.value.json();
+        aiOn = s.enabled === true;
+        sText = s.supportsText === true;
+        sImg = s.supportsImages === true;
       }
+      if (bcRes.status === 'fulfilled' && bcRes.value?.ok) {
+        bcOn = (await bcRes.value.json()).enabled === true;
+      }
+      if (!alive) return;
+      setAiEnabled(aiOn);
+      setSupportsText(sText);
+      setSupportsImages(sImg);
+      setBarcodeEnabled(bcOn);
+      // No text input configured but photo/barcode is → start on the Photo tab.
+      if (!sText && (sImg || bcOn)) setMode('photo');
     })();
     return () => { alive = false; };
   }, []);
 
-  // Abort any in-flight request and release the camera if we leave the screen.
+  // Abort any in-flight request and release both cameras if we leave the screen.
   useEffect(() => () => {
     abortRef.current?.abort();
     streamRef.current?.getTracks().forEach((t) => t.stop());
+    barcodeStreamRef.current?.getTracks().forEach((t) => t.stop());
   }, []);
 
   // Revoke the previous object URL when the photo changes or the screen unmounts.
@@ -129,20 +164,32 @@ function AiEntryPage() {
     }
   }, [cameraOn]);
 
-  const useImage = (blob: Blob) => {
-    setImageBlob(blob);
-    setImageUrl(URL.createObjectURL(blob)); // prior URL revoked by the effect above
+  const useImage = async (blob: Blob) => {
     setRows(null); setNotes([]); setOverallConfidence(null); setError(null);
+    // Re-encode to JPEG + downscale before it ever leaves the browser: HEIC and
+    // multi-MB phone photos otherwise 400 at the vision provider (see lib/image).
+    let normalized = blob;
+    try { normalized = await normalizeImage(blob); } catch { /* fall back to original */ }
+    setImageBlob(normalized);
+    setImageUrl(URL.createObjectURL(normalized)); // prior URL revoked by the effect above
   };
+
+  const secureCamera = () => typeof window !== 'undefined'
+    && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
 
   const startCamera = async () => {
     setError(null);
+    if (!secureCamera()) {
+      // getUserMedia is blocked outside a secure context (e.g. http on the LAN).
+      setError('Camera needs a secure (HTTPS) connection — use “Choose a photo” to upload instead.');
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       streamRef.current = stream;
       setCameraOn(true);
     } catch {
-      // Secure-context / permission / no-camera → the upload fallback always works.
+      // Permission denied / no camera → the upload fallback always works.
       setError('Camera unavailable — choose or take a photo with the file picker below.');
     }
   };
@@ -166,9 +213,100 @@ function AiEntryPage() {
 
   const clearImage = () => { setImageBlob(null); setImageUrl(null); };
 
+  // ── Barcode scan (EAN/UPC) — inside Photo mode ──────────────────
+  const stopBarcode = useCallback(() => {
+    barcodeStreamRef.current?.getTracks().forEach((t) => t.stop());
+    barcodeStreamRef.current = null;
+    setBarcodeBusy(false);
+  }, []);
+
+  // A resolved product is already a real catalogue food (the backend caches it),
+  // so it joins the review list as a matched row — not a "new" one.
+  const addBarcodeFood = (food: BarcodeFood) => {
+    const qty = food.defaultUoM === 'piece' ? 1 : 100;
+    const scaled = (v: number | null) => (v == null ? null : round1(v * qty));
+    setRows((rs) => [
+      ...(rs ?? []),
+      {
+        key: nextKey(),
+        name: food.name,
+        quantity: qty,
+        uom: food.defaultUoM,
+        calories: Math.round(food.caloriesPerUnit * qty),
+        protein: scaled(food.proteinPerUnit),
+        carbs: scaled(food.carbsPerUnit),
+        fat: scaled(food.fatPerUnit),
+        confidence: 1,
+        matchedFoodId: food.id,
+        matchedDefaultUoM: food.defaultUoM,
+        isNew: false,
+      },
+    ]);
+    setSource('Barcode');
+  };
+
+  const lookupBarcode = useCallback(async (code: string) => {
+    const clean = code.replace(/[^0-9]/g, '');
+    if (!clean) return;
+    setBarcodeBusy(true);
+    setBarcodeMsg(null);
+    try {
+      const res = await apiFetch(`/api/barcode/lookup/${encodeURIComponent(clean)}`);
+      const data = await res.json();
+      if (res.ok && data.found && data.food) {
+        addBarcodeFood(data.food as BarcodeFood);
+        stopBarcode();
+        setBarcodeOpen(false);
+        setBarcodeCode('');
+      } else {
+        setBarcodeMsg(data.message || 'Product not found — describe it or enter it manually.');
+      }
+    } catch {
+      setBarcodeMsg('Lookup failed — try again, or enter it manually.');
+    } finally {
+      setBarcodeBusy(false);
+    }
+  }, [stopBarcode]);
+
+  const toggleBarcode = useCallback(async () => {
+    if (barcodeOpen) { stopBarcode(); setBarcodeOpen(false); return; }
+    setBarcodeOpen(true);
+    setBarcodeMsg(null);
+    setBarcodeCode('');
+    if (!secureCamera()) {
+      setBarcodeMsg('Camera needs a secure (HTTPS) connection — type the barcode digits below.');
+      return;
+    }
+    try {
+      const { BrowserMultiFormatReader } = await import('@zxing/browser');
+      const reader = new BrowserMultiFormatReader();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+      barcodeStreamRef.current = stream;
+      const video = barcodeVideoRef.current;
+      if (!video) { stream.getTracks().forEach((t) => t.stop()); return; }
+      video.srcObject = stream;
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => { video.play().then(() => resolve(), reject); };
+        video.onerror = () => reject(new Error('video'));
+      });
+      setBarcodeBusy(true);
+      const result = await reader.decodeOnceFromVideoElement(video);
+      if (result) await lookupBarcode(result.getText());
+    } catch {
+      // Denied / no barcode in frame → manual digit entry still works.
+    } finally {
+      barcodeStreamRef.current?.getTracks().forEach((t) => t.stop());
+      barcodeStreamRef.current = null;
+      setBarcodeBusy(false);
+    }
+  }, [barcodeOpen, stopBarcode, lookupBarcode]);
+
   const switchMode = (m: 'text' | 'photo') => {
     if (m === mode) return;
-    if (m === 'text') stopCamera();
+    if (m === 'text') { stopCamera(); stopBarcode(); setBarcodeOpen(false); }
     setMode(m);
     setError(null);
   };
@@ -287,7 +425,7 @@ function AiEntryPage() {
     <div className="entry-form ai-entry">
       <h1>Describe with AI</h1>
 
-      {aiEnabled === false ? (
+      {aiEnabled === false && !barcodeEnabled ? (
         <div className="ai-disabled-notice">
           <p>AI estimation isn't configured on this server.</p>
           <Link to={manualHref} className="save-btn ai-manual-link">Enter it manually</Link>
@@ -296,7 +434,7 @@ function AiEntryPage() {
         <>
           {error && <p className="form-error" role="alert">{error}</p>}
 
-          {supportsText && supportsImages && (
+          {supportsText && (supportsImages || barcodeEnabled) && (
             <div className="ai-mode-toggle" role="tablist" aria-label="Input method">
               <button
                 role="tab" type="button"
@@ -333,32 +471,71 @@ function AiEntryPage() {
             </div>
           ) : (
             <div className="form-section ai-photo">
-              <label>Snap or upload a photo of your meal</label>
+              {supportsImages && (
+                <>
+                  <label>Snap or upload a photo of your meal</label>
 
-              {cameraOn ? (
-                <div className="ai-camera">
-                  <video ref={videoRef} autoPlay playsInline muted className="ai-camera-preview" />
-                  <div className="ai-photo-actions">
-                    <button type="button" className="save-btn" onClick={capturePhoto}>Capture</button>
-                    <button type="button" className="cancel-btn" onClick={stopCamera}>Cancel</button>
-                  </div>
-                </div>
-              ) : imageUrl ? (
-                <div className="ai-photo-preview">
-                  <img src={imageUrl} alt="Meal to estimate" className="ai-photo-img" />
-                  <button type="button" className="cancel-btn" onClick={clearImage} disabled={pending}>Retake / remove</button>
-                </div>
-              ) : (
-                <div className="ai-photo-actions">
-                  <button type="button" className="save-btn" onClick={startCamera}>Use camera</button>
-                  <label className="cancel-btn ai-upload-btn">
-                    Choose a photo
-                    <input type="file" accept="image/*" capture="environment" onChange={onFile} hidden aria-label="Choose a photo" />
-                  </label>
-                </div>
+                  {cameraOn ? (
+                    <div className="ai-camera">
+                      <video ref={videoRef} autoPlay playsInline muted className="ai-camera-preview" />
+                      <div className="ai-photo-actions">
+                        <button type="button" className="save-btn" onClick={capturePhoto}>Capture</button>
+                        <button type="button" className="cancel-btn" onClick={stopCamera}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : imageUrl ? (
+                    <div className="ai-photo-preview">
+                      <img src={imageUrl} alt="Meal to estimate" className="ai-photo-img" />
+                      <button type="button" className="cancel-btn" onClick={clearImage} disabled={pending}>Retake / remove</button>
+                    </div>
+                  ) : (
+                    <div className="ai-photo-actions">
+                      <button type="button" className="save-btn" onClick={startCamera}>Use camera</button>
+                      <label className="cancel-btn ai-upload-btn">
+                        Choose a photo
+                        <input type="file" accept="image/*" capture="environment" onChange={onFile} hidden aria-label="Choose a photo" />
+                      </label>
+                    </div>
+                  )}
+
+                  <p className="ai-photo-hint">Your photo is sent for estimation and never stored — it stays in this browser until you save or leave.</p>
+                </>
               )}
 
-              <p className="ai-photo-hint">Your photo is sent for estimation and never stored — it stays in this browser until you save or leave.</p>
+              {barcodeEnabled && (
+                <div className="ai-barcode">
+                  {supportsImages && <div className="ai-barcode-sep"><span>or</span></div>}
+                  <button type="button" className="ai-scan-btn" onClick={toggleBarcode} disabled={pending}>
+                    {barcodeOpen ? '⏹ Close scanner' : '▦ Scan a barcode'}
+                  </button>
+
+                  {barcodeOpen && (
+                    <div className="ai-barcode-panel">
+                      <p className="ai-barcode-hint">Point the camera at a product barcode (EAN/UPC), or type the digits.</p>
+                      {secureCamera() && (
+                        <div className="ai-barcode-video">
+                          <video ref={barcodeVideoRef} autoPlay playsInline muted />
+                        </div>
+                      )}
+                      <div className="ai-barcode-manual">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="Barcode digits (8–14)"
+                          value={barcodeCode}
+                          onChange={(e) => setBarcodeCode(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') lookupBarcode(barcodeCode); }}
+                          disabled={barcodeBusy}
+                        />
+                        <button type="button" className="save-btn" onClick={() => lookupBarcode(barcodeCode)} disabled={barcodeBusy || !barcodeCode.trim()}>
+                          {barcodeBusy ? 'Looking…' : 'Look up'}
+                        </button>
+                      </div>
+                      {barcodeMsg && <p className="ai-barcode-msg" role="alert">{barcodeMsg}</p>}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -368,7 +545,7 @@ function AiEntryPage() {
               <span>Estimating…</span>
               <button className="cancel-btn" onClick={cancel}>Cancel</button>
             </div>
-          ) : !cameraOn && (
+          ) : (mode === 'text' || (mode === 'photo' && supportsImages)) && !cameraOn && (
             <button className="save-btn" onClick={onEstimate} disabled={mode === 'photo' && !imageBlob}>
               {rows ? 'Re-estimate' : 'Estimate'}
             </button>
@@ -437,20 +614,24 @@ function AiEntryPage() {
                 </div>
               ))}
 
-              <div className="ai-refine">
-                <label htmlFor="ai-note">Not quite right? Add a clarification</label>
-                <div className="ai-refine-row">
-                  <input
-                    id="ai-note"
-                    value={noteDraft}
-                    placeholder="e.g. the rice was 1.5 cups, the bread is wholemeal"
-                    onChange={(e) => setNoteDraft(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') onRefine(); }}
-                    disabled={pending}
-                  />
-                  <button className="cancel-btn" onClick={onRefine} disabled={pending || !noteDraft.trim()}>Refine</button>
+              {/* Refining re-runs the estimate, so only for AI results (text or photo) —
+                  a scanned barcode product has nothing to re-estimate. */}
+              {(mode === 'text' || imageBlob) && (
+                <div className="ai-refine">
+                  <label htmlFor="ai-note">Not quite right? Add a clarification</label>
+                  <div className="ai-refine-row">
+                    <input
+                      id="ai-note"
+                      value={noteDraft}
+                      placeholder="e.g. the rice was 1.5 cups, the bread is wholemeal"
+                      onChange={(e) => setNoteDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') onRefine(); }}
+                      disabled={pending}
+                    />
+                    <button className="cancel-btn" onClick={onRefine} disabled={pending || !noteDraft.trim()}>Refine</button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="entry-form-row" style={{ marginTop: '1rem' }}>
                 <div className="form-section" style={{ marginBottom: 0 }}>

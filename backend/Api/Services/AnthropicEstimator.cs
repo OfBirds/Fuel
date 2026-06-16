@@ -66,8 +66,16 @@ public class AnthropicEstimator(HttpClient http, ProviderConnection connection, 
         req.Headers.Add("anthropic-version", "2023-06-01");
 
         using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-        resp.EnsureSuccessStatusCode();
         var body = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            // EnsureSuccessStatusCode() drops the body; the provider's 400 explains *why*
+            // (e.g. unsupported image media_type, image too large) — log it before throwing.
+            logger.LogWarning("Anthropic {Model} returned {Status}: {Body}",
+                connection.Model, (int)resp.StatusCode,
+                body.Length > 600 ? body[..600] : body);
+            resp.EnsureSuccessStatusCode();
+        }
         var estimate = Parse(body);
         logger.LogInformation(
             "Anthropic estimate ok: {Items} items, overall conf {Conf}, {Ms}ms, model {Model}",
