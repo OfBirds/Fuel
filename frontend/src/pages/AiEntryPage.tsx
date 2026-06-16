@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getLastMealType, saveLastMealType } from '../lib/storage';
 import { normalizeImage } from '../lib/image';
+import { loadCatalogueByName, type CatalogueFood } from '../lib/foods';
 import '../styles/entryform.css';
 import '../styles/aientry.css';
 
@@ -95,12 +96,16 @@ function AiEntryPage() {
   // It's a precise digit decode (ZXing) + Open Food Facts lookup, not an AI guess,
   // so it stays a dedicated path; a hit becomes a matched review row.
   const [barcodeEnabled, setBarcodeEnabled] = useState(false);
-  const [barcodeOpen, setBarcodeOpen] = useState(false);
+  const [barcodeCameraOn, setBarcodeCameraOn] = useState(false);
   const [barcodeCode, setBarcodeCode] = useState('');
   const [barcodeBusy, setBarcodeBusy] = useState(false);
   const [barcodeMsg, setBarcodeMsg] = useState<string | null>(null);
   const barcodeVideoRef = useRef<HTMLVideoElement | null>(null);
   const barcodeStreamRef = useRef<MediaStream | null>(null);
+
+  // Catalogue keyed by lowercased name — to flag a "new" row that actually duplicates
+  // an existing food (we don't auto-merge yet; just warn so we stop minting dupes).
+  const [catalogue, setCatalogue] = useState<Map<string, CatalogueFood>>(new Map());
 
   const [mealType, setMealType] = useState(queryMeal);
   const [intakeAt, setIntakeAt] = useState(() => `${queryDate}T${nowTime()}`);
@@ -138,6 +143,13 @@ function AiEntryPage() {
       // No text input configured but photo/barcode is → start on the Photo tab.
       if (!sText && (sImg || bcOn)) setMode('photo');
     })();
+    return () => { alive = false; };
+  }, []);
+
+  // Load the catalogue once for duplicate-name detection on "new" review rows.
+  useEffect(() => {
+    let alive = true;
+    loadCatalogueByName().then((m) => { if (alive) setCatalogue(m); });
     return () => { alive = false; };
   }, []);
 
@@ -213,11 +225,12 @@ function AiEntryPage() {
 
   const clearImage = () => { setImageBlob(null); setImageUrl(null); };
 
-  // ── Barcode scan (EAN/UPC) — inside Photo mode ──────────────────
-  const stopBarcode = useCallback(() => {
+  // ── Barcode scan (EAN/UPC) — its own camera/upload pair inside Photo mode ──
+  const stopBarcodeScan = useCallback(() => {
     barcodeStreamRef.current?.getTracks().forEach((t) => t.stop());
     barcodeStreamRef.current = null;
     setBarcodeBusy(false);
+    setBarcodeCameraOn(false);
   }, []);
 
   // A resolved product is already a real catalogue food (the backend caches it),
@@ -255,8 +268,6 @@ function AiEntryPage() {
       const data = await res.json();
       if (res.ok && data.found && data.food) {
         addBarcodeFood(data.food as BarcodeFood);
-        stopBarcode();
-        setBarcodeOpen(false);
         setBarcodeCode('');
       } else {
         setBarcodeMsg(data.message || 'Product not found — describe it or enter it manually.');
@@ -266,17 +277,17 @@ function AiEntryPage() {
     } finally {
       setBarcodeBusy(false);
     }
-  }, [stopBarcode]);
+  }, []);
 
-  const toggleBarcode = useCallback(async () => {
-    if (barcodeOpen) { stopBarcode(); setBarcodeOpen(false); return; }
-    setBarcodeOpen(true);
+  // Live camera scan: open the stream, let ZXing decode one barcode, then look it up.
+  const startBarcodeScan = useCallback(async () => {
     setBarcodeMsg(null);
     setBarcodeCode('');
     if (!secureCamera()) {
-      setBarcodeMsg('Camera needs a secure (HTTPS) connection — type the barcode digits below.');
+      setBarcodeMsg('Camera needs a secure (HTTPS) connection — upload a photo or type the digits below.');
       return;
     }
+    setBarcodeCameraOn(true);
     try {
       const { BrowserMultiFormatReader } = await import('@zxing/browser');
       const reader = new BrowserMultiFormatReader();
@@ -286,7 +297,7 @@ function AiEntryPage() {
       });
       barcodeStreamRef.current = stream;
       const video = barcodeVideoRef.current;
-      if (!video) { stream.getTracks().forEach((t) => t.stop()); return; }
+      if (!video) { stream.getTracks().forEach((t) => t.stop()); setBarcodeCameraOn(false); return; }
       video.srcObject = stream;
       await new Promise<void>((resolve, reject) => {
         video.onloadedmetadata = () => { video.play().then(() => resolve(), reject); };
@@ -296,17 +307,40 @@ function AiEntryPage() {
       const result = await reader.decodeOnceFromVideoElement(video);
       if (result) await lookupBarcode(result.getText());
     } catch {
-      // Denied / no barcode in frame → manual digit entry still works.
+      // Denied / cancelled / no barcode → upload or manual entry still work.
     } finally {
       barcodeStreamRef.current?.getTracks().forEach((t) => t.stop());
       barcodeStreamRef.current = null;
       setBarcodeBusy(false);
+      setBarcodeCameraOn(false);
     }
-  }, [barcodeOpen, stopBarcode, lookupBarcode]);
+  }, [lookupBarcode]);
+
+  // Upload path: decode a barcode straight from a chosen/snapped photo.
+  const onBarcodeFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    setBarcodeMsg(null);
+    setBarcodeBusy(true);
+    const url = URL.createObjectURL(file);
+    try {
+      const { BrowserMultiFormatReader } = await import('@zxing/browser');
+      const reader = new BrowserMultiFormatReader();
+      const result = await reader.decodeFromImageUrl(url);
+      if (result) await lookupBarcode(result.getText());
+      else setBarcodeMsg('No barcode found in that image — try a clearer photo or type the digits.');
+    } catch {
+      setBarcodeMsg("Couldn't read a barcode in that image — try a clearer photo or type the digits.");
+    } finally {
+      URL.revokeObjectURL(url);
+      setBarcodeBusy(false);
+    }
+  };
 
   const switchMode = (m: 'text' | 'photo') => {
     if (m === mode) return;
-    if (m === 'text') { stopCamera(); stopBarcode(); setBarcodeOpen(false); }
+    if (m === 'text') { stopCamera(); stopBarcodeScan(); }
     setMode(m);
     setError(null);
   };
@@ -492,8 +526,8 @@ function AiEntryPage() {
                     <div className="ai-photo-actions">
                       <button type="button" className="save-btn" onClick={startCamera}>Use camera</button>
                       <label className="cancel-btn ai-upload-btn">
-                        Choose a photo
-                        <input type="file" accept="image/*" capture="environment" onChange={onFile} hidden aria-label="Choose a photo" />
+                        Upload a file
+                        <input type="file" accept="image/*" capture="environment" onChange={onFile} hidden aria-label="Upload a meal photo" />
                       </label>
                     </div>
                   )}
@@ -505,35 +539,48 @@ function AiEntryPage() {
               {barcodeEnabled && (
                 <div className="ai-barcode">
                   {supportsImages && <div className="ai-barcode-sep"><span>or</span></div>}
-                  <button type="button" className="ai-scan-btn" onClick={toggleBarcode} disabled={pending}>
-                    {barcodeOpen ? '⏹ Close scanner' : '▦ Scan a barcode'}
-                  </button>
+                  <label className="ai-barcode-label">Snap or upload a photo of a barcode (EAN/UPC)</label>
 
-                  {barcodeOpen && (
-                    <div className="ai-barcode-panel">
-                      <p className="ai-barcode-hint">Point the camera at a product barcode (EAN/UPC), or type the digits.</p>
-                      {secureCamera() && (
-                        <div className="ai-barcode-video">
-                          <video ref={barcodeVideoRef} autoPlay playsInline muted />
-                        </div>
-                      )}
-                      <div className="ai-barcode-manual">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          placeholder="Barcode digits (8–14)"
-                          value={barcodeCode}
-                          onChange={(e) => setBarcodeCode(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') lookupBarcode(barcodeCode); }}
-                          disabled={barcodeBusy}
-                        />
-                        <button type="button" className="save-btn" onClick={() => lookupBarcode(barcodeCode)} disabled={barcodeBusy || !barcodeCode.trim()}>
-                          {barcodeBusy ? 'Looking…' : 'Look up'}
-                        </button>
+                  {barcodeCameraOn ? (
+                    <div className="ai-barcode-camera">
+                      <video ref={barcodeVideoRef} autoPlay playsInline muted className="ai-camera-preview" />
+                      <p className="ai-barcode-hint">Hold the barcode steady in the frame…</p>
+                      <div className="ai-photo-actions">
+                        <button type="button" className="bc-btn-outline" onClick={stopBarcodeScan}>Cancel</button>
                       </div>
-                      {barcodeMsg && <p className="ai-barcode-msg" role="alert">{barcodeMsg}</p>}
+                    </div>
+                  ) : (
+                    <div className="ai-photo-actions">
+                      <button type="button" className="bc-btn" onClick={startBarcodeScan} disabled={pending || barcodeBusy}>
+                        Use camera
+                      </button>
+                      <label className="bc-btn-outline ai-upload-btn">
+                        Upload a file
+                        <input type="file" accept="image/*" capture="environment" onChange={onBarcodeFile} hidden aria-label="Upload a barcode photo" />
+                      </label>
                     </div>
                   )}
+
+                  <details className="ai-barcode-typed">
+                    <summary>Or type the digits</summary>
+                    <div className="ai-barcode-manual">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Barcode digits (8–14)"
+                        value={barcodeCode}
+                        onChange={(e) => setBarcodeCode(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') lookupBarcode(barcodeCode); }}
+                        disabled={barcodeBusy}
+                      />
+                      <button type="button" className="bc-btn" onClick={() => lookupBarcode(barcodeCode)} disabled={barcodeBusy || !barcodeCode.trim()}>
+                        {barcodeBusy ? 'Looking…' : 'Look up'}
+                      </button>
+                    </div>
+                  </details>
+
+                  {barcodeBusy && !barcodeCameraOn && <p className="ai-barcode-hint">Reading barcode…</p>}
+                  {barcodeMsg && <p className="ai-barcode-msg" role="alert">{barcodeMsg}</p>}
                 </div>
               )}
             </div>
@@ -546,9 +593,11 @@ function AiEntryPage() {
               <button className="cancel-btn" onClick={cancel}>Cancel</button>
             </div>
           ) : (mode === 'text' || (mode === 'photo' && supportsImages)) && !cameraOn && (
-            <button className="save-btn" onClick={onEstimate} disabled={mode === 'photo' && !imageBlob}>
-              {rows ? 'Re-estimate' : 'Estimate'}
-            </button>
+            <div className="ai-estimate-row">
+              <button className="save-btn ai-estimate-btn" onClick={onEstimate} disabled={mode === 'photo' && !imageBlob}>
+                {rows ? 'Re-estimate' : 'Estimate'}
+              </button>
+            </div>
           )}
 
           <p className="ai-manual-fallback">
@@ -582,7 +631,13 @@ function AiEntryPage() {
                     </div>
                   </div>
                   {r.isNew && (
-                    <div className="ai-unmatched-hint">Not matched to your catalogue — edit the name above if needed</div>
+                    catalogue.has(r.name.trim().toLowerCase()) ? (
+                      <div className="ai-unmatched-hint dup">
+                        ⚠ "{r.name.trim()}" already exists in your catalogue — saving will create a duplicate. Rename it, or remove this row and search for the existing food.
+                      </div>
+                    ) : (
+                      <div className="ai-unmatched-hint">Not matched to your catalogue — edit the name above if needed</div>
+                    )
                   )}
                   <div className="ai-row-fields">
                     <label>Qty

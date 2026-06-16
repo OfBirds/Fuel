@@ -47,6 +47,23 @@
   color: var(--text-light);
 }
 
+/* The 1fr-1fr grids use inline styles.  Grid items default to min-width:auto
+   so they won't shrink past their content — the label + input together push the
+   column wider than the screen.  min-width:0 on the grid children fixes that. */
+.settings-section [style*="grid"] > * {
+  min-width: 0;
+}
+
+/* Shrink browser-default min-width on inputs/selects so the 1fr-1fr
+   grid columns don't overflow narrow screens.  ~⅓ of the typical 150 px
+   browser default = 50 px. */
+.settings-section input {
+  min-width: 50px;
+}
+.settings-section select {
+  min-width: 70px;
+}
+
 .settings-muted {
   color: var(--text-light);
 }

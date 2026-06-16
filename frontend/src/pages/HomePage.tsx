@@ -31,6 +31,13 @@ function formatDate(d: Date): string {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+// Local HH:MM for the meal-finished marker.
+function formatTime(utc: string): string {
+  const d = new Date(utc);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 // Local calendar date (YYYY-MM-DD) — NOT toISOString(), which would shift to UTC.
 function toDateString(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -100,8 +107,18 @@ function HomePage() {
   const grouped = MEAL_ORDER.map((meal) => {
     const mealEntries = entries.filter((e) => e.mealType === meal);
     const mealTotal = mealEntries.reduce((sum, e) => sum + e.calories, 0);
-    return { meal, entries: mealEntries, mealTotal };
+    // The "finished at" marker is the latest intake time in the meal. Only meaningful
+    // for the main meals (snacks are scattered through the day, so no single time).
+    const finishedAt = meal !== 'Snack' && mealEntries.length > 0
+      ? formatTime(mealEntries.reduce((a, b) => (a.intakeAtUtc > b.intakeAtUtc ? a : b)).intakeAtUtc)
+      : null;
+    return { meal, entries: mealEntries, mealTotal, finishedAt };
   });
+
+  // Calorie bar shifts to warning at 80% of goal and to error at 99%+ — a glanceable
+  // "you're near / over your budget" without needing to read the number.
+  const goalPct = goal != null && goal > 0 ? (totalCalories / goal) * 100 : 0;
+  const calorieLevel = goalPct >= 99 ? 'over' : goalPct >= 80 ? 'warn' : '';
 
   const deleteEntry = async (entryId: string) => {
     if (!user || !confirm('Delete this entry?')) return;
@@ -135,13 +152,15 @@ function HomePage() {
         <div className="calorie-bar-label">
           <span>Calories: {totalCalories}{goal != null ? ` / ${goal}` : ''}</span>
           {goal != null && goal > 0 && (
-            <span>{Math.round((totalCalories / goal) * 100)}%</span>
+            <span className={calorieLevel ? `calorie-pct ${calorieLevel}` : 'calorie-pct'}>
+              {Math.round(goalPct)}%
+            </span>
           )}
         </div>
         <div className="calorie-bar-track">
           <div
-            className="calorie-bar-fill"
-            style={{ width: `${goal != null && goal > 0 ? Math.min(100, (totalCalories / goal) * 100) : 0}%` }}
+            className={calorieLevel ? `calorie-bar-fill ${calorieLevel}` : 'calorie-bar-fill'}
+            style={{ width: `${Math.min(100, goalPct)}%` }}
           />
         </div>
       </div>
@@ -158,10 +177,13 @@ function HomePage() {
               <p>Tap the + on any meal below to log your first meal of the day.</p>
             </div>
           )}
-          {grouped.map(({ meal, entries: mealEntries, mealTotal }) => (
+          {grouped.map(({ meal, entries: mealEntries, mealTotal, finishedAt }) => (
             <section key={meal} className="meal-section" aria-labelledby={`meal-${meal}`}>
               <div className="meal-section-header">
-                <h2 id={`meal-${meal}`} className="meal-section-title">{meal}</h2>
+                <h2 id={`meal-${meal}`} className="meal-section-title">
+                  {meal}
+                  {finishedAt && <span className="meal-section-time"> ({finishedAt})</span>}
+                </h2>
                 <div className="meal-section-header-right">
                   <span className="meal-section-calories">{mealTotal} cal</span>
                   <button
@@ -180,15 +202,17 @@ function HomePage() {
                   <span className="entry-row-calories">{entry.calories} cal</span>
                   <div className="entry-row-actions">
                     <button
-                      className="entry-row-btn"
+                      className="entry-icon-btn edit"
                       onClick={() => navigate(`/entry/${entry.id}/edit`)}
                       aria-label="Edit entry"
-                    >Edit</button>
+                      title="Edit"
+                    >✎</button>
                     <button
-                      className="entry-row-btn danger"
+                      className="entry-icon-btn del"
                       onClick={() => deleteEntry(entry.id)}
                       aria-label="Delete entry"
-                    >Del</button>
+                      title="Delete"
+                    >✕</button>
                   </div>
                 </div>
               ))}

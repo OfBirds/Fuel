@@ -48,10 +48,10 @@ describe('CataloguePage', () => {
 
     renderCatalogue();
     await waitFor(() => {
-      expect(screen.getAllByText('+ Add Food').length).toBeGreaterThan(0);
+      expect(screen.getByLabelText('Add food')).toBeDefined();
     });
 
-    await userEvent.click(screen.getAllByText('+ Add Food')[0]);
+    await userEvent.click(screen.getByLabelText('Add food'));
 
     expect(screen.getAllByText('Save Food').length).toBeGreaterThan(0);
   });

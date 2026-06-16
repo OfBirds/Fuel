@@ -34,6 +34,8 @@ const aiOn = () => ({ ok: true, json: async () => ({ enabled: true, supportsText
 // The page fetches /api/ai/status and /api/barcode/status together at mount;
 // barcode is call #2, so each test queues this right after the AI-status mock.
 const bcOff = () => ({ ok: true, json: async () => ({ enabled: false }) });
+// …then /api/foods (call #3) loads the catalogue for duplicate-name detection.
+const foodsEmpty = () => ({ ok: true, json: async () => [] });
 
 function estimateOk(items: unknown[], overall = 0.7) {
   return { ok: true, json: async () => ({ ok: true, error: null, overallConfidence: overall, source: 'AiText', items }) };
@@ -54,6 +56,7 @@ describe('AiEntryPage', () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
       .mockResolvedValueOnce(bcOff())
+      .mockResolvedValueOnce(foodsEmpty())
       .mockResolvedValueOnce(estimateOk([
         row({ name: 'Chicken Breast' }),
         row({ name: 'Broccoli', matchedFoodId: null, isNew: true, confidence: 0.4 }),
@@ -73,6 +76,7 @@ describe('AiEntryPage', () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
       .mockResolvedValueOnce(bcOff())
+      .mockResolvedValueOnce(foodsEmpty())
       .mockResolvedValueOnce(estimateOk([row({ name: 'Rice' }), row({ name: 'Beans' })]));
 
     renderPage();
@@ -91,6 +95,7 @@ describe('AiEntryPage', () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
       .mockResolvedValueOnce(bcOff())
+      .mockResolvedValueOnce(foodsEmpty())
       .mockResolvedValueOnce(estimateOk([row({ name: 'Rice', quantity: 150, calories: 205 })]))
       .mockResolvedValueOnce({ ok: true, json: async () => [] }); // batch save
 
@@ -105,8 +110,8 @@ describe('AiEntryPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Save 1 item/ }));
 
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
-    const [, opts] = mockFetch.mock.calls[3];
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(5));
+    const [, opts] = mockFetch.mock.calls[4];
     const body = JSON.parse((opts as RequestInit).body as string);
     expect(body.items[0].calories).toBe(255);
     expect(body.items[0].source).toBe('AiText');
@@ -117,6 +122,7 @@ describe('AiEntryPage', () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
       .mockResolvedValueOnce(bcOff())
+      .mockResolvedValueOnce(foodsEmpty())
       .mockResolvedValueOnce(estimateOk([row({ name: 'Toast' })]))
       .mockResolvedValueOnce(estimateOk([row({ name: 'Wholemeal Toast' })]));
 
@@ -129,8 +135,8 @@ describe('AiEntryPage', () => {
     await userEvent.type(screen.getByLabelText(/Add a clarification/), "it's wholemeal");
     await userEvent.click(screen.getByRole('button', { name: 'Refine' }));
 
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
-    const [, opts] = mockFetch.mock.calls[3];
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(5));
+    const [, opts] = mockFetch.mock.calls[4];
     const body = JSON.parse((opts as RequestInit).body as string);
     expect(body.notes).toEqual(["it's wholemeal"]);
   });
@@ -139,6 +145,7 @@ describe('AiEntryPage', () => {
     mockFetch
       .mockResolvedValueOnce(aiOn()) // supportsImages: true
       .mockResolvedValueOnce(bcOff())
+      .mockResolvedValueOnce(foodsEmpty())
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ ok: true, error: null, overallConfidence: 0.6, source: 'AiPhoto', items: [row({ name: 'Pizza', matchedFoodId: null, isNew: true })] }),
@@ -150,19 +157,19 @@ describe('AiEntryPage', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Photo' }));
 
     const file = new File(['fake-bytes'], 'meal.jpg', { type: 'image/jpeg' });
-    await userEvent.upload(screen.getByLabelText('Choose a photo'), file);
+    await userEvent.upload(screen.getByLabelText('Upload a meal photo'), file);
 
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
     await screen.findByDisplayValue('Pizza');
-    const [url, opts] = mockFetch.mock.calls[2];
+    const [url, opts] = mockFetch.mock.calls[3];
     expect(url).toBe('/api/user/test-user-id/estimate/image');
     expect((opts as RequestInit).body).toBeInstanceOf(FormData);
     expect(((opts as RequestInit).body as FormData).get('image')).toBeInstanceOf(Blob);
 
     await userEvent.click(screen.getByRole('button', { name: /Save 1 item/ }));
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
-    const saveBody = JSON.parse((mockFetch.mock.calls[3][1] as RequestInit).body as string);
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(5));
+    const saveBody = JSON.parse((mockFetch.mock.calls[4][1] as RequestInit).body as string);
     expect(saveBody.items[0].source).toBe('AiPhoto');
   });
 
@@ -180,6 +187,7 @@ describe('AiEntryPage', () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
       .mockResolvedValueOnce(bcOff())
+      .mockResolvedValueOnce(foodsEmpty())
       .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: false, error: "Couldn't estimate — enter it manually.", overallConfidence: 0, source: 'AiText', items: [] }) });
 
     renderPage();

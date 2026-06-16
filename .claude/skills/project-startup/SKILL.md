@@ -37,16 +37,28 @@ dotnet run
 - **Schema changes:** apply migrations with
   `dotnet ef database update --project backend/Api`.
 
-## 3. Frontend → http://localhost:3000
+## 3. Frontend → http://localhost:3000 (always with `--host` for LAN access)
 
 ```bash
 cd frontend
 npm install   # first time
-npm run dev
+npm run dev -- --host
 ```
+
+**Always pass `--host`** — without it Vite binds only to `127.0.0.1` and mobile
+devices on the LAN can't reach the app. With `--host` it listens on `0.0.0.0`
+and prints both the localhost and network URLs (e.g. `http://192.168.4.55:3000`).
 
 Vite is configured for **:3000** and proxies `/api` → `http://localhost:5200`
 (see `vite.config.ts`). HMR picks up source edits; no restart needed.
+
+**Startup gotcha:** the harness sometimes kills background `npm run dev` tasks
+when a new background command launches (SIGTERM 143/144). Use `nohup … &`
+instead of the Bash `run_in_background` flag for the frontend:
+
+```bash
+nohup npm run dev -- --host > /tmp/vite.log 2>&1 &
+```
 
 ### Driving it with the Claude Preview tool
 

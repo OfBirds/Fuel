@@ -142,7 +142,7 @@ function WeightPage() {
                 <div className="weight-row-date">{formatDate(w.recordedAtUtc)}</div>
               </div>
               {renderDelta(w.deltaPercent)}
-              <button className="weight-row-delete" onClick={() => deleteWeight(w.id)}>Delete</button>
+              <button className="weight-row-delete" onClick={() => deleteWeight(w.id)} aria-label="Delete weigh-in" title="Delete">✕</button>
             </li>
           ))}
         </ul>

@@ -266,34 +266,6 @@ function SettingsPage() {
                 </select>
               </SettingsField>
             </div>
-            <SettingsField label="Body frame">
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <select value={profile?.constitution ?? ''} onChange={(e) => updateProfile({ constitution: e.target.value || null })} style={{ flex: 1 }}>
-                  <option value="">—</option>
-                  <option value="Small">Small</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Large">Large</option>
-                </select>
-                <button type="button" className="settings-row-help" style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'underline', whiteSpace: 'nowrap' }}
-                  onClick={() => setShowWrist(!showWrist)}>
-                  {showWrist ? 'Hide' : 'Help me decide'}
-                </button>
-              </div>
-              {showWrist && (
-                <div style={{ background: 'var(--neutral)', borderRadius: 6, padding: '0.6rem', marginTop: '0.3rem' }}>
-                  <SettingsField label="Wrist circumference (cm)">
-                    <input type="number" step="0.1" value={wristCm} onChange={(e) => setWristCm(e.target.value)} placeholder="e.g. 17" />
-                  </SettingsField>
-                  {computedFrame && (
-                    <p style={{ marginTop: '0.4rem', fontWeight: 600, color: 'var(--primary)', fontSize: '0.85rem' }}>
-                      Estimated: {computedFrame}
-                      <button type="button" style={{ marginLeft: '0.5rem', background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline' }}
-                        onClick={() => { updateProfile({ constitution: computedFrame }); setShowWrist(false); }}>Use this</button>
-                    </p>
-                  )}
-                </div>
-              )}
-            </SettingsField>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <SettingsField label="Year of birth">
                 <input type="number" value={yobDraft}
@@ -306,6 +278,36 @@ function SettingsPage() {
                   {ACTIVITY_OPTIONS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
                 </select>
               </SettingsField>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <SettingsField label="Body frame">
+                <select value={profile?.constitution ?? ''} onChange={(e) => updateProfile({ constitution: e.target.value || null })}>
+                  <option value="">—</option>
+                  <option value="Small">Small</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Large">Large</option>
+                </select>
+              </SettingsField>
+              <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '0.2rem' }}>
+                <button type="button" className="settings-row-help" style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'underline', whiteSpace: 'nowrap' }}
+                  onClick={() => setShowWrist(!showWrist)}>
+                  {showWrist ? 'Hide' : 'Help me decide'}
+                </button>
+              </div>
+              {showWrist && (
+                <div style={{ background: 'var(--neutral)', borderRadius: 6, padding: '0.6rem', gridColumn: '1 / -1' }}>
+                  <SettingsField label="Wrist circumference (cm)">
+                    <input type="number" step="0.1" value={wristCm} onChange={(e) => setWristCm(e.target.value)} placeholder="e.g. 17" />
+                  </SettingsField>
+                  {computedFrame && (
+                    <p style={{ marginTop: '0.4rem', fontWeight: 600, color: 'var(--primary)', fontSize: '0.85rem' }}>
+                      Estimated: {computedFrame}
+                      <button type="button" style={{ marginLeft: '0.5rem', background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline' }}
+                        onClick={() => { updateProfile({ constitution: computedFrame }); setShowWrist(false); }}>Use this</button>
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </Section>
 
@@ -333,13 +335,16 @@ function SettingsPage() {
                   placeholder="e.g. 4" />
               </SettingsField>
               <SettingsField label="Scope">
-                <select value={profile?.mealPauseScope ?? 'all'} onChange={(e) => updateProfile({ mealPauseScope: e.target.value })}>
-                  <option value="all">All meals</option>
+                <select value={profile?.mealPauseScope ?? 'non-snack'} onChange={(e) => updateProfile({ mealPauseScope: e.target.value })}>
                   <option value="non-snack">Non-snack only</option>
+                  <option value="all">All (incl. snacks)</option>
                 </select>
               </SettingsField>
             </div>
-            <span className="settings-row-help">Warns when you log a meal too soon after the last one. Won't block, just a heads-up. Set to 0 (or leave blank) to turn this off.</span>
+            <span className="settings-row-help">
+              Second helpings within the same meal are always fine. "Non-snack only" checks only between Breakfast, Lunch, and Dinner.{" "}
+              {profile?.mealPauseScope === 'all' && <em>If "all," every snack line also triggers the check — beware.</em>}
+            </span>
           </Section>
 
           {/* Metabolism */}

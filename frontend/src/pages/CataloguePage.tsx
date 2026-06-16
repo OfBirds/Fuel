@@ -329,7 +329,7 @@ function CataloguePage() {
             <option key={m} value={m}>{SORT_LABELS[m]}</option>
           ))}
         </select>
-        <button className="catalogue-add-btn" onClick={startAdd}>+ Add Food</button>
+        <button className="catalogue-add-btn" onClick={startAdd} aria-label="Add food" title="Add food">+</button>
       </div>
 
       {/* Food form */}
@@ -505,12 +505,12 @@ function CataloguePage() {
                     <span className={`food-expander-caret${expandedIds.has(f.id) ? ' open' : ''}`}>▾</span>
                   </button>
                 )}
+                {f.isComposite && <span className="food-card-badge">composite</span>}
                 <div
                   className="food-ponder"
                   onClick={(e) => e.stopPropagation()}
                   title="Priority — lower shows sooner in lists"
                 >
-                  <span className="ponder-label">Priority</span>
                   <button
                     className="ponder-btn"
                     aria-label={`Lower priority of ${f.name}`}
@@ -523,11 +523,12 @@ function CataloguePage() {
                     onClick={() => setPonder(f.id, (f.ponder ?? 100) + 10)}
                   >+</button>
                 </div>
-                {f.isComposite && <span className="food-card-badge">composite</span>}
                 <button
                   className="food-card-delete"
                   onClick={(e) => { e.stopPropagation(); deleteFood(f.id); }}
-                >Delete</button>
+                  aria-label={`Delete ${f.name}`}
+                  title="Delete"
+                >✕</button>
 
                 {f.isComposite && openIngredients === f.id && !expandedIds.has(f.id) && (
                   <div className="food-ingredients-pop" role="tooltip">

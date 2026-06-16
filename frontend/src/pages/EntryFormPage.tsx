@@ -3,6 +3,7 @@ import { apiFetch } from '../lib/api';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getLastMealType, saveLastMealType } from '../lib/storage';
+import { type CatalogueFood } from '../lib/foods';
 import '../styles/entryform.css';
 
 interface FoodItem {
@@ -55,6 +56,13 @@ function toLocalDatetime(utc: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// HH:MM in the viewer's local zone — used for the meal-order conflict time.
+function formatLocalTime(utc: string): string {
+  const d = new Date(utc);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function EntryFormPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -73,6 +81,9 @@ function EntryFormPage() {
   const [sortMode, setSortMode] = useState<SortMode>('priority');
   const [selectedFood, setSelectedFood] = useState<FoodDetail | null>(null);
   const [showInlineForm, setShowInlineForm] = useState(false);
+
+  // A catalogue food whose name (case-insensitively) matches the one being defined.
+  const [inlineDup, setInlineDup] = useState<CatalogueFood | null>(null);
 
   // Inline food definition
   const [inlineName, setInlineName] = useState('');
@@ -105,7 +116,8 @@ function EntryFormPage() {
   const [aiEnabled, setAiEnabled] = useState(false);
 
   // Meal-pause warning
-  const [mealPauseWarning, setMealPauseWarning] = useState<{ hoursSinceLast: number; mealPauseHours: number } | null>(null);
+  const [mealPauseWarning, setMealPauseWarning] = useState<{ hoursSinceLast: number; mealPauseHours: number; lastFoodName: string | null; lastMealType: string | null } | null>(null);
+  const [mealOrderWarning, setMealOrderWarning] = useState<string | null>(null);
 
   // Load existing entry for editing
   useEffect(() => {
@@ -153,6 +165,23 @@ function EntryFormPage() {
     })();
     return () => { alive = false; };
   }, []);
+
+  // Live duplicate-name check for the inline-define form. Queried per keystroke
+  // (debounced) rather than from a one-time snapshot, so a food you created moments
+  // ago is still caught — and the match is case-insensitive.
+  useEffect(() => {
+    const name = inlineName.trim();
+    if (!showInlineForm || !name) { setInlineDup(null); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await apiFetch(`/api/foods?search=${encodeURIComponent(name)}`);
+        if (!res.ok) return;
+        const foods = (await res.json()) as CatalogueFood[];
+        setInlineDup(foods.find((f) => f.name.trim().toLowerCase() === name.toLowerCase()) ?? null);
+      } catch { /* leave the warning as-is */ }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [inlineName, showInlineForm]);
 
   // Preselect a food by foodId (query param — e.g. linked from elsewhere).
   useEffect(() => {
@@ -262,9 +291,19 @@ function EntryFormPage() {
         if (res.ok) {
           const check = await res.json();
           if (check.isWithinPause) {
-            setMealPauseWarning({ hoursSinceLast: check.hoursSinceLast, mealPauseHours: check.mealPauseHours });
+            setMealPauseWarning({ hoursSinceLast: check.hoursSinceLast, mealPauseHours: check.mealPauseHours, lastFoodName: check.lastFoodName ?? null, lastMealType: check.lastMealType ?? null });
           } else {
             setMealPauseWarning(null);
+          }
+          // The server sends the conflict time as a raw UTC instant; format it in the
+          // viewer's local zone here (the server can't know the user's timezone).
+          if (check.mealOrderWarning) {
+            const at = check.mealOrderConflictAtUtc
+              ? ` (finished at ${formatLocalTime(check.mealOrderConflictAtUtc)})`
+              : '';
+            setMealOrderWarning(`${check.mealOrderWarning}${at}.`);
+          } else {
+            setMealOrderWarning(null);
           }
         }
       } catch { setMealPauseWarning(null); }
@@ -317,6 +356,12 @@ function EntryFormPage() {
     }
   };
 
+  const useExistingFood = (food: CatalogueFood) => {
+    setShowInlineForm(false);
+    setError(null);
+    selectFood({ id: food.id } as FoodItem);
+  };
+
   if (!user) return null;
   if (loading) return <div className="entry-form"><p className="settings-muted">Loading…</p></div>;
 
@@ -328,7 +373,13 @@ function EntryFormPage() {
 
       {mealPauseWarning && (
         <p className="meal-pause-warning" role="alert">
-          ⏱ Only {mealPauseWarning.hoursSinceLast}h since your last intake (pause: {mealPauseWarning.mealPauseHours}h). Just a heads-up!
+          ⏱ Only {mealPauseWarning.hoursSinceLast}h since {mealPauseWarning.lastFoodName ? `"${mealPauseWarning.lastFoodName}"` : 'your last intake'}{mealPauseWarning.lastMealType ? ` / ${mealPauseWarning.lastMealType}` : ''} (pause: {mealPauseWarning.mealPauseHours}h). Just a heads-up!
+        </p>
+      )}
+
+      {mealOrderWarning && !mealPauseWarning && (
+        <p className="meal-pause-warning" role="alert">
+          ⚠ {mealOrderWarning}
         </p>
       )}
 
@@ -404,6 +455,15 @@ function EntryFormPage() {
               <div className="form-section">
                 <label>Name</label>
                 <input type="text" value={inlineName} onChange={(e) => setInlineName(e.target.value)} />
+                {inlineDup && (
+                  <p className="dup-food-warning">
+                    ⚠ "{inlineDup.name}" is already in your catalogue.{' '}
+                    <button type="button" className="dup-food-use" onClick={() => useExistingFood(inlineDup)}>
+                      Use the existing one
+                    </button>{' '}
+                    instead of creating a duplicate.
+                  </p>
+                )}
               </div>
               <div className="entry-form-row">
                 <div className="form-section">

@@ -244,4 +244,110 @@ public class ProfileControllerTests : IDisposable
         // Snack is ignored, no previous in-scope intake → no warning
         Assert.False(check.IsWithinPause);
     }
+
+    [Fact]
+    public async Task MealPauseCheck_SameMealType_IsSkipped()
+    {
+        var now = DateTime.UtcNow;
+        _db.FoodEntries.Add(new FoodEntry
+        {
+            UserId = _userId, FoodName = "Chicken", MealType = MealType.Lunch,
+            Quantity = 100, UoM = "g", Calories = 200,
+            IntakeAtUtc = now.AddHours(-0.5),
+        });
+        await _db.SaveChangesAsync();
+
+        var user = await _db.Users.FindAsync(_userId);
+        user!.MealPauseHours = 4;
+        user.MealPauseScope = "all";
+        await _db.SaveChangesAsync();
+
+        // Second Lunch, 30 min later — should NOT warn (same meal, second helping)
+        var result = await _controller.CheckMealPause(
+            _userId, now, "Lunch", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
+        Assert.False(check.IsWithinPause);
+    }
+
+    [Fact]
+    public async Task MealPauseCheck_ReturnsLastFoodName()
+    {
+        var now = DateTime.UtcNow;
+        _db.FoodEntries.Add(new FoodEntry
+        {
+            UserId = _userId, FoodName = "Pizza", MealType = MealType.Lunch,
+            Quantity = 200, UoM = "g", Calories = 500,
+            IntakeAtUtc = now.AddHours(-1),
+        });
+        await _db.SaveChangesAsync();
+
+        var user = await _db.Users.FindAsync(_userId);
+        user!.MealPauseHours = 4;
+        user.MealPauseScope = "all";
+        await _db.SaveChangesAsync();
+
+        // Dinner 1h after Lunch → within pause → returns "Pizza"
+        var result = await _controller.CheckMealPause(
+            _userId, now, "Dinner", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
+        Assert.True(check.IsWithinPause);
+        Assert.Equal("Pizza", check.LastFoodName);
+        Assert.Equal("Lunch", check.LastMealType);
+    }
+
+    [Fact]
+    public async Task MealPauseCheck_NonSnackScope_SnackIsNotChecked()
+    {
+        var now = DateTime.UtcNow;
+        _db.FoodEntries.Add(new FoodEntry
+        {
+            UserId = _userId, FoodName = "Steak", MealType = MealType.Dinner,
+            Quantity = 200, UoM = "g", Calories = 500,
+            IntakeAtUtc = now.AddHours(-0.5),
+        });
+        await _db.SaveChangesAsync();
+
+        var user = await _db.Users.FindAsync(_userId);
+        user!.MealPauseHours = 4;
+        user.MealPauseScope = "non-snack";
+        await _db.SaveChangesAsync();
+
+        // Snack logged 30 min after Dinner — non-snack scope means snacks are
+        // never checked, so no warning even though it's within the pause window.
+        var result = await _controller.CheckMealPause(
+            _userId, now, "Snack", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
+        Assert.False(check.IsWithinPause);
+    }
+
+    [Fact]
+    public async Task MealPauseCheck_MealOrderWarning_DinnerBeforeLunch()
+    {
+        var now = DateTime.UtcNow;
+        // Lunch already logged at 13:00
+        var lunchTime = now.Date.AddHours(13);
+        _db.FoodEntries.Add(new FoodEntry
+        {
+            UserId = _userId, FoodName = "Salad", MealType = MealType.Lunch,
+            Quantity = 100, UoM = "g", Calories = 200,
+            IntakeAtUtc = lunchTime,
+        });
+        await _db.SaveChangesAsync();
+
+        // Logging Dinner at 10:00 — before Lunch — should trigger order warning.
+        var dinnerTime = now.Date.AddHours(10);
+        var result = await _controller.CheckMealPause(
+            _userId, dinnerTime, "Dinner", CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
+        Assert.NotNull(check.MealOrderWarning);
+        Assert.Contains("Dinner is the last meal", check.MealOrderWarning);
+    }
 }

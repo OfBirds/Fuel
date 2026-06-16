@@ -35,6 +35,8 @@ function OnboardingPage({ onComplete }: { onComplete?: () => void }) {
   const [activityLevel, setActivityLevel] = useState('sedentary');
   const [weight, setWeight] = useState('');
   const [goal, setGoal] = useState('2100');
+  const [mealPauseHours, setMealPauseHours] = useState('3');
+  const [mealPauseScope, setMealPauseScope] = useState('non-snack');
 
   // "Help me decide" constitution
   const [showHelp, setShowHelp] = useState(false);
@@ -83,7 +85,11 @@ function OnboardingPage({ onComplete }: { onComplete?: () => void }) {
       const profileRes = await apiFetch(`/api/user/${user.id}/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ height: h, sex, constitution, yearOfBirth: y, activityLevel }),
+        body: JSON.stringify({
+          height: h, sex, constitution, yearOfBirth: y, activityLevel,
+          mealPauseHours: Number(mealPauseHours) || 3,
+          mealPauseScope,
+        }),
       });
       if (!profileRes.ok) throw new Error('Failed to save profile');
 
@@ -185,6 +191,26 @@ function OnboardingPage({ onComplete }: { onComplete?: () => void }) {
               <select value={activityLevel} onChange={(e) => setActivityLevel(e.target.value)}>
                 {ACTIVITY_LEVELS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
               </select>
+            </div>
+          </div>
+
+          <div className="onboarding-row">
+            <div className="onboarding-section">
+              <label>Meal pause (hours)</label>
+              <input type="number" min="0" step="0.5" value={mealPauseHours}
+                onChange={(e) => setMealPauseHours(e.target.value)}
+                placeholder="e.g. 3" />
+              <span className="onboarding-field-help">Minimum hours between different meals before a gentle heads-up. Set to 0 to turn off.</span>
+            </div>
+            <div className="onboarding-section">
+              <label>Scope</label>
+              <select value={mealPauseScope} onChange={(e) => setMealPauseScope(e.target.value)}>
+                <option value="non-snack">Non-snack meals</option>
+                <option value="all">All meals</option>
+              </select>
+              <span className="onboarding-field-help">
+                {mealPauseScope === 'all' ? 'If "all," snacks are also counted — every snack line triggers the check, beware.' : 'Warns between Breakfast, Lunch, and Dinner only. Second helpings within the same meal are fine.'}
+              </span>
             </div>
           </div>
 

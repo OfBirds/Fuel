@@ -134,7 +134,8 @@ public class ProfileController(AppDbContext db, IProfileService profileService) 
         return Ok(response);
     }
 
-    /// <summary>Check if a planned intake falls within the meal-pause window.</summary>
+    /// <summary>Check if a planned intake falls within the meal-pause window and whether
+    /// its time is out of order relative to other same-day meals.</summary>
     [HttpGet("meal-pause-check")]
     public async Task<ActionResult<MealPauseCheckResponse>> CheckMealPause(
         Guid userId,
@@ -151,18 +152,37 @@ public class ProfileController(AppDbContext db, IProfileService profileService) 
             MealPauseHours = user.MealPauseHours,
         };
 
-        if (user.MealPauseHours is null || user.MealPauseHours <= 0 || intakeAtUtc is null)
+        if (intakeAtUtc is null)
             return Ok(response);
 
-        var scope = (user.MealPauseScope ?? "all").Trim().ToLowerInvariant();
+        // ── Meal-order check (independent of pause config) ──
+        var (orderMsg, orderAt) = GetMealOrderWarning(userId, mealType, intakeAtUtc.Value);
+        response.MealOrderWarning = orderMsg;
+        response.MealOrderConflictAtUtc = orderAt;
 
-        // Find the most recent entry before this intake
-        var prevQuery = db.FoodEntries
+        // ── Pause check ──
+        if (user.MealPauseHours is null || user.MealPauseHours <= 0)
+            return Ok(response);
+
+        var scope = (user.MealPauseScope ?? "non-snack").Trim().ToLowerInvariant();
+        var currentMealType = !string.IsNullOrWhiteSpace(mealType) ? mealType.Trim() : null;
+
+        // Non-snack scope: don't warn at all when logging a snack.
+        if (scope == "non-snack" && currentMealType is not null
+            && string.Equals(currentMealType, "Snack", StringComparison.OrdinalIgnoreCase))
+            return Ok(response);
+
+        // Find the most recent entry before this intake, skipping same-meal-type
+        // entries (second helpings never trigger a warning) and applying scope.
+        IQueryable<FoodEntry> prevQuery = db.FoodEntries
             .Where(e => e.UserId == userId && e.IntakeAtUtc < intakeAtUtc.Value);
+
+        if (currentMealType is not null)
+            prevQuery = prevQuery.Where(e => e.MealType.ToString() != currentMealType);
 
         if (scope == "non-snack")
             prevQuery = prevQuery.Where(e => e.MealType != MealType.Snack);
-        // "all" scope means all entries — no additional filter needed
+        // "all" scope: snacks count for everyone — no extra filter.
 
         var previous = await prevQuery
             .OrderByDescending(e => e.IntakeAtUtc)
@@ -173,9 +193,71 @@ public class ProfileController(AppDbContext db, IProfileService profileService) 
 
         var hoursSince = (intakeAtUtc.Value - previous.IntakeAtUtc).TotalHours;
         response.HoursSinceLast = Math.Round(hoursSince, 1);
+        response.LastFoodName = previous.FoodName;
+        response.LastMealType = previous.MealType.ToString();
         response.IsWithinPause = hoursSince < user.MealPauseHours;
 
         return Ok(response);
+    }
+
+    // Returns the warning text (no time — the client appends the conflict time in the
+    // viewer's local zone) and the conflicting entry's UTC instant.
+    private (string? Message, DateTime? At) GetMealOrderWarning(
+        Guid userId, string? mealType, DateTime intakeAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(mealType)
+            || string.Equals(mealType.Trim(), "Snack", StringComparison.OrdinalIgnoreCase))
+            return (null, null);
+
+        var mt = mealType.Trim();
+        // Use the intake date in local terms — same calendar day.
+        var dayStart = intakeAtUtc.Date;
+        var dayEnd = dayStart.AddDays(1);
+
+        var sameDay = db.FoodEntries
+            .Where(e => e.UserId == userId
+                && e.IntakeAtUtc >= dayStart && e.IntakeAtUtc < dayEnd
+                && e.MealType != MealType.Snack
+                && e.MealType.ToString() != mt)
+            .Select(e => new { e.MealType, e.IntakeAtUtc })
+            .ToList();
+
+        if (sameDay.Count == 0) return (null, null);
+
+        if (string.Equals(mt, "Breakfast", StringComparison.OrdinalIgnoreCase))
+        {
+            var earlier = sameDay
+                .Where(e => e.MealType is MealType.Lunch or MealType.Dinner && e.IntakeAtUtc < intakeAtUtc)
+                .OrderByDescending(e => e.IntakeAtUtc)
+                .FirstOrDefault();
+            if (earlier is not null)
+                return ($"Breakfast is the first meal — {earlier.MealType} is logged earlier", earlier.IntakeAtUtc);
+        }
+        else if (string.Equals(mt, "Lunch", StringComparison.OrdinalIgnoreCase))
+        {
+            var dinnerBefore = sameDay
+                .Where(e => e.MealType == MealType.Dinner && e.IntakeAtUtc < intakeAtUtc)
+                .OrderByDescending(e => e.IntakeAtUtc).FirstOrDefault();
+            if (dinnerBefore is not null)
+                return ("Lunch is before Dinner — Dinner is logged earlier", dinnerBefore.IntakeAtUtc);
+
+            var breakfastAfter = sameDay
+                .Where(e => e.MealType == MealType.Breakfast && e.IntakeAtUtc > intakeAtUtc)
+                .OrderBy(e => e.IntakeAtUtc).FirstOrDefault();
+            if (breakfastAfter is not null)
+                return ("Lunch is after Breakfast — Breakfast is logged later", breakfastAfter.IntakeAtUtc);
+        }
+        else if (string.Equals(mt, "Dinner", StringComparison.OrdinalIgnoreCase))
+        {
+            var later = sameDay
+                .Where(e => e.MealType is MealType.Breakfast or MealType.Lunch && e.IntakeAtUtc > intakeAtUtc)
+                .OrderBy(e => e.IntakeAtUtc)
+                .FirstOrDefault();
+            if (later is not null)
+                return ($"Dinner is the last meal — {later.MealType} is logged later", later.IntakeAtUtc);
+        }
+
+        return (null, null);
     }
 
     private static ProfileResponse ToResponse(User u) => new()

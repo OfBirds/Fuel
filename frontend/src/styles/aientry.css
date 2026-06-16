@@ -125,6 +125,13 @@
   padding-left: 0.2rem;
 }
 
+/* A "new" row whose name collides with an existing food — stronger than the plain
+   unmatched hint, since saving would mint a duplicate. */
+.ai-unmatched-hint.dup {
+  color: var(--error);
+  font-weight: 500;
+}
+
 .ai-row-top {
   display: flex;
   align-items: center;
@@ -266,12 +273,55 @@
 .ai-photo-actions {
   display: flex;
   gap: 0.6rem;
-  flex-wrap: wrap;
+  align-items: stretch;
+}
+/* Every action in the row gets an identical box — same flex, padding and line-height —
+   so a <button> and an upload <label> render at exactly the same height (the button
+   was rendering ~6px taller). Neither reads as the lesser option. */
+.ai-photo-actions > * {
+  flex: 1;
+  /* A native <button> renders a few px taller than the upload <label> even with equal
+     padding/line-height. An explicit height (with padding folded in via border-box)
+     makes every action exactly the same box — the camera button shrinks to match. */
+  box-sizing: border-box;
+  height: 2.625rem;
+  padding: 0 0.7rem;
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
+  font-size: 1rem;
 }
 .ai-upload-btn {
-  display: inline-flex;
-  align-items: center;
   cursor: pointer;
+}
+
+/* Upload labels need their text vertically centred like the sibling buttons.
+   The base classes (cancel-btn / bc-btn-outline) have equal specificity to
+   .ai-photo-actions > * so the padding winner is a coin flip.  This compound
+   selector is two classes — it always wins. */
+.ai-photo-actions .ai-upload-btn {
+  padding-top: 0;
+  padding-bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The Estimate action sits to the right and a touch larger — it's the primary commit
+   for this screen, not a left-hugging afterthought. */
+.ai-estimate-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+.ai-estimate-btn {
+  flex: 0 0 auto;
+  padding: 0.8rem 2.2rem;
+  font-size: 1.05rem;
 }
 .ai-camera-preview,
 .ai-photo-img {
@@ -315,52 +365,52 @@
   background: var(--border);
 }
 
-.ai-scan-btn {
+.ai-barcode-label {
   display: block;
-  width: 100%;
-  padding: 0.65rem;
-  background: none;
-  border: 1px dashed var(--primary);
-  color: var(--primary);
-  border-radius: 6px;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s, color 0.2s;
-}
-.ai-scan-btn:hover:not(:disabled) {
-  background: var(--primary);
-  color: #fff;
-}
-.ai-scan-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.ai-barcode-panel {
-  margin-top: 0.6rem;
-  padding: 0.75rem;
-  background: var(--neutral);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  margin-bottom: 0.5rem;
 }
 .ai-barcode-hint {
   font-size: 0.8rem;
   color: var(--text-light);
-  margin-bottom: 0.5rem;
+  margin: 0.4rem 0;
 }
-.ai-barcode-video {
-  width: 100%;
-  max-width: 320px;
-  margin: 0 auto 0.6rem;
+
+/* Barcode actions wear the lime accent (not the indigo of the photo-AI buttons) so
+   the two scanners read as different paths and you're less likely to tap the wrong one. */
+.bc-btn {
+  background: var(--accent);
+  color: #1F2433;            /* dark text — stays readable on lime in both themes */
+  border: 1px solid var(--accent);
   border-radius: 6px;
-  overflow: hidden;
-  background: #000;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
 }
-.ai-barcode-video video {
-  display: block;
-  width: 100%;
-  height: auto;
+.bc-btn:hover:not(:disabled) { opacity: 0.9; }
+.bc-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.bc-btn-outline {
+  background: none;
+  border: 1px solid var(--accent);
+  color: var(--text);
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.bc-btn-outline:hover { background: rgba(132, 204, 22, 0.14); }
+
+.ai-barcode-typed {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+}
+.ai-barcode-typed summary {
+  cursor: pointer;
+  color: var(--text-light);
+  margin-bottom: 0.5rem;
 }
 .ai-barcode-manual {
   display: flex;
@@ -376,8 +426,9 @@
   background: var(--surface);
   color: var(--text);
 }
-.ai-barcode-manual .save-btn {
+.ai-barcode-manual .bc-btn {
   white-space: nowrap;
+  padding: 0.5rem 0.9rem;
 }
 .ai-barcode-msg {
   margin-top: 0.5rem;
