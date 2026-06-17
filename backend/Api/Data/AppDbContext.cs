@@ -25,7 +25,10 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Email).IsRequired();
-            entity.Property(e => e.PasswordHash).IsRequired();
+            // PasswordHash is nullable now — OIDC accounts have no local password.
+            // ExternalSubject links a row to a CrimsonRaven identity; unique (Postgres
+            // allows many NULLs, so unlinked rows don't collide).
+            entity.HasIndex(e => e.ExternalSubject).IsUnique();
             entity.Property(e => e.NotifyReleases).HasDefaultValue(true);
             // gen_random_uuid() backfills existing rows with unique tokens (PG15 core).
             entity.Property(e => e.UnsubscribeToken).HasDefaultValueSql("gen_random_uuid()");

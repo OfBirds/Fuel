@@ -44,6 +44,11 @@ services:
       # without it the app mints an ephemeral key and logs every user out on restart.
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
       JWT_EXPIRY_DAYS: ${JWT_EXPIRY_DAYS}
+      # CrimsonRaven SSO (OIDC). Blank OIDC_AUTHORITY → SSO off, local JWT only (dual-auth
+      # backup). Per-stack issuer/client; see docs/auth-crimsonraven.md.
+      OIDC_AUTHORITY: ${OIDC_AUTHORITY}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE}
       # Release-notification settings (see docs/notifications.md).
       NOTIFY_ON_DEPLOY: ${NOTIFY_ON_DEPLOY}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}

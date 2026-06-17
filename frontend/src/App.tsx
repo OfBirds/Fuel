@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from './lib/api';
-import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { getFontScale, saveFontScale, getOnboardingCompleted, saveOnboardingCompleted } from './lib/storage';
@@ -12,6 +12,7 @@ import AiEntryPage from './pages/AiEntryPage';
 import CataloguePage from './pages/CataloguePage';
 import WeightPage from './pages/WeightPage';
 import OnboardingPage from './pages/OnboardingPage';
+import AuthCallbackPage from './pages/AuthCallbackPage';
 import './styles/app.css';
 
 const FONT_MIN = 40;
@@ -58,8 +59,14 @@ function FontSizeControl() {
 
 function AppContent() {
   const { user, logout } = useAuth();
+  const location = useLocation();
   const [profileChecked, setProfileChecked] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+
+  // The OIDC redirect lands here with no session yet — handle it before the login guard.
+  if (location.pathname === '/auth/callback') {
+    return <AuthCallbackPage />;
+  }
 
   // Check if onboarding is needed (first login, no profile, not explicitly skipped)
   useEffect(() => {

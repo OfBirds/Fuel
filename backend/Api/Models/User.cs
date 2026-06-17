@@ -4,7 +4,20 @@ public class User
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public required string Email { get; set; }
-    public required string PasswordHash { get; set; }
+
+    /// <summary>
+    /// PBKDF2 hash for the local (backup) login. Null for accounts created via
+    /// CrimsonRaven OIDC, which have no local password.
+    /// </summary>
+    public string? PasswordHash { get; set; }
+
+    /// <summary>
+    /// The CrimsonRaven (OIDC) subject this account is linked to, set on first SSO login
+    /// (matched to an existing row by verified email — see <c>OidcUserProvisioner</c>).
+    /// Null until linked. The Fuel <see cref="Id"/> remains the owner of all data.
+    /// </summary>
+    public string? ExternalSubject { get; set; }
+
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

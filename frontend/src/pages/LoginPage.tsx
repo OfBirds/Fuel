@@ -69,7 +69,16 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, register } = useAuth();
+  const { login, register, loginWithSSO, ssoEnabled } = useAuth();
+
+  const handleSSO = async () => {
+    setError('');
+    try {
+      await loginWithSSO();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start SSO sign-in');
+    }
+  };
 
   const resetForm = () => {
     setError('');
@@ -126,6 +135,15 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
       <div className="login-container">
         <h1>Fuel</h1>
         <p className="login-subtitle">{SUBTITLES[view]}</p>
+
+        {ssoEnabled && view !== 'forgot' && (
+          <>
+            <button type="button" className="submit-button sso-button" onClick={handleSSO} disabled={loading}>
+              Continue with CrimsonRaven
+            </button>
+            <div className="login-divider"><span>or use your email</span></div>
+          </>
+        )}
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">

@@ -164,6 +164,33 @@
   cursor: not-allowed;
 }
 
+/* CrimsonRaven SSO — branded crimson, full width, sits above the email form */
+.sso-button {
+  width: 100%;
+  background: #B11226;
+}
+.sso-button:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(177, 18, 38, 0.3);
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--text-light);
+  font-size: 0.85rem;
+  margin: 1rem 0;
+}
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border, #ddd);
+}
+.login-divider span {
+  padding: 0 0.75rem;
+}
+
 .login-toggle {
   text-align: center;
   margin-top: 1.5rem;

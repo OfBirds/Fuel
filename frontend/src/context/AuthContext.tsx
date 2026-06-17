@@ -1,4 +1,5 @@
-import { createContext, useState, useContext, ReactNode } from 'react';
+import { createContext, useState, useContext, useEffect, ReactNode } from 'react';
+import { getUserManager, loadRuntimeConfig } from '../lib/oidc';
 
 interface User {
   id: string;
@@ -8,8 +9,14 @@ interface User {
 interface AuthContextType {
   user: User | null;
   token: string | null;
+  /** Whether CrimsonRaven SSO is configured for this stack (drives the SSO button). */
+  ssoEnabled: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
+  /** Kick off the CrimsonRaven PKCE redirect. */
+  loginWithSSO: () => Promise<void>;
+  /** Finish the OIDC redirect (called from /auth/callback). */
+  completeSsoCallback: () => Promise<void>;
   logout: () => void;
 }
 
@@ -25,47 +32,84 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   }
 }
 
+function persist(token: string, user: User) {
+  localStorage.setItem('token', token);
+  localStorage.setItem('user', JSON.stringify(user));
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
     const stored = localStorage.getItem('user');
     return stored ? JSON.parse(stored) : null;
   });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+
+  // Learn whether SSO is configured, and keep the stored bearer fresh when the OIDC
+  // refresh-token renewal fires (so apiFetch always carries a valid access token).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const cfg = await loadRuntimeConfig();
+      if (!alive || !cfg.oidcEnabled) return;
+      setSsoEnabled(true);
+      const mgr = await getUserManager();
+      mgr?.events.addUserLoaded((u) => {
+        setToken(u.access_token);
+        localStorage.setItem('token', u.access_token);
+      });
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const setSession = (newToken: string, newUser: User) => {
+    setUser(newUser);
+    setToken(newToken);
+    persist(newToken, newUser);
+  };
 
   const login = async (email: string, password: string) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password }),
     });
-
-    if (!res.ok) {
-      throw new Error(await errorMessage(res, 'Invalid email or password'));
-    }
-
+    if (!res.ok) throw new Error(await errorMessage(res, 'Invalid email or password'));
     const data = await res.json();
-    setUser({ id: data.userId, email: data.email });
-    setToken(data.token);
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify({ id: data.userId, email: data.email }));
+    setSession(data.token, { id: data.userId, email: data.email });
   };
 
   const register = async (email: string, password: string) => {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email, password }),
     });
-
-    if (!res.ok) {
-      throw new Error(await errorMessage(res, 'Registration failed'));
-    }
-
+    if (!res.ok) throw new Error(await errorMessage(res, 'Registration failed'));
     const data = await res.json();
-    setUser({ id: data.userId, email: data.email });
-    setToken(data.token);
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify({ id: data.userId, email: data.email }));
+    setSession(data.token, { id: data.userId, email: data.email });
+  };
+
+  const loginWithSSO = async () => {
+    const mgr = await getUserManager();
+    if (!mgr) throw new Error('SSO is not configured.');
+    await mgr.signinRedirect();
+  };
+
+  // Completes the code exchange, then asks the backend who we are: the OIDC token's `sub`
+  // is the IdP subject, but the backend maps it to (and returns) our Fuel User.Id, which
+  // is what every api/user/{id} route needs.
+  const completeSsoCallback = async () => {
+    const mgr = await getUserManager();
+    if (!mgr) throw new Error('SSO is not configured.');
+    const oidcUser = await mgr.signinRedirectCallback();
+    const accessToken = oidcUser.access_token;
+    localStorage.setItem('token', accessToken); // so apiFetch attaches it on /me
+    setToken(accessToken);
+    const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Could not establish your session.'));
+    const data = await res.json();
+    setSession(accessToken, { id: data.userId, email: data.email });
   };
 
   const logout = () => {
@@ -73,10 +117,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    getUserManager().then((mgr) => mgr?.removeUser()).catch(() => {});
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, token, ssoEnabled, login, register, loginWithSSO, completeSsoCallback, logout }}>
       {children}
     </AuthContext.Provider>
   );

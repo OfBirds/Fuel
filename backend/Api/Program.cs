@@ -3,6 +3,7 @@ using Api.Data;
 using Api.Services;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -95,22 +96,89 @@ var jwtExpiryDays = int.TryParse(builder.Configuration["JWT_EXPIRY_DAYS"], out v
 builder.Services.AddSingleton<ITokenService>(
     new JwtTokenService(jwtSigningKey, TimeSpan.FromDays(jwtExpiryDays)));
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+// Dual-scheme auth for the CrimsonRaven migration (docs/auth-crimsonraven.md):
+//   "Fuel"         — the self-issued HMAC JWT (sub = Fuel User.Id); the backup path.
+//   "CrimsonRaven" — OIDC access tokens validated against the IdP's JWKS (OIDC_AUTHORITY),
+//                    mapped onto a Fuel User by OidcUserProvisioner.
+// The default "smart" policy scheme peeks the bearer's `iss` and forwards to whichever
+// validator matches, so one Authorization header works for both. OIDC is opt-in: when
+// OIDC_AUTHORITY is unset (e.g. a stack without an IdP yet) only the Fuel scheme runs.
+const string FuelScheme = "Fuel";
+const string OidcScheme = "CrimsonRaven";
+
+var oidcAuthority = builder.Configuration["OIDC_AUTHORITY"];   // e.g. http://192.168.4.55:9100
+var oidcAudience = builder.Configuration["OIDC_AUDIENCE"];     // expected `aud` in the access token
+var oidcEnabled = !string.IsNullOrWhiteSpace(oidcAuthority);
+
+var authBuilder = builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = "smart";
+    options.DefaultChallengeScheme = "smart";
+});
+
+authBuilder.AddPolicyScheme("smart", "Fuel or CrimsonRaven (by token issuer)", options =>
+{
+    options.ForwardDefaultSelector = ctx =>
     {
-        options.MapInboundClaims = false; // keep `sub` as `sub`, don't remap to NameIdentifier
+        if (oidcEnabled)
+        {
+            string authHeader = ctx.Request.Headers.Authorization!;
+            if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var token = new JsonWebTokenHandler().ReadJsonWebToken(authHeader["Bearer ".Length..].Trim());
+                    if (string.Equals(token.Issuer, oidcAuthority, StringComparison.OrdinalIgnoreCase))
+                        return OidcScheme;
+                }
+                catch { /* unreadable token → let the Fuel validator reject it */ }
+            }
+        }
+        return FuelScheme;
+    };
+});
+
+authBuilder.AddJwtBearer(FuelScheme, options =>
+{
+    options.MapInboundClaims = false; // keep `sub` as `sub`, don't remap to NameIdentifier
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidIssuer = JwtTokenService.Issuer,
+        ValidateAudience = true,
+        ValidAudience = JwtTokenService.Audience,
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = jwtSigningKey,
+        ValidateLifetime = true,
+        NameClaimType = JwtRegisteredClaimNames.Sub,
+    };
+});
+
+if (oidcEnabled)
+{
+    authBuilder.AddJwtBearer(OidcScheme, options =>
+    {
+        options.Authority = oidcAuthority;
+        // homelab :9100 is http; the prod instance (raven.bearsoft.duckdns.org) is https.
+        options.RequireHttpsMetadata = oidcAuthority!.StartsWith("https", StringComparison.OrdinalIgnoreCase);
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            ValidIssuer = JwtTokenService.Issuer,
-            ValidateAudience = true,
-            ValidAudience = JwtTokenService.Audience,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = jwtSigningKey,
+            ValidIssuer = oidcAuthority,
+            ValidateAudience = !string.IsNullOrWhiteSpace(oidcAudience),
+            ValidAudience = oidcAudience,
             ValidateLifetime = true,
             NameClaimType = JwtRegisteredClaimNames.Sub,
         };
     });
+
+    // Maps a CrimsonRaven identity onto a Fuel User (link-by-verified-email) and rewrites
+    // `sub` to the Fuel User.Id so ResourceOwnershipFilter + routes stay unchanged.
+    // Needs HttpContext (for the bearer) to resolve email from the IdP userinfo endpoint.
+    builder.Services.AddHttpContextAccessor();
+    builder.Services.AddScoped<IClaimsTransformation, OidcUserProvisioner>();
+}
 
 // Locked-down by default: every endpoint requires auth unless it opts out with
 // [AllowAnonymous] (auth, version, unsubscribe) or .AllowAnonymous() (SPA fallback).

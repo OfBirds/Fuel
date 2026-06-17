@@ -48,7 +48,8 @@ public class AuthService(AppDbContext context) : IAuthService
         if (user == null)
             return null;
 
-        if (!VerifyPassword(password, user.PasswordHash))
+        // OIDC-only accounts have no local password — they must sign in via CrimsonRaven.
+        if (string.IsNullOrEmpty(user.PasswordHash) || !VerifyPassword(password, user.PasswordHash))
             return null;
 
         return user;
