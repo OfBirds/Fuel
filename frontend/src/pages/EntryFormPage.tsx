@@ -4,6 +4,8 @@ import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getLastMealType, saveLastMealType } from '../lib/storage';
 import { type CatalogueFood } from '../lib/foods';
+import { useShowMacros } from '../hooks/useShowMacros';
+import { UnitSelect } from '../components/UnitSelect';
 import '../styles/entryform.css';
 
 interface FoodItem {
@@ -47,7 +49,6 @@ interface EntryDetail {
   fat: number | null;
 }
 
-const UOM_OPTIONS = ['g', 'ml', 'piece'];
 const MEAL_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 
 function toLocalDatetime(utc: string): string {
@@ -65,6 +66,7 @@ function formatLocalTime(utc: string): string {
 
 function EntryFormPage() {
   const { user } = useAuth();
+  const showMacros = useShowMacros();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { entryId } = useParams<{ entryId: string }>();
@@ -468,9 +470,7 @@ function EntryFormPage() {
               <div className="entry-form-row">
                 <div className="form-section">
                   <label>Default unit</label>
-                  <select value={inlineUoM} onChange={(e) => setInlineUoM(e.target.value)}>
-                    {UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                  <UnitSelect value={inlineUoM} onChange={setInlineUoM} />
                 </div>
                 <div className="form-section">
                   <label>Cal / {inlineUoM}</label>
@@ -505,9 +505,7 @@ function EntryFormPage() {
             </div>
             <div className="form-section">
               <label>Unit</label>
-              <select value={uom} onChange={(e) => setUom(e.target.value)}>
-                {UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
+              <UnitSelect value={uom} onChange={setUom} />
             </div>
           </div>
 
@@ -533,18 +531,22 @@ function EntryFormPage() {
                 <label>Calories</label>
                 <input type="number" value={calories} onChange={(e) => setCalories(Number(e.target.value))} />
               </div>
-              <div className="nutrition-field">
-                <label>Protein (g)</label>
-                <input type="number" value={protein ?? ''} onChange={(e) => setProtein(e.target.value ? Number(e.target.value) : undefined)} />
-              </div>
-              <div className="nutrition-field">
-                <label>Carbs (g)</label>
-                <input type="number" value={carbs ?? ''} onChange={(e) => setCarbs(e.target.value ? Number(e.target.value) : undefined)} />
-              </div>
-              <div className="nutrition-field">
-                <label>Fat (g)</label>
-                <input type="number" value={fat ?? ''} onChange={(e) => setFat(e.target.value ? Number(e.target.value) : undefined)} />
-              </div>
+              {showMacros && (
+                <>
+                  <div className="nutrition-field">
+                    <label>Protein (g)</label>
+                    <input type="number" value={protein ?? ''} onChange={(e) => setProtein(e.target.value ? Number(e.target.value) : undefined)} />
+                  </div>
+                  <div className="nutrition-field">
+                    <label>Carbs (g)</label>
+                    <input type="number" value={carbs ?? ''} onChange={(e) => setCarbs(e.target.value ? Number(e.target.value) : undefined)} />
+                  </div>
+                  <div className="nutrition-field">
+                    <label>Fat (g)</label>
+                    <input type="number" value={fat ?? ''} onChange={(e) => setFat(e.target.value ? Number(e.target.value) : undefined)} />
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

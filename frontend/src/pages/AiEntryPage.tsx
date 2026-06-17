@@ -5,11 +5,12 @@ import { useAuth } from '../context/AuthContext';
 import { getLastMealType, saveLastMealType } from '../lib/storage';
 import { normalizeImage } from '../lib/image';
 import { loadCatalogueByName, type CatalogueFood } from '../lib/foods';
+import { useShowMacros } from '../hooks/useShowMacros';
+import { UnitSelect } from '../components/UnitSelect';
 import '../styles/entryform.css';
 import '../styles/aientry.css';
 
 const MEAL_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
-const UOM_OPTIONS = ['g', 'ml', 'piece'];
 const LOW_CONFIDENCE = 0.5;
 
 interface ApiRow {
@@ -68,6 +69,7 @@ function nowTime(): string {
 
 function AiEntryPage() {
   const { user } = useAuth();
+  const showMacros = useShowMacros();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const queryMeal = searchParams.get('meal') || getLastMealType();
@@ -645,26 +647,28 @@ function AiEntryPage() {
                         onChange={(e) => updateRow(r.key, { quantity: num(e.target.value) })} />
                     </label>
                     <label>Unit
-                      <select value={r.uom} onChange={(e) => updateRow(r.key, { uom: e.target.value })}>
-                        {[...new Set([r.uom, ...UOM_OPTIONS])].map((u) => <option key={u} value={u}>{u}</option>)}
-                      </select>
+                      <UnitSelect value={r.uom} onChange={(v) => updateRow(r.key, { uom: v })} />
                     </label>
                     <label>Cal
                       <input type="number" value={r.calories}
                         onChange={(e) => updateRow(r.key, { calories: num(e.target.value) })} />
                     </label>
-                    <label>P
-                      <input type="number" value={r.protein ?? ''}
-                        onChange={(e) => updateRow(r.key, { protein: optNum(e.target.value) })} />
-                    </label>
-                    <label>C
-                      <input type="number" value={r.carbs ?? ''}
-                        onChange={(e) => updateRow(r.key, { carbs: optNum(e.target.value) })} />
-                    </label>
-                    <label>F
-                      <input type="number" value={r.fat ?? ''}
-                        onChange={(e) => updateRow(r.key, { fat: optNum(e.target.value) })} />
-                    </label>
+                    {showMacros && (
+                      <>
+                        <label>P
+                          <input type="number" value={r.protein ?? ''}
+                            onChange={(e) => updateRow(r.key, { protein: optNum(e.target.value) })} />
+                        </label>
+                        <label>C
+                          <input type="number" value={r.carbs ?? ''}
+                            onChange={(e) => updateRow(r.key, { carbs: optNum(e.target.value) })} />
+                        </label>
+                        <label>F
+                          <input type="number" value={r.fat ?? ''}
+                            onChange={(e) => updateRow(r.key, { fat: optNum(e.target.value) })} />
+                        </label>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

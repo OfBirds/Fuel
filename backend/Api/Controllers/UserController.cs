@@ -38,5 +38,6 @@ public class UserController(AppDbContext db) : ControllerBase
     {
         NotifyReleases = user.NotifyReleases,
         DailyCalorieGoal = user.DailyCalorieGoal,
+        ShowMacros = user.ShowMacros,
     };
 }

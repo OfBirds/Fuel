@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { saveShowMacros } from '../lib/storage';
 import '../styles/dayview.css';
 
 interface EntryItem {
@@ -23,6 +24,7 @@ interface EntryItem {
 interface PrefsResponse {
   notifyReleases: boolean;
   dailyCalorieGoal: number | null;
+  showMacros: boolean;
 }
 
 const MEAL_ORDER = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
@@ -82,6 +84,7 @@ function HomePage() {
       if (prefsRes.ok) {
         const prefsData = (await prefsRes.json()) as PrefsResponse;
         setGoal(prefsData.dailyCalorieGoal ?? null);
+        saveShowMacros(prefsData.showMacros);
       }
     } catch {
       setError("Couldn't load your food log. Please try again.");

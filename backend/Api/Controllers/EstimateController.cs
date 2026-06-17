@@ -132,7 +132,7 @@ public class EstimateController(
 
             rows.Add(new EstimateRow
             {
-                Name = item.Name,
+                Name = ToTitleCase(item.Name),
                 Quantity = item.Quantity,
                 Uom = item.Uom,
                 Calories = item.Calories,
@@ -157,5 +157,28 @@ public class EstimateController(
         var paren = s.IndexOf('(');
         if (paren >= 0) s = s[..paren];
         return s.Trim();
+    }
+
+    // Minor words kept lowercase in the middle of a title (articles, short
+    // conjunctions/prepositions). The first and last word are always capitalized.
+    private static readonly HashSet<string> TitleMinorWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "a", "an", "and", "as", "at", "but", "by", "for", "if", "in", "nor", "of",
+        "off", "on", "or", "per", "the", "to", "up", "via", "vs", "with",
+    };
+
+    /// <summary>Title-case an AI food name for display ("scrambled eggs on toast" →
+    /// "Scrambled Eggs on Toast"). Models tend to return all-lowercase; this is
+    /// display-only — matching still goes through <see cref="NormalizeName"/>.</summary>
+    internal static string ToTitleCase(string raw)
+    {
+        var words = raw.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < words.Length; i++)
+        {
+            var w = words[i].ToLowerInvariant();
+            var minor = i != 0 && i != words.Length - 1 && TitleMinorWords.Contains(w);
+            words[i] = minor || w.Length == 0 ? w : char.ToUpperInvariant(w[0]) + w[1..];
+        }
+        return string.Join(' ', words);
     }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { getGroupedUnits, saveGroupedUnits, saveShowMacros } from '../lib/storage';
 import '../styles/settings.css';
 
 interface Prefs {
@@ -46,6 +47,7 @@ function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [groupedUnits, setGroupedUnits] = useState(getGroupedUnits());
 
   // Draft states for debounced profile fields
   const [hDraft, setHDraft] = useState('');
@@ -75,6 +77,7 @@ function SettingsPage() {
           if (profileRes.ok) {
             const pr = (await profileRes.json()) as ProfileData;
             setProfile(pr);
+            saveShowMacros(pr.showMacros);
             setHDraft(pr.height?.toString() ?? '');
             setYobDraft(pr.yearOfBirth?.toString() ?? '');
             setPauseDraft(pr.mealPauseHours?.toString() ?? '');
@@ -317,10 +320,19 @@ function SettingsPage() {
               <input type="checkbox"
                 checked={profile?.showMacros ?? false}
                 disabled={!profile}
-                onChange={(e) => profile && updateProfile({ showMacros: e.target.checked })} />
+                onChange={(e) => { if (profile) { saveShowMacros(e.target.checked); updateProfile({ showMacros: e.target.checked }); } }} />
               <span className="settings-row-label">
-                Show macros on the home page
-                <span className="settings-row-help">See protein, carbs, and fat alongside calorie totals.</span>
+                Show macros
+                <span className="settings-row-help">Show protein, carbs, and fat fields when adding, editing, or defining foods.</span>
+              </span>
+            </label>
+            <label className="settings-row">
+              <input type="checkbox"
+                checked={groupedUnits}
+                onChange={(e) => { setGroupedUnits(e.target.checked); saveGroupedUnits(e.target.checked); }} />
+              <span className="settings-row-label">
+                Grouped unit picker
+                <span className="settings-row-help">Offer the full metric / imperial / other unit list when defining a food. Off shows just g, ml, and piece.</span>
               </span>
             </label>
           </Section>

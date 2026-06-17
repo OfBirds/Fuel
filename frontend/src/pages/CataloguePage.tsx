@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { useShowMacros } from '../hooks/useShowMacros';
+import { UnitSelect } from '../components/UnitSelect';
 import '../styles/catalogue.css';
 
 interface FoodItem {
@@ -63,10 +65,10 @@ const emptyForm: FoodFormData = {
   proteinPerUnit: undefined, carbsPerUnit: undefined, fatPerUnit: undefined,
 };
 
-const UOM_OPTIONS = ['g', 'ml', 'piece'];
 
 function CataloguePage() {
   const { user } = useAuth();
+  const showMacros = useShowMacros();
   const [foods, setFoods] = useState<FoodItem[]>([]);
   const [search, setSearch] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('priority');
@@ -353,9 +355,7 @@ function CataloguePage() {
           <div className="food-form-row">
             <div className="food-form-section">
               <label>Default unit</label>
-              <select value={form.defaultUoM} onChange={(e) => setForm((f) => ({ ...f, defaultUoM: e.target.value }))}>
-                {UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
+              <UnitSelect value={form.defaultUoM} onChange={(v) => setForm((f) => ({ ...f, defaultUoM: v }))} />
             </div>
             <div className="food-form-section">
               <label>Calories per {form.defaultUoM}</label>
@@ -367,34 +367,38 @@ function CataloguePage() {
             </div>
           </div>
 
-          <div className="food-form-row">
-            <div className="food-form-section">
-              <label>Protein / {form.defaultUoM} (g)</label>
-              <input
-                type="number" min="0" step="0.1"
-                value={form.proteinPerUnit ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, proteinPerUnit: e.target.value ? Number(e.target.value) : undefined }))}
-              />
-            </div>
-            <div className="food-form-section">
-              <label>Carbs / {form.defaultUoM} (g)</label>
-              <input
-                type="number" min="0" step="0.1"
-                value={form.carbsPerUnit ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, carbsPerUnit: e.target.value ? Number(e.target.value) : undefined }))}
-              />
-            </div>
-          </div>
+          {showMacros && (
+            <>
+              <div className="food-form-row">
+                <div className="food-form-section">
+                  <label>Protein / {form.defaultUoM} (g)</label>
+                  <input
+                    type="number" min="0" step="0.1"
+                    value={form.proteinPerUnit ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, proteinPerUnit: e.target.value ? Number(e.target.value) : undefined }))}
+                  />
+                </div>
+                <div className="food-form-section">
+                  <label>Carbs / {form.defaultUoM} (g)</label>
+                  <input
+                    type="number" min="0" step="0.1"
+                    value={form.carbsPerUnit ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, carbsPerUnit: e.target.value ? Number(e.target.value) : undefined }))}
+                  />
+                </div>
+              </div>
 
-          <div className="food-form-section">
-            <label>Fat / {form.defaultUoM} (g)</label>
-            <input
-              type="number" min="0" step="0.1"
-              value={form.fatPerUnit ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, fatPerUnit: e.target.value ? Number(e.target.value) : undefined }))}
-              style={{ maxWidth: '200px' }}
-            />
-          </div>
+              <div className="food-form-section">
+                <label>Fat / {form.defaultUoM} (g)</label>
+                <input
+                  type="number" min="0" step="0.1"
+                  value={form.fatPerUnit ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, fatPerUnit: e.target.value ? Number(e.target.value) : undefined }))}
+                  style={{ maxWidth: '200px' }}
+                />
+              </div>
+            </>
+          )}
 
           {/* Ingredients */}
           <div className="ingredients-section">
@@ -410,9 +414,7 @@ function CataloguePage() {
                         value={ing.inlineName}
                         onChange={(e) => updateIngredient(i, { inlineName: e.target.value, childFoodName: e.target.value })}
                       />
-                      <select value={ing.inlineUoM} onChange={(e) => updateIngredient(i, { inlineUoM: e.target.value })}>
-                        {UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
-                      </select>
+                      <UnitSelect value={ing.inlineUoM} onChange={(v) => updateIngredient(i, { inlineUoM: v })} />
                       <input
                         className="inline-ingredient-cal"
                         type="number" min="0" step="0.1"
@@ -430,9 +432,7 @@ function CataloguePage() {
                     value={ing.quantity || ''}
                     onChange={(e) => updateIngredient(i, { quantity: Number(e.target.value) })}
                   />
-                  <select className="ingredient-uom" value={ing.uoM} onChange={(e) => updateIngredient(i, { uoM: e.target.value })}>
-                    {UOM_OPTIONS.map((u) => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                  <UnitSelect className="ingredient-uom" value={ing.uoM} onChange={(v) => updateIngredient(i, { uoM: v })} />
                   <button className="ingredient-remove" onClick={() => removeIngredient(i)}>×</button>
                 </div>
               </div>

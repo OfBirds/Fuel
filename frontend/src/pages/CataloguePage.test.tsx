@@ -9,6 +9,7 @@ vi.mock('../context/AuthContext', () => ({
 }));
 
 import CataloguePage from './CataloguePage';
+import { saveShowMacros } from '../lib/storage';
 
 const mockFetch = vi.fn();
 globalThis.fetch = mockFetch;
@@ -24,6 +25,7 @@ function renderCatalogue() {
 describe('CataloguePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it('lists foods from API', async () => {
@@ -54,6 +56,31 @@ describe('CataloguePage', () => {
     await userEvent.click(screen.getByLabelText('Add food'));
 
     expect(screen.getAllByText('Save Food').length).toBeGreaterThan(0);
+  });
+
+  it('hides macro fields in the food form when show-macros is off (default)', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
+
+    renderCatalogue();
+    await waitFor(() => expect(screen.getByLabelText('Add food')).toBeDefined());
+    await userEvent.click(screen.getByLabelText('Add food'));
+
+    expect(screen.queryByText(/Protein \//)).toBeNull();
+    expect(screen.queryByText(/Carbs \//)).toBeNull();
+    expect(screen.queryByText(/Fat \//)).toBeNull();
+  });
+
+  it('shows macro fields in the food form when show-macros is on', async () => {
+    saveShowMacros(true);
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
+
+    renderCatalogue();
+    await waitFor(() => expect(screen.getByLabelText('Add food')).toBeDefined());
+    await userEvent.click(screen.getByLabelText('Add food'));
+
+    expect(screen.getByText(/Protein \//)).toBeInTheDocument();
+    expect(screen.getByText(/Carbs \//)).toBeInTheDocument();
+    expect(screen.getByText(/Fat \//)).toBeInTheDocument();
   });
 
   it('shows empty state when no foods', async () => {

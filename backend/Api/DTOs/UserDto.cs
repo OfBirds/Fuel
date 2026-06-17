@@ -8,6 +8,13 @@ public class UserPrefsResponse
 {
     public bool NotifyReleases { get; set; }
     public double? DailyCalorieGoal { get; set; }
+
+    /// <summary>
+    /// Mirror of the profile macro-display toggle, served here so the lightweight
+    /// pages that already read /prefs can gate macro UI without a second profile fetch.
+    /// Read-only on this endpoint — it's set via the profile endpoint.
+    /// </summary>
+    public bool ShowMacros { get; set; }
 }
 
 public class UpdateUserPrefsRequest

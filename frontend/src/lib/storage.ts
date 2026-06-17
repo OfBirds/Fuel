@@ -52,6 +52,16 @@ export const saveFontScale = (pct: number) => write('fontScale', pct);
 export const getLastMealType = () => read<string>('lastMealType') ?? 'Breakfast';
 export const saveLastMealType = (mealType: string) => write('lastMealType', mealType);
 
+// --- Show macros (local mirror of the server profile flag) ---
+// Authoritative value lives on the user profile; mirrored here on prefs/profile load
+// so macro UI can be gated synchronously without an extra fetch per page.
+export const getShowMacros = () => read<boolean>('showMacros') ?? false;
+export const saveShowMacros = (on: boolean) => write('showMacros', on);
+
+// --- Grouped unit picker (expanded metric/imperial/other unit list in food forms) ---
+export const getGroupedUnits = () => read<boolean>('groupedUnits') ?? true;
+export const saveGroupedUnits = (on: boolean) => write('groupedUnits', on);
+
 // --- Onboarding completed flag (set on skip or completion) ---
 export const getOnboardingCompleted = () => read<boolean>('onboardingCompleted') ?? false;
 export const saveOnboardingCompleted = () => write('onboardingCompleted', true);

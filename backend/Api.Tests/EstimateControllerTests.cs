@@ -110,6 +110,32 @@ public class EstimateControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task EstimateText_TitleCasesDisplayName_ButStillMatches()
+    {
+        // Models tend to return all-lowercase; the row shown to the user is title-cased,
+        // while matching to the catalogue is unaffected (it lowercases independently).
+        _chain.Result = new NutritionEstimate { Items = { Item("chicken breast", 100, 165) } };
+
+        var result = await NewController().EstimateText(
+            _userId, new EstimateTextRequest { Description = "chicken" }, default);
+
+        var resp = Assert.IsType<EstimateResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal("Chicken Breast", resp.Items[0].Name);    // display: title-cased
+        Assert.Equal(_chickenId, resp.Items[0].MatchedFoodId); // matching: unaffected
+    }
+
+    [Theory]
+    [InlineData("scrambled eggs", "Scrambled Eggs")]
+    [InlineData("scrambled eggs on toast", "Scrambled Eggs on Toast")] // "on" minor, mid-name
+    [InlineData("chicken with rice", "Chicken with Rice")]             // "with" minor, mid-name
+    [InlineData("soup of the day", "Soup of the Day")]                 // two minor words mid-name
+    [InlineData("the daily special", "The Daily Special")]            // minor word first → capital
+    [InlineData("rice", "Rice")]
+    [InlineData("BAKED BEANS", "Baked Beans")]                         // normalizes shouty input
+    public void ToTitleCase_CapitalizesWordsExceptMinorOnesMidName(string input, string expected)
+        => Assert.Equal(expected, EstimateController.ToTitleCase(input));
+
+    [Fact]
     public async Task EstimateText_NotConfigured_ReturnsUnavailable_WithoutCallingChain()
     {
         _chain.SupportsText = false;
