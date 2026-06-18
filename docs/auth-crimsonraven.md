@@ -75,6 +75,12 @@ A user who hasn't verified their email is treated as new (empty) until they do.
 - `useOidcLogo()` pulls CrimsonRaven's themed logo from `/api/config` for the
   redirect/callback screens, so the IdP's brand is shown while bouncing.
 
+> **TODO (icon on the inbound bounce):** the redirect screens show CrimsonRaven's logo in
+> both directions. That's right going **to** CR (`LoginPage` spinner), but the
+> **return** trip — `AuthCallbackPage` ("Signing you in…", after CR has authenticated us
+> and we're landing back in the app) — should show the **Fuel / Indigo Swallow** icon, not
+> the IdP's, since we're arriving at Fuel. Needs a Fuel-side brand icon for that screen.
+
 ## Config (flat env, per stack)
 
 | Key | Meaning |

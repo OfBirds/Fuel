@@ -98,6 +98,13 @@ definition (not a long list). In the manual entry picker, **`g` (solids) and `ml
 AI text/photo logging (Phase 2/3), the macro-display toggle UI and profile-derived
 goals (Phase 1), per-food icons (Phase 3), catalogue-lookup optimization (later).
 
+> **TODO (per-day goal history):** the day view's calorie ring + "Cal left / Cal
+> consumed" figures use the user's **current** `DailyCalorieGoal` for every day, including
+> past ones. That makes history wrong once the goal changes — yesterday's ring is computed
+> against today's target. Persist the planned (goal) calories **per day** (snapshot the
+> goal in effect on each logged day) so the ring and figures are true when scrolling back.
+> For another time.
+
 ## Tests
 - **Backend (xUnit + EF InMemory):** Food CRUD; cycle detection rejects
   self/transitive links; composite rollup; entry create + snapshot; day-total
