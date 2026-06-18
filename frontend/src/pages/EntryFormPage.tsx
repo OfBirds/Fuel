@@ -506,7 +506,11 @@ function EntryFormPage() {
             </div>
             <div className="form-section">
               <label>Unit</label>
-              <UnitSelect value={uom} onChange={setUom} />
+              {/* The unit is fixed by the food's definition — to change it, edit the food in
+                  the catalogue (the AI flow stays freely editable, since it can be wrong). */}
+              <div className="unit-fixed" title="Set by the food's definition — change it in the catalogue.">
+                {uom}
+              </div>
             </div>
           </div>
 

@@ -212,6 +212,19 @@
   color: var(--text);
 }
 
+/* Read-only unit for a logged catalogue food — looks like the field next to it but is
+   fixed (the unit lives in the food's definition). */
+.unit-fixed {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 1rem;
+  background: var(--neutral);
+  color: var(--text-light);
+  box-sizing: border-box;
+}
+
 .nutrition-display {
   background: var(--neutral);
   border-radius: 8px;
