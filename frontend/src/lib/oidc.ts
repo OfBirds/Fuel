@@ -6,9 +6,12 @@
 import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 
 export interface RuntimeConfig {
-  oidcEnabled: boolean;
+  oidcEnabled: boolean;   // CrimsonRaven is configured for this stack
+  oidcOnline?: boolean;   // ...and reachable right now (drives Raven-first vs local fallback)
   oidcAuthority?: string;
   oidcClientId?: string;
+  oidcLogoUrl?: string;     // CrimsonRaven's current logo (light), scraped from its login page
+  oidcLogoUrlDark?: string; // ...and the dark variant
 }
 
 let configPromise: Promise<RuntimeConfig> | null = null;

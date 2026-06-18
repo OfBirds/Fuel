@@ -9,8 +9,14 @@ interface User {
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  /** Whether CrimsonRaven SSO is configured for this stack (drives the SSO button). */
-  ssoEnabled: boolean;
+  /** CrimsonRaven is configured AND reachable now → login goes straight to it (no choice). */
+  ssoOnline: boolean;
+  /** CrimsonRaven is configured for this stack (regardless of reachability) — drives the
+   *  "IdP is down" maintenance notice on the legacy fallback form. */
+  ssoConfigured: boolean;
+  /** Runtime config (the sso* flags) has been resolved — gates the login screen so it
+   *  doesn't flash the legacy form before we know whether to redirect to CrimsonRaven. */
+  authReady: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   /** Kick off the CrimsonRaven PKCE redirect. */
@@ -43,16 +49,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return stored ? JSON.parse(stored) : null;
   });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
-  const [ssoEnabled, setSsoEnabled] = useState(false);
+  const [ssoOnline, setSsoOnline] = useState(false);
+  const [ssoConfigured, setSsoConfigured] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
 
-  // Learn whether SSO is configured, and keep the stored bearer fresh when the OIDC
-  // refresh-token renewal fires (so apiFetch always carries a valid access token).
+  // CrimsonRaven is the front door when it's reachable (ssoOnline → login redirects straight
+  // to it). If it's configured but down (ssoConfigured && !ssoOnline) the legacy email/password
+  // form is shown as the break-glass fallback; if it's not configured at all (local dev) the
+  // legacy form is just the normal login. Also keep the stored bearer fresh on OIDC renewal.
   useEffect(() => {
     let alive = true;
     (async () => {
       const cfg = await loadRuntimeConfig();
-      if (!alive || !cfg.oidcEnabled) return;
-      setSsoEnabled(true);
+      if (!alive) return;
+      setSsoConfigured(!!cfg.oidcEnabled);
+      setSsoOnline(!!(cfg.oidcEnabled && cfg.oidcOnline));
+      setAuthReady(true);
+      if (!cfg.oidcEnabled) return;
       const mgr = await getUserManager();
       mgr?.events.addUserLoaded((u) => {
         setToken(u.access_token);
@@ -112,17 +125,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(accessToken, { id: data.userId, email: data.email });
   };
 
-  const logout = () => {
+  const logout = async () => {
+    // If this was an SSO session, end the CrimsonRaven session too (signoutRedirect →
+    // IdP end-session → back to us). Otherwise the IdP cookie lingers and the next login
+    // silently re-auths the same account — so you couldn't switch users. Local sessions
+    // just clear here.
+    const mgr = await getUserManager();
+    const oidcUser = mgr ? await mgr.getUser().catch(() => null) : null;
     setUser(null);
     setToken(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    getUserManager().then((mgr) => mgr?.removeUser()).catch(() => {});
+    if (mgr && oidcUser) {
+      await mgr.signoutRedirect().catch(() => mgr.removeUser());
+    }
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, token, ssoEnabled, login, register, loginWithSSO, completeSsoCallback, logout }}>
+      value={{ user, token, ssoOnline, ssoConfigured, authReady, login, register, loginWithSSO, completeSsoCallback, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -63,11 +63,6 @@ function AppContent() {
   const [profileChecked, setProfileChecked] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
-  // The OIDC redirect lands here with no session yet — handle it before the login guard.
-  if (location.pathname === '/auth/callback') {
-    return <AuthCallbackPage />;
-  }
-
   // Check if onboarding is needed (first login, no profile, not explicitly skipped)
   useEffect(() => {
     if (!user) return;
@@ -90,6 +85,12 @@ function AppContent() {
     saveOnboardingCompleted();
     setNeedsOnboarding(false);
   };
+
+  // The OIDC redirect lands here with no session yet — handle it before the login guard.
+  // (Must come after all hooks so the hook order stays stable across renders.)
+  if (location.pathname === '/auth/callback') {
+    return <AuthCallbackPage />;
+  }
 
   if (!user) {
     return <LoginPage onLoginSuccess={() => {}} />;

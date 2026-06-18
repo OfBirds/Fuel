@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useOidcLogo } from '../hooks/useOidcLogo';
 import '../styles/login.css';
 
 // Lands here after the CrimsonRaven redirect. Completes the PKCE code exchange, resolves
@@ -8,6 +9,7 @@ import '../styles/login.css';
 function AuthCallbackPage() {
   const { completeSsoCallback } = useAuth();
   const navigate = useNavigate();
+  const logoSrc = useOidcLogo();
   const [error, setError] = useState('');
   const ran = useRef(false); // guard React 18 StrictMode double-invoke (code is single-use)
 
@@ -36,7 +38,10 @@ function AuthCallbackPage() {
             </button>
           </>
         ) : (
-          <p className="login-subtitle">Signing you in…</p>
+          <>
+            {logoSrc && <img src={logoSrc} alt="CrimsonRaven" className="redirect-logo" />}
+            <p className="login-subtitle">Signing you in…</p>
+          </>
         )}
       </div>
     </div>

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useOidcLogo } from '../hooks/useOidcLogo';
 import '../styles/login.css';
 
 function EyeIcon({ visible }: { visible: boolean }) {
@@ -69,16 +70,19 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, register, loginWithSSO, ssoEnabled } = useAuth();
+  const { login, register, loginWithSSO, ssoOnline, ssoConfigured, authReady } = useAuth();
 
-  const handleSSO = async () => {
-    setError('');
-    try {
-      await loginWithSSO();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start SSO sign-in');
-    }
-  };
+  // CrimsonRaven is the front door: when it's online, send the user straight there — no
+  // choice. The legacy email/password form below is only reached when Raven is down or
+  // unconfigured (break-glass / local dev).
+  useEffect(() => {
+    if (!authReady || !ssoOnline) return;
+    loginWithSSO().catch((err) =>
+      setError(err instanceof Error ? err.message : 'Could not reach CrimsonRaven.'));
+  }, [authReady, ssoOnline, loginWithSSO]);
+
+  // CrimsonRaven's own logo (themed), pulled live from the IdP — shown on the redirect screen.
+  const logoSrc = useOidcLogo();
 
   const resetForm = () => {
     setError('');
@@ -130,20 +134,44 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
     }
   };
 
+  // Until we know whether CrimsonRaven is up — or while bouncing to it — show a spinner,
+  // never the legacy form (no flash, and SSO is the only path when Raven is online).
+  if (!authReady || ssoOnline) {
+    return (
+      <div className="login-page">
+        <div className="login-container">
+          <h1>Fuel</h1>
+          {error ? (
+            <>
+              <p className="error-message">{error}</p>
+              <button type="button" className="submit-button"
+                onClick={() => { setError(''); loginWithSSO().catch((e) => setError(e instanceof Error ? e.message : 'Could not reach CrimsonRaven.')); }}>
+                Try again
+              </button>
+            </>
+          ) : (
+            <>
+              {ssoOnline && logoSrc && <img src={logoSrc} alt="CrimsonRaven" className="redirect-logo" />}
+              <p className="login-subtitle">{ssoOnline ? 'Redirecting to CrimsonRaven…' : 'Loading…'}</p>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Legacy email/password — reached only when CrimsonRaven is down or not configured here.
   return (
     <div className="login-page">
       <div className="login-container">
         <h1>Fuel</h1>
-        <p className="login-subtitle">{SUBTITLES[view]}</p>
-
-        {ssoEnabled && view !== 'forgot' && (
-          <>
-            <button type="button" className="submit-button sso-button" onClick={handleSSO} disabled={loading}>
-              Continue with CrimsonRaven
-            </button>
-            <div className="login-divider"><span>or use your email</span></div>
-          </>
+        {ssoConfigured && (
+          <div className="maintenance-note">
+            <strong>CrimsonRaven is offline.</strong> Sign in or register with the same email to
+            reach your data until it's back.
+          </div>
         )}
+        <p className="login-subtitle">{SUBTITLES[view]}</p>
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">

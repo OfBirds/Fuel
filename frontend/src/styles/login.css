@@ -164,31 +164,26 @@
   cursor: not-allowed;
 }
 
-/* CrimsonRaven SSO — branded crimson, full width, sits above the email form */
-.sso-button {
-  width: 100%;
-  background: #B11226;
-}
-.sso-button:hover:not(:disabled) {
-  box-shadow: 0 4px 12px rgba(177, 18, 38, 0.3);
+/* CrimsonRaven's logo on the "Redirecting…" interstitial (pulled live from the IdP). */
+.redirect-logo {
+  display: block;
+  max-width: 160px;
+  max-height: 90px;
+  margin: 0 auto 1rem;
+  object-fit: contain;
 }
 
-.login-divider {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  color: var(--text-light);
+/* Shown on the legacy email/password form only when CrimsonRaven is configured but
+   offline — the break-glass path back to a user's data. */
+.maintenance-note {
+  background: #FFF7E6;
+  color: #8A5A00;
+  border: 1px solid #FFE0A3;
+  border-radius: 6px;
+  padding: 0.7rem 0.85rem;
   font-size: 0.85rem;
-  margin: 1rem 0;
-}
-.login-divider::before,
-.login-divider::after {
-  content: '';
-  flex: 1;
-  border-bottom: 1px solid var(--border, #ddd);
-}
-.login-divider span {
-  padding: 0 0.75rem;
+  line-height: 1.4;
+  margin-bottom: 1.25rem;
 }
 
 .login-toggle {
