@@ -54,10 +54,11 @@
 }
 
 /* Day's calorie summary: a circular progress ring (percentage of goal, filled like a
-   progress bar) on the left, with calories-left / calories-consumed beside it. */
+   progress bar) beside the calories-left / calories-consumed figures, centered as a unit. */
 .calorie-summary {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
@@ -102,12 +103,15 @@
 .cal-figures {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 0.15rem;
 }
 
+/* Primary figure (cal left) is the day's headline — roughly twice the consumed line. */
 .cal-figure-primary {
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: 1.8rem;
+  line-height: 1.1;
   color: var(--text);
 }
 
@@ -288,20 +292,4 @@
 .add-entry-btn:hover {
   border-color: var(--primary);
   color: var(--primary);
-}
-
-.empty-state {
-  text-align: center;
-  padding: 3rem 1rem;
-  color: var(--text-light);
-}
-
-.empty-state h2 {
-  font-family: 'Merriweather', serif;
-  margin-bottom: 0.5rem;
-  color: var(--text);
-}
-
-.empty-state p {
-  margin-bottom: 1.5rem;
 }

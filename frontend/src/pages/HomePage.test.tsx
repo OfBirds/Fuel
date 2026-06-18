@@ -26,16 +26,19 @@ describe('HomePage', () => {
     vi.clearAllMocks();
   });
 
-  it('shows empty state when no entries', async () => {
+  it('renders meal sections and goal figures when no entries', async () => {
     mockFetch
       .mockResolvedValueOnce({ ok: true, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ notifyReleases: true, dailyCalorieGoal: 2000 }) });
 
     renderHomePage();
+    // No empty-state copy any more — the meal sections are self-explanatory.
     await waitFor(() => {
-      const el = screen.getAllByText('Nothing logged yet');
-      expect(el.length).toBeGreaterThan(0);
+      expect(screen.getByText('Cal left: 2000')).toBeInTheDocument();
     });
+    expect(screen.getByText('Cal cons: 0')).toBeInTheDocument();
+    expect(screen.getByText('Breakfast')).toBeInTheDocument();
+    expect(screen.queryByText('Nothing logged yet')).not.toBeInTheDocument();
   });
 
   it('groups entries by meal type', async () => {

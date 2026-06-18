@@ -180,12 +180,6 @@ function HomePage() {
         <p className="settings-muted" style={{ textAlign: 'center', marginTop: '2rem' }}>Loading…</p>
       ) : (
         <>
-          {entries.length === 0 && (
-            <div className="empty-state">
-              <h2>Nothing logged yet</h2>
-              <p>Tap the + on any meal below to log your first meal of the day.</p>
-            </div>
-          )}
           {grouped.map(({ meal, entries: mealEntries, mealTotal, finishedAt }) => (
             <section key={meal} className="meal-section" aria-labelledby={`meal-${meal}`}>
               <div className="meal-section-header">
