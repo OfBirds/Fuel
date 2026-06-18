@@ -76,6 +76,10 @@ describe('HomePage', () => {
       expect(screen.getAllByText('Chicken').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Rice').length).toBeGreaterThan(0);
     }, { timeout: 3000 });
+    // Calorie summary ring + figures: 685 consumed of 2000 → 1315 left, 34%.
+    expect(screen.getByText('Cal cons: 685')).toBeInTheDocument();
+    expect(screen.getByText('Cal left: 1315')).toBeInTheDocument();
+    expect(screen.getByText('34%')).toBeInTheDocument();
   });
 
   it('shows add buttons for each meal section', async () => {

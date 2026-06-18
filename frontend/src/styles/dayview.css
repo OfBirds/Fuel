@@ -53,38 +53,68 @@
   opacity: 0.9;
 }
 
-.calorie-bar {
+/* Day's calorie summary: a circular progress ring (percentage of goal, filled like a
+   progress bar) on the left, with calories-left / calories-consumed beside it. */
+.calorie-summary {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   margin-bottom: 1.5rem;
 }
 
-.calorie-bar-label {
+.cal-ring {
+  --pct: 0;
+  --ring: var(--primary);
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  /* Conic fill = the progress; the rest is the track. */
+  background: conic-gradient(var(--ring) calc(var(--pct) * 1%), var(--neutral) 0);
+  transition: background 0.3s ease;
+}
+
+/* Punch a hole so it reads as a ring, not a pie. */
+.cal-ring::before {
+  content: '';
+  grid-area: 1 / 1;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.cal-ring-pct {
+  grid-area: 1 / 1;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+/* 80%+ of goal → amber, 99%+ → red. */
+.cal-ring.warn { --ring: var(--warning); }
+.cal-ring.over { --ring: var(--error); }
+.cal-ring.warn .cal-ring-pct { color: var(--warning); }
+.cal-ring.over .cal-ring-pct { color: var(--error); }
+
+.cal-figures {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cal-figure-primary {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text);
+}
+
+.cal-figure-secondary {
   font-size: 0.9rem;
-  margin-bottom: 0.3rem;
   color: var(--text-light);
 }
-
-.calorie-bar-track {
-  height: 8px;
-  background: var(--neutral);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.calorie-bar-fill {
-  height: 100%;
-  background: var(--primary);
-  border-radius: 4px;
-  transition: width 0.3s ease, background 0.3s ease;
-}
-
-/* 80%+ of goal → amber, 99%+ → red. Mirrors the percentage colour below. */
-.calorie-bar-fill.warn { background: var(--warning); }
-.calorie-bar-fill.over { background: var(--error); }
-
-.calorie-pct.warn { color: var(--warning); font-weight: 600; }
-.calorie-pct.over { color: var(--error); font-weight: 600; }
 
 .meal-section {
   margin-bottom: 1.5rem;
@@ -188,8 +218,9 @@
   gap: 0.4rem;
 }
 
-/* Round icon buttons that echo the meal "+" add button — a pen to edit, an ✕ to
-   delete, tinted with the palette's warning (amber) and error (red). */
+/* Round icon buttons — a pen to edit, an ✕ to delete. Subtle: a soft tint of the
+   palette's warning (amber) / error (red) with the glyph in that colour, so they read
+   as low-contrast affordances rather than bright solid fills. Tint strengthens on hover. */
 .entry-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -201,18 +232,22 @@
   border-radius: 50%;
   font-size: 0.95rem;
   line-height: 1;
-  color: white;
   cursor: pointer;
-  transition: opacity 0.2s, transform 0.1s;
-}
-.entry-icon-btn:hover {
-  opacity: 0.88;
+  transition: background 0.15s;
 }
 .entry-icon-btn.edit {
-  background: var(--warning);
+  background: color-mix(in srgb, var(--warning) 16%, var(--surface));
+  color: var(--warning);
 }
 .entry-icon-btn.del {
-  background: var(--error);
+  background: color-mix(in srgb, var(--error) 16%, var(--surface));
+  color: var(--error);
+}
+.entry-icon-btn.edit:hover {
+  background: color-mix(in srgb, var(--warning) 30%, var(--surface));
+}
+.entry-icon-btn.del:hover {
+  background: color-mix(in srgb, var(--error) 30%, var(--surface));
 }
 
 .entry-row-btn {

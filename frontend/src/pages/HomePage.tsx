@@ -120,7 +120,8 @@ function HomePage() {
 
   // Calorie bar shifts to warning at 80% of goal and to error at 99%+ — a glanceable
   // "you're near / over your budget" without needing to read the number.
-  const goalPct = goal != null && goal > 0 ? (totalCalories / goal) * 100 : 0;
+  const hasGoal = goal != null && goal > 0;
+  const goalPct = hasGoal ? (totalCalories / goal!) * 100 : 0;
   const calorieLevel = goalPct >= 99 ? 'over' : goalPct >= 80 ? 'warn' : '';
 
   const deleteEntry = async (entryId: string) => {
@@ -151,20 +152,25 @@ function HomePage() {
         <button className="day-today-btn" onClick={goToday}>Today</button>
       </div>
 
-      <div className="calorie-bar">
-        <div className="calorie-bar-label">
-          <span>Calories: {totalCalories}{goal != null ? ` / ${goal}` : ''}</span>
-          {goal != null && goal > 0 && (
-            <span className={calorieLevel ? `calorie-pct ${calorieLevel}` : 'calorie-pct'}>
-              {Math.round(goalPct)}%
-            </span>
-          )}
+      <div className="calorie-summary">
+        <div
+          className={calorieLevel ? `cal-ring ${calorieLevel}` : 'cal-ring'}
+          style={{ '--pct': hasGoal ? Math.min(100, Math.round(goalPct)) : 0 } as React.CSSProperties}
+        >
+          <span className="cal-ring-pct">{hasGoal ? `${Math.round(goalPct)}%` : '—'}</span>
         </div>
-        <div className="calorie-bar-track">
-          <div
-            className={calorieLevel ? `calorie-bar-fill ${calorieLevel}` : 'calorie-bar-fill'}
-            style={{ width: `${Math.min(100, goalPct)}%` }}
-          />
+        <div className="cal-figures">
+          {hasGoal ? (
+            <>
+              <div className="cal-figure-primary">Cal left: {Math.round(goal! - totalCalories)}</div>
+              <div className="cal-figure-secondary">Cal cons: {totalCalories}</div>
+            </>
+          ) : (
+            <>
+              <div className="cal-figure-primary">Cal cons: {totalCalories}</div>
+              <div className="cal-figure-secondary">Set a daily goal in Settings</div>
+            </>
+          )}
         </div>
       </div>
 
