@@ -118,6 +118,27 @@ describe('AiEntryPage', () => {
     expect(body.items[0].foodId).toBe('food-1');
   });
 
+  it('changing the quantity rescales calories from the per-unit ratio', async () => {
+    mockFetch
+      .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(bcOff())
+      .mockResolvedValueOnce(foodsEmpty())
+      .mockResolvedValueOnce(estimateOk([row({ name: 'Rice', quantity: 100, calories: 500 })]));
+
+    renderPage();
+    await screen.findByRole('textbox', { name: /what did you eat/i });
+    await userEvent.type(screen.getByRole('textbox', { name: /what did you eat/i }), 'rice');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    const qtyInput = await screen.findByDisplayValue('100'); // 100 g @ 500 cal = 5 cal/g
+    expect(screen.getByDisplayValue('500')).toBeInTheDocument();
+    await userEvent.clear(qtyInput);
+    await userEvent.type(qtyInput, '200');
+
+    // calories must follow: 5 cal/g * 200 g = 1000 (the bug was: no recalc)
+    await waitFor(() => expect(screen.getByDisplayValue('1000')).toBeInTheDocument());
+  });
+
   it('refine re-requests with the accumulated note', async () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())

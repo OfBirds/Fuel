@@ -38,7 +38,26 @@ interface EstimateApiResponse {
 
 interface Row extends ApiRow {
   key: string;
+  // Per-unit ratios so a quantity change rescales calories/macros. Derived from whatever
+  // absolute values the row currently holds (AI estimate, matched food, or a manual edit).
+  caloriesPerUnit: number;
+  proteinPerUnit: number | null;
+  carbsPerUnit: number | null;
+  fatPerUnit: number | null;
 }
+
+const perUnit = (total: number, qty: number) => (qty > 0 ? total / qty : 0);
+const perUnitOpt = (total: number | null, qty: number) =>
+  total == null ? null : qty > 0 ? total / qty : 0;
+
+// Attach per-unit ratios to a raw API row (AI estimate), derived from its own quantity.
+const withRatios = (r: ApiRow): Omit<Row, 'key'> => ({
+  ...r,
+  caloriesPerUnit: perUnit(r.calories, r.quantity),
+  proteinPerUnit: perUnitOpt(r.protein, r.quantity),
+  carbsPerUnit: perUnitOpt(r.carbs, r.quantity),
+  fatPerUnit: perUnitOpt(r.fat, r.quantity),
+});
 
 // Shape of the catalogue food returned by /api/barcode/lookup (FoodResponse).
 interface BarcodeFood {
@@ -252,6 +271,10 @@ function AiEntryPage() {
         protein: scaled(food.proteinPerUnit),
         carbs: scaled(food.carbsPerUnit),
         fat: scaled(food.fatPerUnit),
+        caloriesPerUnit: food.caloriesPerUnit,
+        proteinPerUnit: food.proteinPerUnit,
+        carbsPerUnit: food.carbsPerUnit,
+        fatPerUnit: food.fatPerUnit,
         confidence: 1,
         matchedFoodId: food.id,
         matchedDefaultUoM: food.defaultUoM,
@@ -383,7 +406,7 @@ function AiEntryPage() {
         setError(data.error || "Couldn't estimate — enter it manually.");
         return; // keep any prior rows (a refine that failed leaves the last result up)
       }
-      setRows(data.items.map((r) => ({ ...r, key: nextKey() })));
+      setRows(data.items.map((r) => ({ ...withRatios(r), key: nextKey() })));
       setOverallConfidence(data.overallConfidence);
       setSource(data.source || (mode === 'photo' ? 'AiPhoto' : 'AiText'));
     } catch (e) {
@@ -410,6 +433,31 @@ function AiEntryPage() {
 
   const updateRow = (key: string, patch: Partial<Row>) =>
     setRows((rs) => rs?.map((r) => (r.key === key ? { ...r, ...patch } : r)) ?? null);
+
+  // Changing the amount rescales calories + macros from the row's per-unit ratios.
+  const changeQuantity = (key: string, qty: number) =>
+    setRows((rs) => rs?.map((r) => (r.key === key ? {
+      ...r,
+      quantity: qty,
+      calories: Math.round(r.caloriesPerUnit * qty),
+      protein: r.proteinPerUnit == null ? null : round1(r.proteinPerUnit * qty),
+      carbs: r.carbsPerUnit == null ? null : round1(r.carbsPerUnit * qty),
+      fat: r.fatPerUnit == null ? null : round1(r.fatPerUnit * qty),
+    } : r)) ?? null);
+
+  // A manual calories/macro edit re-derives that field's per-unit ratio, so a later
+  // quantity change still scales proportionally from the corrected value.
+  const changeCalories = (key: string, cal: number) =>
+    setRows((rs) => rs?.map((r) => (r.key === key
+      ? { ...r, calories: cal, caloriesPerUnit: perUnit(cal, r.quantity) } : r)) ?? null);
+  const changeMacro = (key: string, field: 'protein' | 'carbs' | 'fat', val: number | null) =>
+    setRows((rs) => rs?.map((r) => {
+      if (r.key !== key) return r;
+      const ratio = perUnitOpt(val, r.quantity);
+      if (field === 'protein') return { ...r, protein: val, proteinPerUnit: ratio };
+      if (field === 'carbs') return { ...r, carbs: val, carbsPerUnit: ratio };
+      return { ...r, fat: val, fatPerUnit: ratio };
+    }) ?? null);
   const deleteRow = (key: string) =>
     setRows((rs) => rs?.filter((r) => r.key !== key) ?? null);
 
@@ -644,28 +692,28 @@ function AiEntryPage() {
                   <div className="ai-row-fields">
                     <label>Qty
                       <NumberInput min="0" value={r.quantity}
-                        onValueChange={(v) => updateRow(r.key, { quantity: v ?? 0 })} />
+                        onValueChange={(v) => changeQuantity(r.key, v ?? 0)} />
                     </label>
                     <label>Unit
                       <UnitSelect value={r.uom} onChange={(v) => updateRow(r.key, { uom: v })} />
                     </label>
                     <label>Cal
                       <NumberInput value={r.calories}
-                        onValueChange={(v) => updateRow(r.key, { calories: v ?? 0 })} />
+                        onValueChange={(v) => changeCalories(r.key, v ?? 0)} />
                     </label>
                     {showMacros && (
                       <>
                         <label>P
                           <input type="number" value={r.protein ?? ''}
-                            onChange={(e) => updateRow(r.key, { protein: optNum(e.target.value) })} />
+                            onChange={(e) => changeMacro(r.key, 'protein', optNum(e.target.value))} />
                         </label>
                         <label>C
                           <input type="number" value={r.carbs ?? ''}
-                            onChange={(e) => updateRow(r.key, { carbs: optNum(e.target.value) })} />
+                            onChange={(e) => changeMacro(r.key, 'carbs', optNum(e.target.value))} />
                         </label>
                         <label>F
                           <input type="number" value={r.fat ?? ''}
-                            onChange={(e) => updateRow(r.key, { fat: optNum(e.target.value) })} />
+                            onChange={(e) => changeMacro(r.key, 'fat', optNum(e.target.value))} />
                         </label>
                       </>
                     )}
