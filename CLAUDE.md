@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Fuel is a self-hosted full-stack app: **ASP.NET Core (net10) API + React/Vite/TypeScript SPA + PostgreSQL**, shipped as a single Docker image. It began life as a batteries-included template (CI/CD, observability, email, auth scaffold all pre-wired) — the README still documents the template rails. The actual product feature ("smart diet tracker") is largely unbuilt; `HomePage.tsx` is a near-empty shell. When adding the feature, you're building on the scaffold, not replacing it.
+This is a self-hosted full-stack app: **ASP.NET Core (net10) API + React/Vite/TypeScript SPA + PostgreSQL**, shipped as a single Docker image. It began life as a batteries-included template (CI/CD, observability, email, auth scaffold all pre-wired). The product — an AI-assisted **smart diet tracker** — is now substantially built on that scaffold: food catalogue, meal logging + day view, profile/weight, AI calorie/macro estimation (text + photo), barcode lookup, and an installable PWA.
+
+**Naming:** the product is branded **Indigo Swallow** (the bird-named homelab ecosystem — see CrimsonRaven). The **repo, code namespace, Docker/CI artifacts, JWT issuer, and `fuel-*` infra all stay `fuel`** — only user-facing strings + the icon are "Indigo Swallow". Don't rename code/config to match the brand.
 
 ## Commands
 
@@ -49,11 +51,13 @@ Build/run gotcha: `dotnet build`/`run` fails if the app is already running and h
 
 ## Auth
 
-Login issues a **signed JWT** (`JwtTokenService`, HMAC-SHA256; `sub`=userId, `email`, exp). The signing key is the flat `JWT_SIGNING_KEY` env var — when unset, the app mints an *ephemeral* random key at startup and logs a warning (so local dev needs zero setup; tokens just don't survive a restart). `JWT_EXPIRY_DAYS` (default 30) sets login lifetime. Deploy stacks **must** set a real `JWT_SIGNING_KEY` (≥32 chars).
+**Dual-auth, CrimsonRaven-first.** Primary login is **CrimsonRaven** (the homelab Zitadel IdP) via OIDC/PKCE; the self-issued email/password JWT is the **backup** path, still wired so logins keep working if the IdP is down. Full spec: `docs/auth-crimsonraven.md`. `Program.cs` registers **two bearer schemes** — `"Fuel"` (HMAC) and `"CrimsonRaven"` (`AddJwtBearer` against `OIDC_AUTHORITY`/JWKS) — behind a `"smart"` policy scheme that forwards by peeking the token's `iss`. OIDC is opt-in per stack via flat env (`OIDC_AUTHORITY`/`OIDC_CLIENT_ID`/`OIDC_AUDIENCE`); blank authority → only the Fuel scheme runs. `OidcUserProvisioner` (`IClaimsTransformation`) maps a CrimsonRaven identity onto a Fuel `User` by **verified email** (`User.ExternalSubject`) and rewrites `sub` → Fuel `User.Id`, so the routes/filter below are unchanged.
 
-`Program.cs` wires `AddJwtBearer` + a **fallback authorization policy**, so every endpoint requires a valid token unless it opts out with `[AllowAnonymous]` (`auth/*`, `version`, `unsubscribe`, and the SPA `MapFallbackToFile`). Routes are shaped `api/user/{userId}/...`; a global `ResourceOwnershipFilter` (`backend/Api/Authorization`) rejects (403) any request whose route/query `userId` ≠ the token's `sub`, so a valid token for one user can't reach another's data. PBKDF2 password hashing in `AuthService` is real and fine.
+The backup path issues a **signed JWT** (`JwtTokenService`, HMAC-SHA256; `sub`=userId, `email`, exp). The signing key is the flat `JWT_SIGNING_KEY` env var — when unset, the app mints an *ephemeral* random key at startup and logs a warning (so local dev needs zero setup; tokens just don't survive a restart). `JWT_EXPIRY_DAYS` (default 30) sets login lifetime. Deploy stacks **must** set a real `JWT_SIGNING_KEY` (≥32 chars).
 
-Frontend: all API calls go through `apiFetch` (`src/lib/api.ts`), which attaches `Authorization: Bearer <token>` and, on a 401, clears the session and bounces to login. Auth endpoints (login/register/reset) call `fetch` directly since no token exists yet. **Note:** the JWT carries identity but the app is still single-user-per-account with no roles/refresh — add those if the threat model needs them.
+A **fallback authorization policy** makes every endpoint require a valid token (either scheme) unless it opts out with `[AllowAnonymous]` (`auth/*`, `config`, `version`, `unsubscribe`, and the SPA `MapFallbackToFile`). Routes are shaped `api/user/{userId}/...`; a global `ResourceOwnershipFilter` (`backend/Api/Authorization`) rejects (403) any request whose route/query `userId` ≠ the token's (post-transform) `sub`, so a valid token for one user can't reach another's data. PBKDF2 password hashing in `AuthService` is real and fine.
+
+Frontend: all API calls go through `apiFetch` (`src/lib/api.ts`), which attaches `Authorization: Bearer <token>` and, on a 401, clears the session and bounces to login. The OIDC flow uses `oidc-client-ts` (`src/lib/oidc.ts`) configured at runtime from `GET /api/config`; `LoginPage` auto-redirects to CrimsonRaven when it's online and only falls back to the local form when it's not. **Note:** still single-user-per-account with no roles; refresh/sessions now come from CrimsonRaven on the OIDC path.
 
 ## Deploy
 

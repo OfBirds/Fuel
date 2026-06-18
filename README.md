@@ -1,19 +1,25 @@
-# Fuel — self-hosted AI calorie tracker
+# Indigo Swallow — self-hosted AI calorie tracker
 
-Fuel is a minimalist, self-hosted **calorie tracker** with AI-assisted logging:
+> **Repo/codebase note:** the product is branded **Indigo Swallow** (part of a bird-named
+> homelab ecosystem alongside the **CrimsonRaven** identity provider). The repository, code
+> namespace, Docker/CI artifacts and infra all stay `fuel` — only user-facing strings + the
+> app icon carry the brand.
+
+Indigo Swallow is a minimalist, self-hosted **calorie tracker** with AI-assisted logging:
 log a meal by typing it or snapping a photo, an AI provider estimates the calories
-(and macros), and Fuel files it under the day's meals against your goal. It ships
+(and macros), and it files them under the day's meals against your goal. It ships
 as a single Docker image — **ASP.NET Core (net10) + React/Vite/TypeScript +
-PostgreSQL**.
+PostgreSQL** — and installs as a **PWA**.
 
-Food and weight data is about as personal as it gets, so Fuel is built to be
+Food and weight data is about as personal as it gets, so it's built to be
 **self-hosted**: it runs on infrastructure you control, not someone else's cloud.
 
-> **Status: early.** The infrastructure rails below are wired and working; the
-> product features (food catalogue, logging, profile/weight, AI estimation) are
-> being built out. See [`docs/`](docs/) for the per-feature design specs.
+> **Status: in use.** The infrastructure rails are wired and the product features
+> (food catalogue, logging, day view, profile/weight, AI estimation, barcode lookup) are
+> built and running on staging. Auth is delegated to **CrimsonRaven** SSO with a local
+> email/password fallback. See [`docs/`](docs/) for the per-feature specs.
 
-## What Fuel does (the product)
+## What Indigo Swallow does (the product)
 
 - **Log food three ways** — manually, by **typing** a description ("gurmanska
   pljeskavica 300 gr in a bun"), or from a **photo**. The AI paths pre-fill the
@@ -48,9 +54,11 @@ These rails come from the project's self-hosted full-stack base and are in place
 - **Observability** — Serilog structured logs (rolling JSON file + console),
   shipped to [Seq](https://datalust.co/seq) with OpenTelemetry traces, every event
   tagged with the app version.
-- **Auth** — register / login / reset-password with PBKDF2 password hashing and
-  signed-JWT bearer tokens; every API endpoint requires auth by default and is
-  scoped to the token's own user. Set `JWT_SIGNING_KEY` before deploying — see
+- **Auth** — **CrimsonRaven SSO first** (OIDC/PKCE), with a self-issued
+  email/password JWT (PBKDF2) as the backup path; dual-auth, identity mapped onto existing
+  users by verified email so no data is lost. Every API endpoint requires auth by default and
+  is scoped to the token's own user. Set `JWT_SIGNING_KEY` before deploying and configure
+  `OIDC_*` per stack — see [`docs/auth-crimsonraven.md`](docs/auth-crimsonraven.md) and
   [Before you ship](#before-you-ship).
 - **Email** — MailKit `SmtpEmailSender` (port-based TLS), configured from `SMTP_*`
   env keys.
@@ -140,8 +148,10 @@ scripts/              rename.sh / rename.ps1 (template provenance; vestigial now
 - [`docs/ai-estimation.md`](docs/ai-estimation.md) — Phase 2/3: AI calorie estimation from text & photo (multi-item, unit conversion, refine loop, camera)
 - [`docs/ai-providers.md`](docs/ai-providers.md) — the deploy-time, swappable AI provider abstraction
 - [`docs/barcode-lookup.md`](docs/barcode-lookup.md) — Phase 3: grocery barcode/EAN → official food definition (Open Food Facts)
+- [`docs/food-sorting-and-ranking.md`](docs/food-sorting-and-ranking.md) — catalogue sort/ranking modes
 
 **Platform**
+- [`docs/auth-crimsonraven.md`](docs/auth-crimsonraven.md) — CrimsonRaven SSO (dual-auth, link-by-email, CrimsonRaven-first login)
 - [`docs/infrastructure.md`](docs/infrastructure.md) — CI/CD + hosting design
 - [`docs/deploy-runbook.md`](docs/deploy-runbook.md) — one-time host/runner setup
 - [`docs/notifications.md`](docs/notifications.md) — versioning + release emails

@@ -1,8 +1,13 @@
 # Auth — CrimsonRaven SSO (dual-auth, data-preserving)
 
-> Status: **built** (dual-auth). Fuel accepts **both** CrimsonRaven (OIDC) tokens **and**
-> its own legacy HMAC JWT, so the existing email/password login keeps working as the
-> backup during migration. Decommissioning the local path is a deliberate later step.
+> Status: **live** (dual-auth, CrimsonRaven-first). The app accepts **both** CrimsonRaven
+> (OIDC) tokens **and** its own legacy HMAC JWT. The login screen is **CrimsonRaven-first**:
+> when the IdP is reachable the user is sent straight to it; the email/password form is only
+> shown when CrimsonRaven is offline/unconfigured (break-glass), with a maintenance notice.
+> Decommissioning the local path is a deliberate later step. Running on staging over HTTPS
+> (`https://raven-staging.bearsoft.duckdns.org`).
+>
+> (The app is branded **Indigo Swallow**; the repo/code namespace stays `fuel`.)
 
 ## Why
 
@@ -42,20 +47,33 @@ A user who hasn't verified their email is treated as new (empty) until they do.
 - OIDC is **opt-in**: blank `OIDC_AUTHORITY` → only the Fuel scheme runs.
 - **`GET /api/auth/me`** (authenticated) returns `{ userId, email }` — the SPA calls it
   after the OIDC callback to learn its Fuel `User.Id`.
-- **`GET /api/config`** (anonymous) exposes `{ oidcEnabled, oidcAuthority, oidcClientId }`
-  so the single Docker image can be configured per-stack at runtime (no rebuild).
+- **`GET /api/config`** (anonymous) lets the single Docker image be configured per-stack at
+  runtime (no rebuild). It returns `{ oidcEnabled, oidcAuthority, oidcClientId, oidcOnline,
+  oidcLogoUrl, oidcLogoUrlDark }`:
+  - `oidcOnline` — a short-cached liveness probe of the IdP's discovery endpoint; drives the
+    CrimsonRaven-first vs offline-fallback decision on the login screen.
+  - `oidcLogoUrl` / `oidcLogoUrlDark` — CrimsonRaven's own (themed) logo, scraped from its
+    login page and cached, so the app shows the IdP's mark on the redirect/callback screens
+    (single source of truth = CrimsonRaven).
 
 ## Frontend
 
 - `oidc-client-ts` `UserManager`, configured at runtime from `/api/config`
   (`src/lib/oidc.ts`). Authorization Code + PKCE, `scope "openid profile email
   offline_access"`, silent renew via refresh token.
-- `AuthContext` gains `loginWithSSO()` (redirect) and `completeSsoCallback()`; the
-  `/auth/callback` route (`AuthCallbackPage`) finishes the code exchange, calls
-  `/api/auth/me`, and stores `token` + `user {id,email}` the **same** way as the local
-  path — so `apiFetch`'s Bearer attach and 401→clear are unchanged.
-- `LoginPage` shows **both**: a "Continue with CrimsonRaven" button (when `ssoEnabled`)
-  and the existing email/password form.
+- `AuthContext` exposes `loginWithSSO()` (redirect), `completeSsoCallback()`, and the state
+  `ssoOnline` / `ssoConfigured` / `authReady` (from `/api/config`). The `/auth/callback`
+  route (`AuthCallbackPage`) finishes the code exchange, calls `/api/auth/me`, and stores
+  `token` + `user {id,email}` the **same** way as the local path — so `apiFetch`'s Bearer
+  attach and 401→clear are unchanged. **Logout** calls `signoutRedirect()` when an OIDC
+  session exists (ends the CrimsonRaven session so a different account can sign in), else a
+  local clear.
+- `LoginPage` is **CrimsonRaven-first**, not a choice: when `authReady && ssoOnline` it
+  auto-redirects via `loginWithSSO()` (showing a spinner). The legacy email/password form is
+  reached **only** when CrimsonRaven is down/unconfigured, and then shows a maintenance note
+  ("CrimsonRaven is offline — sign in/register with the same email to reach your data").
+- `useOidcLogo()` pulls CrimsonRaven's themed logo from `/api/config` for the
+  redirect/callback screens, so the IdP's brand is shown while bouncing.
 
 ## Config (flat env, per stack)
 
@@ -65,10 +83,13 @@ A user who hasn't verified their email is treated as new (empty) until they do.
 | `OIDC_CLIENT_ID` | Fuel public/PKCE client id in CrimsonRaven. |
 | `OIDC_AUDIENCE` | Expected `aud` in the access token. |
 
-- **Local + staging** → `http://192.168.4.55:9100` (homelab Zitadel, client
-  `377800190771331075`).
+- **Local + staging** → `https://raven-staging.bearsoft.duckdns.org` (homelab Zitadel, now
+  HTTPS — see `CrimsonRaven/docs/https-migration.md`; client `377946274235744259`). HTTPS is
+  required so the SPA's `crypto.subtle`/PKCE and Login V2's session cookie work (secure
+  context). Staging is served at `https://fuel-staging.bearsoft.duckdns.org` for the same
+  reason.
 - **Prod** → `https://raven.bearsoft.duckdns.org` (separate instance; its own Fuel app +
-  user store).
+  user store — register that app + fill prod `OIDC_*` when standing prod SSO up).
 
 ## Verify
 
@@ -79,10 +100,15 @@ A user who hasn't verified their email is treated as new (empty) until they do.
   CrimsonRaven login → `/auth/callback` → day view shows that user's existing data;
   the legacy email/password login still works.
 
+## Resolved during build
+
+- **Access-token claims.** Zitadel's access token does **not** carry `email`/`email_verified`,
+  so `OidcUserProvisioner` falls back to a **userinfo lookup** (`{authority}/oidc/v1/userinfo`
+  with the request's bearer, via `IHttpContextAccessor`) to get the verified email for
+  link-by-email. No Zitadel Action needed.
+
 ## Open / later
 
-- **Confirm `aud` + access-token claims** against a real Zitadel token (set the Fuel app's
-  access-token type to **JWT**; verify `email` / `email_verified` are present — if the
-  access token omits them, add a userinfo lookup or a Zitadel Action).
 - **Phase 4 cutover** (separate): remove `JwtTokenService`, password logic, `/api/auth/*`,
   the `"Fuel"` scheme, and drop `PasswordHash`.
+- **Prod SSO**: register a Fuel OIDC app on the prod CrimsonRaven and fill prod `OIDC_*`.
