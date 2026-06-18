@@ -3,62 +3,84 @@
   margin: 0 auto;
 }
 
+/* Date navigation: circular chevron buttons flanking a centered title, with a "Today"
+   link tucked under the date (hidden when already on today). Mirrors ThoseDaysApp's
+   calendar header, themed with Fuel's palette. */
 .day-header {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1rem;
 }
 
-.day-nav-btn {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 0.45rem 0.9rem;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  line-height: 1.2;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.day-nav-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary);
+.day-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .day-date {
   font-family: 'Merriweather', serif;
   font-size: 1.3rem;
-  min-width: 12rem;
+  margin: 0;
   text-align: center;
 }
 
-.day-today-btn {
+/* Prev/next day: circular solid buttons with a chevron. */
+.day-nav-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
   background: var(--primary);
   color: white;
-  /* Match .day-nav-btn's box so it isn't visibly smaller than the arrows beside it. */
-  padding: 0.45rem 0.9rem;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  line-height: 1.2;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid var(--primary);
-  transition: all 0.2s;
-}
-
-.day-today-btn:hover {
-  opacity: 0.9;
-}
-
-/* Day's calorie summary: a circular progress ring (percentage of goal, filled like a
-   progress bar) beside the calories-left / calories-consumed figures, centered as a unit. */
-.calorie-summary {
+  font-size: 1.4rem;
+  line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.day-nav-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.day-today-btn {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  padding: 0.2rem 0.7rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.day-today-btn:hover {
+  background: var(--primary);
+  color: white;
+}
+
+/* Hidden on today, but keeps its space so the header doesn't jump. */
+.day-today-btn.is-hidden {
+  visibility: hidden;
+}
+
+/* Day's calorie summary: calories-left / calories-consumed figures on the left edge, the
+   circular progress ring (percentage of goal) pushed to the right edge. */
+.calorie-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
@@ -67,8 +89,10 @@
   --pct: 0;
   --ring: var(--primary);
   flex: none;
-  width: 72px;
-  height: 72px;
+  /* rem (not px) so the ring + its % scale with font-size / zoom. ~matches the height
+     of the two-line figures on the left. */
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -81,8 +105,8 @@
 .cal-ring::before {
   content: '';
   grid-area: 1 / 1;
-  width: 56px;
-  height: 56px;
+  width: 1.9rem;
+  height: 1.9rem;
   border-radius: 50%;
   background: var(--surface);
 }
@@ -90,7 +114,7 @@
 .cal-ring-pct {
   grid-area: 1 / 1;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.62rem;
   color: var(--text);
 }
 
@@ -103,14 +127,14 @@
 .cal-figures {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.15rem;
 }
 
-/* Primary figure (cal left) is the day's headline — roughly twice the consumed line. */
+/* Primary figure (cal left) is the day's headline — sized to match the date heading. */
 .cal-figure-primary {
   font-weight: 700;
-  font-size: 1.8rem;
+  font-size: 1.3rem;
   line-height: 1.1;
   color: var(--text);
 }

@@ -66,6 +66,7 @@ function HomePage() {
   const [error, setError] = useState<string | null>(null);
 
   const dateStr = toDateString(currentDate);
+  const isToday = dateStr === toDateString(new Date());
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -146,19 +147,20 @@ function HomePage() {
   return (
     <div className="day-view">
       <div className="day-header">
-        <button className="day-nav-btn" onClick={() => goDay(-1)} aria-label="Previous day">&larr;</button>
-        <span className="day-date">{formatDate(currentDate)}</span>
-        <button className="day-nav-btn" onClick={() => goDay(1)} aria-label="Next day">&rarr;</button>
-        <button className="day-today-btn" onClick={goToday}>Today</button>
+        <button className="day-nav-btn" onClick={() => goDay(-1)} aria-label="Previous day">‹</button>
+        <div className="day-title">
+          <span className="day-date">{formatDate(currentDate)}</span>
+          <button
+            className={`day-today-btn${isToday ? ' is-hidden' : ''}`}
+            onClick={goToday}
+            tabIndex={isToday ? -1 : 0}
+            aria-hidden={isToday}
+          >↩ Today</button>
+        </div>
+        <button className="day-nav-btn" onClick={() => goDay(1)} aria-label="Next day">›</button>
       </div>
 
       <div className="calorie-summary">
-        <div
-          className={calorieLevel ? `cal-ring ${calorieLevel}` : 'cal-ring'}
-          style={{ '--pct': hasGoal ? Math.min(100, Math.round(goalPct)) : 0 } as React.CSSProperties}
-        >
-          <span className="cal-ring-pct">{hasGoal ? `${Math.round(goalPct)}%` : '—'}</span>
-        </div>
         <div className="cal-figures">
           {hasGoal ? (
             <>
@@ -171,6 +173,12 @@ function HomePage() {
               <div className="cal-figure-secondary">Set a daily goal in Settings</div>
             </>
           )}
+        </div>
+        <div
+          className={calorieLevel ? `cal-ring ${calorieLevel}` : 'cal-ring'}
+          style={{ '--pct': hasGoal ? Math.min(100, Math.round(goalPct)) : 0 } as React.CSSProperties}
+        >
+          <span className="cal-ring-pct">{hasGoal ? `${Math.round(goalPct)}%` : '—'}</span>
         </div>
       </div>
 
