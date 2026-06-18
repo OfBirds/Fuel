@@ -126,19 +126,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    // If this was an SSO session, end the CrimsonRaven session too (signoutRedirect →
-    // IdP end-session → back to us). Otherwise the IdP cookie lingers and the next login
-    // silently re-auths the same account — so you couldn't switch users. Local sessions
-    // just clear here.
     const mgr = await getUserManager();
     const oidcUser = mgr ? await mgr.getUser().catch(() => null) : null;
-    setUser(null);
-    setToken(null);
+    // Clear the persisted session first so any return from the IdP — or a local logout —
+    // lands logged-out (AuthProvider seeds user/token from these on mount).
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     if (mgr && oidcUser) {
-      await mgr.signoutRedirect().catch(() => mgr.removeUser());
+      // End the CrimsonRaven session and leave the page. Crucially, do NOT setUser(null)
+      // first: that remounts LoginPage, whose Raven-first effect fires signinRedirect and
+      // races (and usually beats) this signout — so the IdP cookie survives and you're
+      // silently re-authed straight back in. Navigating away here avoids the race entirely.
+      try {
+        await mgr.signoutRedirect();
+        return; // page is now navigating to the IdP end-session endpoint
+      } catch {
+        await mgr.removeUser().catch(() => {});
+      }
     }
+    // Local (non-SSO) logout, or signout failed to start: clear in-app state.
+    setUser(null);
+    setToken(null);
   };
 
   return (
