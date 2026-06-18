@@ -94,8 +94,18 @@ A user who hasn't verified their email is treated as new (empty) until they do.
   required so the SPA's `crypto.subtle`/PKCE and Login V2's session cookie work (secure
   context). Staging is served at `https://fuel-staging.bearsoft.duckdns.org` for the same
   reason.
-- **Prod** → `https://raven.bearsoft.duckdns.org` (separate instance; its own Fuel app +
-  user store — register that app + fill prod `OIDC_*` when standing prod SSO up).
+- **Prod** → `https://raven.bearsoft.duckdns.org` (separate instance, its own user store).
+  Prod Fuel is served at `https://swallow.bearsoft.duckdns.org`. The Fuel app is registered
+  as a **public PKCE client** (`auth_method = NONE`, no secret), same shape as staging:
+  - project `378028902527795203` · app `378028918986244099` · **client `378028919003021315`**
+    (`OIDC_CLIENT_ID == OIDC_AUDIENCE`).
+  - redirect URI `https://swallow.bearsoft.duckdns.org/auth/callback`; post-logout
+    `https://swallow.bearsoft.duckdns.org`.
+  - Prod env (host `.env.prod`): `OIDC_AUTHORITY=https://raven.bearsoft.duckdns.org`,
+    `OIDC_CLIENT_ID`/`OIDC_AUDIENCE=378028919003021315`,
+    `PUBLIC_BASE_URL=https://swallow.bearsoft.duckdns.org` (see `deploy/.env.prod.example`).
+  - Pre-flight (verified without deploying): discovery issuer matches authority, JWKS 200,
+    `/authorize` accepts the swallow redirect (302) and rejects others (400).
 
 ## Verify
 
