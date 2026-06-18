@@ -3,6 +3,7 @@ import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useShowMacros } from '../hooks/useShowMacros';
 import { UnitSelect } from '../components/UnitSelect';
+import { NumberInput } from '../components/NumberInput';
 import '../styles/catalogue.css';
 
 interface FoodItem {
@@ -359,10 +360,10 @@ function CataloguePage() {
             </div>
             <div className="food-form-section">
               <label>Calories per {form.defaultUoM}</label>
-              <input
-                type="number" min="0" step="0.1"
+              <NumberInput
+                min="0" step="0.1"
                 value={form.caloriesPerUnit}
-                onChange={(e) => setForm((f) => ({ ...f, caloriesPerUnit: Number(e.target.value) }))}
+                onValueChange={(v) => setForm((f) => ({ ...f, caloriesPerUnit: v ?? 0 }))}
               />
             </div>
           </div>
@@ -415,22 +416,22 @@ function CataloguePage() {
                         onChange={(e) => updateIngredient(i, { inlineName: e.target.value, childFoodName: e.target.value })}
                       />
                       <UnitSelect value={ing.inlineUoM} onChange={(v) => updateIngredient(i, { inlineUoM: v })} />
-                      <input
+                      <NumberInput
                         className="inline-ingredient-cal"
-                        type="number" min="0" step="0.1"
+                        min="0" step="0.1"
                         placeholder="Cal/unit"
-                        value={ing.inlineCal || ''}
-                        onChange={(e) => updateIngredient(i, { inlineCal: Number(e.target.value) })}
+                        value={ing.inlineCal}
+                        onValueChange={(v) => updateIngredient(i, { inlineCal: v ?? 0 })}
                       />
                     </>
                   ) : (
                     <span className="ingredient-name">{ing.childFoodName}</span>
                   )}
-                  <input
+                  <NumberInput
                     className="ingredient-qty"
-                    type="number" min="0" step="0.1"
-                    value={ing.quantity || ''}
-                    onChange={(e) => updateIngredient(i, { quantity: Number(e.target.value) })}
+                    min="0" step="0.1"
+                    value={ing.quantity}
+                    onValueChange={(v) => updateIngredient(i, { quantity: v ?? 0 })}
                   />
                   <UnitSelect className="ingredient-uom" value={ing.uoM} onChange={(v) => updateIngredient(i, { uoM: v })} />
                   <button className="ingredient-remove" onClick={() => removeIngredient(i)}>×</button>

@@ -7,6 +7,7 @@ import { normalizeImage } from '../lib/image';
 import { loadCatalogueByName, type CatalogueFood } from '../lib/foods';
 import { useShowMacros } from '../hooks/useShowMacros';
 import { UnitSelect } from '../components/UnitSelect';
+import { NumberInput } from '../components/NumberInput';
 import '../styles/entryform.css';
 import '../styles/aientry.css';
 
@@ -412,7 +413,6 @@ function AiEntryPage() {
   const deleteRow = (key: string) =>
     setRows((rs) => rs?.filter((r) => r.key !== key) ?? null);
 
-  const num = (v: string): number => (v === '' ? 0 : Number(v));
   const optNum = (v: string): number | null => (v === '' ? null : Number(v));
 
   const save = async () => {
@@ -643,15 +643,15 @@ function AiEntryPage() {
                   )}
                   <div className="ai-row-fields">
                     <label>Qty
-                      <input type="number" min="0" value={r.quantity}
-                        onChange={(e) => updateRow(r.key, { quantity: num(e.target.value) })} />
+                      <NumberInput min="0" value={r.quantity}
+                        onValueChange={(v) => updateRow(r.key, { quantity: v ?? 0 })} />
                     </label>
                     <label>Unit
                       <UnitSelect value={r.uom} onChange={(v) => updateRow(r.key, { uom: v })} />
                     </label>
                     <label>Cal
-                      <input type="number" value={r.calories}
-                        onChange={(e) => updateRow(r.key, { calories: num(e.target.value) })} />
+                      <NumberInput value={r.calories}
+                        onValueChange={(v) => updateRow(r.key, { calories: v ?? 0 })} />
                     </label>
                     {showMacros && (
                       <>

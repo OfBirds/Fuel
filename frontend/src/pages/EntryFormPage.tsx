@@ -6,6 +6,7 @@ import { getLastMealType, saveLastMealType } from '../lib/storage';
 import { type CatalogueFood } from '../lib/foods';
 import { useShowMacros } from '../hooks/useShowMacros';
 import { UnitSelect } from '../components/UnitSelect';
+import { NumberInput } from '../components/NumberInput';
 import '../styles/entryform.css';
 
 interface FoodItem {
@@ -474,7 +475,7 @@ function EntryFormPage() {
                 </div>
                 <div className="form-section">
                   <label>Cal / {inlineUoM}</label>
-                  <input type="number" value={inlineCal} onChange={(e) => setInlineCal(Number(e.target.value))} />
+                  <NumberInput value={inlineCal} onValueChange={(v) => setInlineCal(v ?? 0)} />
                 </div>
               </div>
               <button className="add-entry-btn" onClick={submitInlineFood}>
@@ -501,7 +502,7 @@ function EntryFormPage() {
           <div className="entry-form-row">
             <div className="form-section">
               <label>Quantity</label>
-              <input type="number" min="0" step="1" value={quantity} onChange={(e) => onQuantityChange(Number(e.target.value))} />
+              <NumberInput min="0" step="1" value={quantity} onValueChange={(v) => onQuantityChange(v ?? 0)} />
             </div>
             <div className="form-section">
               <label>Unit</label>
@@ -529,7 +530,7 @@ function EntryFormPage() {
             <div className="nutrition-row">
               <div className="nutrition-field">
                 <label>Calories</label>
-                <input type="number" value={calories} onChange={(e) => setCalories(Number(e.target.value))} />
+                <NumberInput value={calories} onValueChange={(v) => setCalories(v ?? 0)} />
               </div>
               {showMacros && (
                 <>
