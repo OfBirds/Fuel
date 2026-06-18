@@ -81,7 +81,7 @@
 .ai-review-head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  gap: 0.5rem;
   margin-bottom: 0.75rem;
 }
 
@@ -94,6 +94,24 @@
 .ai-confidence {
   font-size: 0.85rem;
   color: var(--text-light);
+}
+
+/* Revert manual edits back to the AI's original suggestion (no re-estimate). Pushed to
+   the right of the review header. */
+.ai-undo-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ai-undo-btn:hover {
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
 }
 
 .ai-row {

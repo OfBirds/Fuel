@@ -101,6 +101,9 @@ function AiEntryPage() {
   const [mode, setMode] = useState<'text' | 'photo'>('text');
   const [description, setDescription] = useState('');
   const [rows, setRows] = useState<Row[] | null>(null);
+  // Snapshot of the AI's suggestion as returned, so manual edits can be undone back to it
+  // without re-running the estimate.
+  const [aiSnapshot, setAiSnapshot] = useState<Row[] | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
   const [noteDraft, setNoteDraft] = useState('');
   const [overallConfidence, setOverallConfidence] = useState<number | null>(null);
@@ -406,7 +409,9 @@ function AiEntryPage() {
         setError(data.error || "Couldn't estimate — enter it manually.");
         return; // keep any prior rows (a refine that failed leaves the last result up)
       }
-      setRows(data.items.map((r) => ({ ...withRatios(r), key: nextKey() })));
+      const fresh = data.items.map((r) => ({ ...withRatios(r), key: nextKey() }));
+      setRows(fresh);
+      setAiSnapshot(fresh); // baseline to undo manual edits back to
       setOverallConfidence(data.overallConfidence);
       setSource(data.source || (mode === 'photo' ? 'AiPhoto' : 'AiText'));
     } catch (e) {
@@ -460,6 +465,11 @@ function AiEntryPage() {
     }) ?? null);
   const deleteRow = (key: string) =>
     setRows((rs) => rs?.filter((r) => r.key !== key) ?? null);
+
+  // Restore the AI's original suggestion (undo all manual edits/deletes), no re-estimate.
+  const undoEdits = () => { if (aiSnapshot) setRows(aiSnapshot.map((r) => ({ ...r }))); };
+  const editedFromAi =
+    aiSnapshot != null && rows != null && JSON.stringify(rows) !== JSON.stringify(aiSnapshot);
 
   const optNum = (v: string): number | null => (v === '' ? null : Number(v));
 
@@ -660,6 +670,10 @@ function AiEntryPage() {
                 <h2>Review {rows.length} item{rows.length === 1 ? '' : 's'}</h2>
                 {overallConfidence != null && (
                   <span className="ai-confidence">{Math.round(overallConfidence * 100)}% overall</span>
+                )}
+                {editedFromAi && (
+                  <button type="button" className="ai-undo-btn" onClick={undoEdits}
+                    title="Restore the AI's original suggestion">↺ Undo edits</button>
                 )}
               </div>
 

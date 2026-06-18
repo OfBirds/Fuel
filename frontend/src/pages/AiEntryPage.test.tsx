@@ -139,6 +139,35 @@ describe('AiEntryPage', () => {
     await waitFor(() => expect(screen.getByDisplayValue('1000')).toBeInTheDocument());
   });
 
+  it('undo restores the AI suggestion after manual edits', async () => {
+    mockFetch
+      .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(bcOff())
+      .mockResolvedValueOnce(foodsEmpty())
+      .mockResolvedValueOnce(estimateOk([row({ name: 'Rice', quantity: 100, calories: 500 })]));
+
+    renderPage();
+    await screen.findByRole('textbox', { name: /what did you eat/i });
+    await userEvent.type(screen.getByRole('textbox', { name: /what did you eat/i }), 'rice');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    const qtyInput = await screen.findByDisplayValue('100');
+    // No undo button until the user actually edits.
+    expect(screen.queryByRole('button', { name: /undo edits/i })).not.toBeInTheDocument();
+
+    await userEvent.clear(qtyInput);
+    await userEvent.type(qtyInput, '200');
+    await waitFor(() => expect(screen.getByDisplayValue('1000')).toBeInTheDocument());
+
+    const undo = await screen.findByRole('button', { name: /undo edits/i });
+    await userEvent.click(undo);
+
+    // Back to the AI's original 100 g / 500 cal, and the button disappears again.
+    await waitFor(() => expect(screen.getByDisplayValue('100')).toBeInTheDocument());
+    expect(screen.getByDisplayValue('500')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /undo edits/i })).not.toBeInTheDocument();
+  });
+
   it('refine re-requests with the accumulated note', async () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
