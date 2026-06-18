@@ -1,69 +1,58 @@
-const CACHE_VERSION = 'v1.0.0';
-const CACHE_NAME = `fuel-${CACHE_VERSION}`;
-const urlsToCache = [
-  '/',
-  '/index.html',
-  '/src/main.tsx',
-  '/src/styles/index.css',
-];
+// Indigo Swallow service worker. Plain JS (served as-is from /public — no TS here).
+// Strategy: never touch /api (always network, so auth'd data is never cached/stale);
+// network-first for navigations so a new deploy is picked up immediately, falling back to
+// the cached shell when offline; cache-first for hashed static assets (immutable, fast).
+const CACHE = 'indigo-swallow-v1';
+const SHELL = ['/', '/index.html', '/manifest.json', '/indigo-swallow.svg'];
 
-self.addEventListener('install', (event: ExtendableEvent) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(urlsToCache).catch(() => {
-        console.log('Some resources failed to cache');
-      });
-    })
-  );
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL).catch(() => {})));
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (event: ExtendableEvent) => {
+self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+    )
   );
   self.clients.claim();
 });
 
-self.addEventListener('fetch', (event: FetchEvent) => {
+self.addEventListener('fetch', (event) => {
   const { request } = event;
+  if (request.method !== 'GET') return;
 
-  if (request.method !== 'GET') {
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return; // let cross-origin (fonts, IdP) pass through
+  if (url.pathname.startsWith('/api/')) return;     // never cache API / auth responses
+
+  // Navigations / HTML: network-first (fresh deploys win), cached shell as offline fallback.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((cache) => cache.put('/index.html', copy));
+          return res;
+        })
+        .catch(() => caches.match('/index.html'))
+    );
     return;
   }
 
-  if (request.url.includes('/api/')) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (!response || response.status !== 200 || response.type === 'error') {
-            return response;
+  // Static assets (hashed, immutable): cache-first, populate on first miss.
+  event.respondWith(
+    caches.match(request).then(
+      (cached) =>
+        cached ||
+        fetch(request).then((res) => {
+          if (res && res.status === 200 && res.type === 'basic') {
+            const copy = res.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy));
           }
-
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseToCache);
-          });
-
-          return response;
+          return res;
         })
-        .catch(() => {
-          return caches.match(request);
-        })
-    );
-  } else {
-    event.respondWith(
-      caches.match(request).then((response) => {
-        return response || fetch(request);
-      })
-    );
-  }
+    )
+  );
 });

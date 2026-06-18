@@ -99,7 +99,7 @@ public class ReleaseNotifier(
     internal static (string subject, string html, string text) BuildEmail(
         string version, string url, string unsubscribe, string? releaseNotes)
     {
-        var subject = $"Fuel — new version {version} is out";
+        var subject = $"Indigo Swallow — new version {version} is out";
 
         // Render the release notes as HTML paragraphs and plain-text lines.
         // Simple conversion: blank-line → paragraph break, bullet → <li>, else <p>.
@@ -152,16 +152,16 @@ public class ReleaseNotifier(
         }
 
         var html = $"""
-            <p>A new version of <strong>Fuel</strong> ({version}) has been released.</p>
+            <p>A new version of <strong>Indigo Swallow</strong> ({version}) has been released.</p>
             {(notesHtml.Length > 0 ? notesHtml + "\n" : "")}
-            <p><a href="{url}">Open Fuel</a></p>
+            <p><a href="{url}">Open Indigo Swallow</a></p>
             <hr>
             <p style="font-size:12px;color:#888">
               Don't want these emails? <a href="{unsubscribe}">Unsubscribe</a>.
             </p>
             """;
         var text =
-            $"A new version of Fuel ({version}) has been released.\n\n" +
+            $"A new version of Indigo Swallow ({version}) has been released.\n\n" +
             $"{notesText}" +
             $"{url}\n\n" +
             $"Unsubscribe: {unsubscribe}";

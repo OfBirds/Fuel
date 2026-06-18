@@ -28,6 +28,6 @@ public class UnsubscribeController(AppDbContext db) : ControllerBase
             await db.SaveChangesAsync(ct);
         }
 
-        return Content("You've been unsubscribed from Fuel release emails.", "text/plain");
+        return Content("You've been unsubscribed from Indigo Swallow release emails.", "text/plain");
     }
 }

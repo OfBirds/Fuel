@@ -135,7 +135,7 @@ function OnboardingPage({ onComplete }: { onComplete?: () => void }) {
   return (
     <div className="onboarding-page">
       <div className="onboarding-container">
-        <h1>Welcome to Fuel</h1>
+        <h1>Welcome to Indigo Swallow</h1>
         <p className="onboarding-subtitle">Let's set up your profile to get started.</p>
 
         {error && <p className="onboarding-error" role="alert">{error}</p>}

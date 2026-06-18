@@ -1,7 +1,9 @@
 ### What's new
 
-- **Sign-in is now CrimsonRaven-first.** When CrimsonRaven is reachable you go straight to
-  it — no extra button or choice. If it's offline (or not configured), Fuel falls back to
-  the email/password login with a notice, so you can always reach your data. Logging out now
-  ends the CrimsonRaven session too, so you can switch accounts.
-- The sign-in screens show CrimsonRaven's own logo (light/dark), pulled live from the IdP.
+- **Fuel is now Indigo Swallow.** Same app, new name and bird-mark to match the rest of the
+  ecosystem — your data, login, and settings are untouched. The colours are unchanged
+  (indigo `#4F46E5`).
+- **Install it like an app.** Indigo Swallow is now a proper installable PWA — add it to your
+  home screen / desktop and it opens full-screen with its own icon. It also caches the app
+  shell, so it loads instantly and survives a flaky connection (your data still always comes
+  fresh from the server).

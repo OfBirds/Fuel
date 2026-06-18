@@ -218,7 +218,7 @@ function SettingsPage() {
         <>
           {/* Notifications */}
           <Section title="Notifications">
-            <label className="settings-row" title="Get an email when a new version of Fuel is released.">
+            <label className="settings-row" title="Get an email when a new version of Indigo Swallow is released.">
               <input
                 type="checkbox"
                 checked={prefs?.notifyReleases ?? false}
@@ -227,7 +227,7 @@ function SettingsPage() {
               />
               <span className="settings-row-label">
                 Email me about new versions
-                <span className="settings-row-help">A short note when Fuel is updated. Nothing else — and no data leaves the app.</span>
+                <span className="settings-row-help">A short note when Indigo Swallow is updated. Nothing else — and no data leaves the app.</span>
               </span>
             </label>
           </Section>

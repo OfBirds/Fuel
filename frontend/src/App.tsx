@@ -132,7 +132,7 @@ function AppContent() {
         </Routes>
       </main>
       <footer className="app-footer">
-        <span className="app-brand">Fuel</span>
+        <span className="app-brand">Indigo Swallow</span>
       </footer>
     </div>
   );

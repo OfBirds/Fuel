@@ -140,7 +140,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
     return (
       <div className="login-page">
         <div className="login-container">
-          <h1>Fuel</h1>
+          <h1>Indigo Swallow</h1>
           {error ? (
             <>
               <p className="error-message">{error}</p>
@@ -164,7 +164,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   return (
     <div className="login-page">
       <div className="login-container">
-        <h1>Fuel</h1>
+        <h1>Indigo Swallow</h1>
         {ssoConfigured && (
           <div className="maintenance-note">
             <strong>CrimsonRaven is offline.</strong> Sign in or register with the same email to
@@ -279,7 +279,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
 
         <div className="disclaimer">
           <p>
-            <strong>Self-hosted &amp; private.</strong> Fuel runs on your own server — your food
+            <strong>Self-hosted &amp; private.</strong> Indigo Swallow runs on your own server — your food
             log and weigh-ins never leave it.
           </p>
         </div>
