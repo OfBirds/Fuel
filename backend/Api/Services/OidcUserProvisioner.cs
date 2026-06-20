@@ -4,6 +4,7 @@ using Api.Data;
 using Api.Models;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace Api.Services;
@@ -16,6 +17,10 @@ namespace Api.Services;
 ///   <item>finds the user by <see cref="User.ExternalSubject"/> (the IdP <c>sub</c>);</item>
 ///   <item>else links by <b>verified</b> email to an existing row (preserves that user's
 ///   entries/weights/profile — the Fuel <c>User.Id</c> never changes);</item>
+///   <item>else, if the email is <b>unverified but already owns a row</b>, <b>holds</b> — persists
+///   nothing and leaves the <c>sub</c> un-rewritten (downstream <c>Guid.TryParse</c> fails → 401/403,
+///   a "verify your email" state) so a later verified login self-heals into that row instead of being
+///   locked out by a competing one;</item>
 ///   <item>else creates a new password-less user.</item>
 /// </list>
 /// It then rewrites the principal's <c>sub</c> to the Fuel <c>User.Id</c>. Fuel-issued
@@ -31,7 +36,8 @@ public class OidcUserProvisioner(
     AppDbContext db,
     IHttpClientFactory httpClientFactory,
     IHttpContextAccessor httpContextAccessor,
-    IConfiguration config) : IClaimsTransformation
+    IConfiguration config,
+    ILogger<OidcUserProvisioner> logger) : IClaimsTransformation
 {
     public async Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
     {
@@ -53,17 +59,32 @@ public class OidcUserProvisioner(
             if (string.IsNullOrWhiteSpace(email))
                 (email, emailVerified) = await FetchUserinfoAsync(sub);
 
-            // Link only on a VERIFIED email match, so a CrimsonRaven account can't claim
-            // another person's Fuel data by asserting an unverified address.
-            if (emailVerified && !string.IsNullOrWhiteSpace(email))
+            // Does an existing row already own this email?
+            User? emailOwner = null;
+            if (!string.IsNullOrWhiteSpace(email))
             {
                 var lowered = email.ToLowerInvariant();
-                user = await db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == lowered);
+                emailOwner = await db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == lowered);
             }
 
-            if (user is not null)
+            if (emailOwner is not null && !emailVerified)
             {
-                user.ExternalSubject = sub; // link existing row → data preserved
+                // HOLD: an unverified address must not claim another person's data, and we must NOT
+                // bind this sub to a competing row — that would make every later login hit the fast
+                // ExternalSubject path and never retry the verified link, so verifying the email
+                // afterwards couldn't recover the data. Persist nothing and leave the sub un-rewritten;
+                // downstream Guid.TryParse fails → 401/403 ("verify your email"), and a later VERIFIED
+                // login self-heals into the row. Primary guard remains the IdP (verify-on-registration).
+                logger.LogWarning(
+                    "Unverified login (sub {Sub}) matches existing user {UserId}; holding until the email is verified",
+                    sub, emailOwner.Id);
+                return principal;
+            }
+
+            if (emailOwner is not null)
+            {
+                emailOwner.ExternalSubject = sub; // verified → link existing row, data preserved
+                user = emailOwner;
             }
             else
             {
