@@ -5,6 +5,7 @@ using Api.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace Api.Tests;
@@ -41,7 +42,7 @@ public class OidcUserProvisionerTests : IDisposable
     // deps) is never exercised — empty stubs suffice. No HttpContext → userinfo no-ops.
     private OidcUserProvisioner Provisioner() => new(
         _db, new StubHttpClientFactory(), new HttpContextAccessor(),
-        new ConfigurationBuilder().Build());
+        new ConfigurationBuilder().Build(), NullLogger<OidcUserProvisioner>.Instance);
 
     private sealed class StubHttpClientFactory : IHttpClientFactory
     {
@@ -80,17 +81,46 @@ public class OidcUserProvisionerTests : IDisposable
     }
 
     [Fact]
-    public async Task UnverifiedEmail_DoesNotLink_CreatesNewUser()
+    public async Task UnverifiedEmail_MatchingExistingUser_Holds_PersistsNothing()
     {
         var result = await Provisioner()
             .TransformAsync(Principal("zitadel-sub-2", "alice@example.com", emailVerified: false));
 
-        Assert.NotEqual(_aliceId.ToString(), Sub(result));         // did NOT claim alice's row
+        Assert.Equal("zitadel-sub-2", Sub(result));   // sub NOT rewritten → downstream 401/403 (pending)
         var alice = await _db.Users.FindAsync(_aliceId);
-        Assert.Null(alice!.ExternalSubject);                       // alice untouched
-        Assert.Equal(2, await _db.Users.CountAsync());             // a new (empty) user instead
-        var created = await _db.Users.FirstAsync(u => u.ExternalSubject == "zitadel-sub-2");
-        Assert.Null(created.PasswordHash);                         // OIDC user has no local password
+        Assert.Null(alice!.ExternalSubject);          // alice untouched — not claimed
+        Assert.Equal(1, await _db.Users.CountAsync()); // and NO competing row that would lock out the link
+    }
+
+    [Fact]
+    public async Task VerifyingLater_SelfHealsIntoExistingUser()
+    {
+        var provisioner = Provisioner();
+
+        // First login, email not yet verified → held, nothing persisted.
+        await provisioner.TransformAsync(Principal("zitadel-sub-2", "alice@example.com", emailVerified: false));
+        Assert.Null((await _db.Users.FindAsync(_aliceId))!.ExternalSubject);
+        Assert.Equal(1, await _db.Users.CountAsync());
+
+        // User verifies in the IdP, logs in again (same sub) → links into alice's row.
+        var healed = await provisioner.TransformAsync(Principal("zitadel-sub-2", "alice@example.com", emailVerified: true));
+
+        Assert.Equal(_aliceId.ToString(), Sub(healed));
+        Assert.Equal("zitadel-sub-2", (await _db.Users.FindAsync(_aliceId))!.ExternalSubject);
+        Assert.Equal(1, await _db.Users.CountAsync());
+    }
+
+    [Fact]
+    public async Task UnverifiedEmail_WithNoExistingUser_IsStillProvisioned()
+    {
+        var result = await Provisioner()
+            .TransformAsync(Principal("zitadel-sub-3", "newcomer@example.com", emailVerified: false));
+
+        // Nobody owns this email → nothing to protect; they get their own fresh row.
+        var created = await _db.Users.FirstAsync(u => u.ExternalSubject == "zitadel-sub-3");
+        Assert.Equal(created.Id.ToString(), Sub(result));
+        Assert.Null(created.PasswordHash);
+        Assert.Equal(2, await _db.Users.CountAsync());
     }
 
     [Fact]
