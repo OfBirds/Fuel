@@ -49,6 +49,10 @@ services:
       OIDC_AUTHORITY: ${OIDC_AUTHORITY}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
       OIDC_AUDIENCE: ${OIDC_AUDIENCE}
+      # Role-less CrimsonRaven machine PAT, used ONLY to resend email-verification mail for a held
+      # (unverified) sign-in — server-side, never reaches the browser. Blank → resend disabled.
+      # See the CrimsonRaven repo's docs/app-email-verification-resend.md.
+      CR_MAILER_PAT: ${CR_MAILER_PAT}
       # Release-notification settings (see docs/notifications.md).
       NOTIFY_ON_DEPLOY: ${NOTIFY_ON_DEPLOY}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}

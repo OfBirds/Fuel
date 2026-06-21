@@ -168,13 +168,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resendVerification = async () => {
     const raw = localStorage.getItem(SSO_PENDING_KEY);
     if (!raw) throw new Error('Your session expired — sign in again to resend.');
-    const { token: heldToken, sub } = JSON.parse(raw) as { token: string; sub: string };
-    const cfg = await loadRuntimeConfig();
-    if (!cfg.oidcAuthority) throw new Error('SSO is not configured.');
-    const res = await fetch(`${cfg.oidcAuthority.replace(/\/$/, '')}/v2/users/${sub}/email/resend`, {
+    const { token: heldToken } = JSON.parse(raw) as { token: string };
+    // Our backend proxies to CrimsonRaven with a role-less PAT — the user's own JWT can't call CR's
+    // API directly (the instance audience bug). The held token only authenticates us to our backend,
+    // which reads the sub from it and triggers the resend.
+    const res = await fetch('/api/auth/resend-verification', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${heldToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sendCode: {} }),
+      headers: { Authorization: `Bearer ${heldToken}` },
     });
     if (!res.ok) throw new Error(await errorMessage(res, 'Could not send the verification email.'));
   };

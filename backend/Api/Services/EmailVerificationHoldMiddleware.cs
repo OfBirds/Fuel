@@ -15,7 +15,9 @@ public class EmailVerificationHoldMiddleware(RequestDelegate next)
 {
     public async Task InvokeAsync(HttpContext context)
     {
-        if (context.User.Identity?.IsAuthenticated == true
+        // The resend-verification endpoint is the held user's escape hatch — never block it.
+        if (!context.Request.Path.StartsWithSegments("/api/auth/resend-verification")
+            && context.User.Identity?.IsAuthenticated == true
             && context.User.HasClaim(OidcUserProvisioner.HoldClaimType, OidcUserProvisioner.EmailUnverifiedHold))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
