@@ -70,7 +70,9 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, register, loginWithSSO, logout, ssoOnline, ssoConfigured, authReady } = useAuth();
+  const { login, register, loginWithSSO, logout, resendVerification, ssoOnline, ssoConfigured, authReady } = useAuth();
+  const [resending, setResending] = useState(false);
+  const [resendMsg, setResendMsg] = useState('');
   // Set by the SSO callback when the backend held this sign-in (unverified email matching an
   // existing account). While set, we must NOT auto-redirect to CrimsonRaven — its session is
   // live, so it would re-auth and 403 in an endless loop. Show the way-out form instead.
@@ -98,6 +100,17 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
     localStorage.removeItem(SSO_BLOCKED_KEY);
     setSsoBlocked(null);
     logout();
+  };
+  const handleResend = async () => {
+    setResending(true); setError(''); setResendMsg('');
+    try {
+      await resendVerification();
+      setResendMsg('Verification email sent — check your inbox, click the link, then "try again".');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not send the verification email.');
+    } finally {
+      setResending(false);
+    }
   };
 
   // CrimsonRaven's own logo (themed), pulled live from the IdP — shown on the redirect screen.
@@ -190,8 +203,12 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
           <h1>Indigo Swallow</h1>
           <p className="login-subtitle">Verify your email to finish signing in</p>
           <div className="maintenance-note">{ssoBlocked}</div>
+          {resendMsg && <div className="success-message">{resendMsg}</div>}
           {error && <div className="error-message">{error}</div>}
-          <button type="button" className="submit-button" onClick={retrySso}>
+          <button type="button" className="submit-button" onClick={handleResend} disabled={resending}>
+            {resending ? 'Sending…' : 'Resend verification email'}
+          </button>
+          <button type="button" className="submit-button" style={{ marginTop: '0.5rem' }} onClick={retrySso}>
             I've verified — try again
           </button>
           <div className="login-toggle" style={{ marginTop: '0.75rem' }}>

@@ -13,7 +13,7 @@ let authReady = true;
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
     user: null, token: null, login, register, loginWithSSO,
-    ssoOnline, ssoConfigured, authReady, logout: vi.fn(),
+    ssoOnline, ssoConfigured, authReady, logout: vi.fn(), resendVerification: vi.fn(),
   }),
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   SSO_BLOCKED_KEY: 'sso_blocked',
@@ -77,6 +77,7 @@ describe('LoginPage — CrimsonRaven-first', () => {
     render(<LoginPage onLoginSuccess={() => {}} />);
     expect(loginWithSSO).not.toHaveBeenCalled();                  // the critical bit: NO redirect loop
     expect(screen.getByText(/Verify your email to finish signing in/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Resend verification email/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Log out \/ use a different account/i })).toBeInTheDocument();
     expect(screen.queryByLabelText('Email')).toBeNull();          // confusing legacy form hidden by default
     await user.click(screen.getByRole('button', { name: /Sign in with a password instead/i }));

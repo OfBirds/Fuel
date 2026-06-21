@@ -6,6 +6,10 @@ import { getUserManager, loadRuntimeConfig } from '../lib/oidc';
  *  out instead; the value is the human message to show. Cleared on any successful session/logout. */
 export const SSO_BLOCKED_KEY = 'sso_blocked';
 
+/** Holds the still-valid IdP token + subject of a held sign-in, so the "resend verification email"
+ *  action can call CrimsonRaven's self-service ResendEmailCode with the user's OWN token (no admin role). */
+export const SSO_PENDING_KEY = 'sso_pending';
+
 interface User {
   id: string;
   email: string;
@@ -31,6 +35,8 @@ interface AuthContextType {
   loginWithSSO: () => Promise<void>;
   /** Finish the OIDC redirect (called from /auth/callback). */
   completeSsoCallback: () => Promise<void>;
+  /** Resend the verification email for a held (unverified) sign-in — CR self-service, user's own token. */
+  resendVerification: () => Promise<void>;
   logout: () => void;
 }
 
@@ -85,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setSession = (newToken: string, newUser: User) => {
     localStorage.removeItem(SSO_BLOCKED_KEY); // a real session clears any prior "verify email" hold
+    localStorage.removeItem(SSO_PENDING_KEY);
     setUser(newUser);
     setToken(newToken);
     persist(newToken, newUser);
@@ -139,6 +146,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (body?.error === 'email_unverified') {
           localStorage.removeItem('token');
           setToken(null);
+          // Keep the (still-valid) token + subject so the held screen can resend the verification
+          // email via CR self-service. sub = the IdP subject (Zitadel userId).
+          localStorage.setItem(SSO_PENDING_KEY,
+            JSON.stringify({ token: accessToken, sub: oidcUser.profile.sub }));
           localStorage.setItem(SSO_BLOCKED_KEY,
             body.message || 'Please verify your email, then sign in again.');
           throw new Error('email_unverified');
@@ -152,6 +163,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(accessToken, { id: data.userId, email: data.email, name });
   };
 
+  // Resend the email-verification mail for a held sign-in, using the user's OWN (still-valid) token
+  // against CrimsonRaven's self-service ResendEmailCode — permission "authenticated", no admin role.
+  const resendVerification = async () => {
+    const raw = localStorage.getItem(SSO_PENDING_KEY);
+    if (!raw) throw new Error('Your session expired — sign in again to resend.');
+    const { token: heldToken, sub } = JSON.parse(raw) as { token: string; sub: string };
+    const cfg = await loadRuntimeConfig();
+    if (!cfg.oidcAuthority) throw new Error('SSO is not configured.');
+    const res = await fetch(`${cfg.oidcAuthority.replace(/\/$/, '')}/v2/users/${sub}/email/resend`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${heldToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sendCode: {} }),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Could not send the verification email.'));
+  };
+
   const logout = async () => {
     const mgr = await getUserManager();
     const oidcUser = mgr ? await mgr.getUser().catch(() => null) : null;
@@ -160,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem(SSO_BLOCKED_KEY);
+    localStorage.removeItem(SSO_PENDING_KEY);
     if (mgr && oidcUser) {
       // End the CrimsonRaven session and leave the page. Crucially, do NOT setUser(null)
       // first: that remounts LoginPage, whose Raven-first effect fires signinRedirect and
@@ -179,7 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, ssoOnline, ssoConfigured, authReady, login, register, loginWithSSO, completeSsoCallback, logout }}>
+      value={{ user, token, ssoOnline, ssoConfigured, authReady, login, register, loginWithSSO, completeSsoCallback, resendVerification, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -34,7 +34,11 @@ export async function getUserManager(): Promise<UserManager | null> {
     redirect_uri: `${window.location.origin}/auth/callback`,
     post_logout_redirect_uri: window.location.origin,
     response_type: 'code',
-    scope: 'openid profile email offline_access',
+    // The reserved `…:zitadel:aud` scope puts the Zitadel API in the access token's audience, so the
+    // user's OWN token can call self-service endpoints like POST /v2/users/{sub}/email/resend
+    // (ResendEmailCode is permission "authenticated" — no manager role needed). Used by the held
+    // "resend verification email" action.
+    scope: 'openid profile email offline_access urn:zitadel:iam:org:project:id:zitadel:aud',
     // Keep the session out of the URL and renew silently using the refresh token.
     userStore: new WebStorageStateStore({ store: window.localStorage }),
     automaticSilentRenew: true,
