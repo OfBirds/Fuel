@@ -288,6 +288,9 @@ if (app.Environment.IsDevelopment())
 // fallback only handles non-/api, non-file requests.
 app.UseStaticFiles();
 app.UseAuthentication();
+// A held (unverified-email) OIDC login is authenticated but unmapped — block it with a clear 403
+// before it can reach any endpoint. No-op unless OidcUserProvisioner stamped the hold marker.
+app.UseMiddleware<EmailVerificationHoldMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 app.MapFallbackToFile("index.html").AllowAnonymous();

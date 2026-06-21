@@ -39,6 +39,12 @@ public class OidcUserProvisioner(
     IConfiguration config,
     ILogger<OidcUserProvisioner> logger) : IClaimsTransformation
 {
+    /// <summary>Marker claim stamped on a held (unverified-email) login so
+    /// <see cref="EmailVerificationHoldMiddleware"/> can turn it into a clear 403.</summary>
+    public const string HoldClaimType = "auth_hold";
+    /// <summary>Value of <see cref="HoldClaimType"/> for the unverified-email hold.</summary>
+    public const string EmailUnverifiedHold = "email_unverified";
+
     public async Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
     {
         if (principal.Identity is not ClaimsIdentity { IsAuthenticated: true } identity)
@@ -73,11 +79,13 @@ public class OidcUserProvisioner(
                 // bind this sub to a competing row — that would make every later login hit the fast
                 // ExternalSubject path and never retry the verified link, so verifying the email
                 // afterwards couldn't recover the data. Persist nothing and leave the sub un-rewritten;
-                // downstream Guid.TryParse fails → 401/403 ("verify your email"), and a later VERIFIED
                 // login self-heals into the row. Primary guard remains the IdP (verify-on-registration).
+                // Stamp a marker claim (without rewriting sub, so it still can't reach any data) that
+                // EmailVerificationHoldMiddleware turns into a clear 403 instead of an opaque failure.
                 logger.LogWarning(
                     "Unverified login (sub {Sub}) matches existing user {UserId}; holding until the email is verified",
                     sub, emailOwner.Id);
+                identity.AddClaim(new Claim(HoldClaimType, EmailUnverifiedHold));
                 return principal;
             }
 

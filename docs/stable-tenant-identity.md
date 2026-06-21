@@ -12,8 +12,10 @@ MulberryHeron repo: **`docs/adr/0012-stable-tenant-identity.md`**.
 3. **Verified** email matching an existing row → **link** (`ExternalSubject = sub`); the `User.Id`,
    and all its data, is preserved across the IdP move.
 4. **Unverified** email that *already owns a row* → **HOLD**: persist nothing, leave the `sub`
-   un-rewritten (downstream `Guid.TryParse` fails → 401/403, a "verify your email" state). A later
-   *verified* login self-heals into the row — no admin step, and an unverified address can never claim
+   un-rewritten, and stamp a marker claim. `EmailVerificationHoldMiddleware` turns it into a clear
+   **`403 {"error":"email_unverified","message":…}`** (the SPA can show a "verify your email" screen). A
+   later *verified* login carries no marker → it's let through and self-heals into the row — no admin
+   step, and an unverified address can never claim
    another person's data. (Replaced the old behaviour, which created a competing row that permanently
    shadowed the verified link, and the temporary `OIDC_LINK_ALLOW_UNVERIFIED_EMAIL` escape hatch.)
 5. Else **create** a new password-less user.

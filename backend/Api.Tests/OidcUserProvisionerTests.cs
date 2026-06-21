@@ -86,7 +86,9 @@ public class OidcUserProvisionerTests : IDisposable
         var result = await Provisioner()
             .TransformAsync(Principal("zitadel-sub-2", "alice@example.com", emailVerified: false));
 
-        Assert.Equal("zitadel-sub-2", Sub(result));   // sub NOT rewritten → downstream 401/403 (pending)
+        Assert.Equal("zitadel-sub-2", Sub(result));   // sub NOT rewritten → unmapped, can reach no data
+        Assert.True(result.HasClaim(                   // marker → EmailVerificationHoldMiddleware returns a clear 403
+            OidcUserProvisioner.HoldClaimType, OidcUserProvisioner.EmailUnverifiedHold));
         var alice = await _db.Users.FindAsync(_aliceId);
         Assert.Null(alice!.ExternalSubject);          // alice untouched — not claimed
         Assert.Equal(1, await _db.Users.CountAsync()); // and NO competing row that would lock out the link
@@ -106,6 +108,8 @@ public class OidcUserProvisionerTests : IDisposable
         var healed = await provisioner.TransformAsync(Principal("zitadel-sub-2", "alice@example.com", emailVerified: true));
 
         Assert.Equal(_aliceId.ToString(), Sub(healed));
+        Assert.False(healed.HasClaim(                 // hold cleared → middleware lets it through
+            OidcUserProvisioner.HoldClaimType, OidcUserProvisioner.EmailUnverifiedHold));
         Assert.Equal("zitadel-sub-2", (await _db.Users.FindAsync(_aliceId))!.ExternalSubject);
         Assert.Equal(1, await _db.Users.CountAsync());
     }
