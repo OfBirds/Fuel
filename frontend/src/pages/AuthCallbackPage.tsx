@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, SSO_BLOCKED_KEY } from '../context/AuthContext';
 import { useOidcLogo } from '../hooks/useOidcLogo';
 import '../styles/login.css';
 
@@ -21,6 +21,13 @@ function AuthCallbackPage() {
         await completeSsoCallback();
         navigate('/', { replace: true });
       } catch (e) {
+        // Email-unverified hold → go back to the login screen, which shows the way out
+        // (use email+password, or log out). Do NOT show an error here: that would strand
+        // the user on the callback page with no escape from the SSO redirect.
+        if (localStorage.getItem(SSO_BLOCKED_KEY)) {
+          navigate('/', { replace: true });
+          return;
+        }
         setError(e instanceof Error ? e.message : 'Sign-in failed.');
       }
     })();

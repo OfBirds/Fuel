@@ -1,6 +1,11 @@
 import { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { getUserManager, loadRuntimeConfig } from '../lib/oidc';
 
+/** Set when an SSO sign-in is held by the backend (unverified email matching an existing
+ *  account). Its presence tells LoginPage to stop auto-redirecting to the IdP and offer a way
+ *  out instead; the value is the human message to show. Cleared on any successful session/logout. */
+export const SSO_BLOCKED_KEY = 'sso_blocked';
+
 interface User {
   id: string;
   email: string;
@@ -79,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setSession = (newToken: string, newUser: User) => {
+    localStorage.removeItem(SSO_BLOCKED_KEY); // a real session clears any prior "verify email" hold
     setUser(newUser);
     setToken(newToken);
     persist(newToken, newUser);
@@ -123,7 +129,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('token', accessToken); // so apiFetch attaches it on /me
     setToken(accessToken);
     const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!res.ok) throw new Error(await errorMessage(res, 'Could not establish your session.'));
+    if (!res.ok) {
+      // Email-unverified HOLD: the IdP signed us in, but the backend won't map the session until
+      // the email is verified. We must NOT fall back into the SSO redirect — the IdP session is
+      // live, so it would silently re-auth and 403 forever (the dead loop). Flag it so LoginPage
+      // shows a way out (use email+password, or log out) instead, and drop the unusable token.
+      if (res.status === 403) {
+        const body = await res.json().catch(() => ({} as { error?: string; message?: string }));
+        if (body?.error === 'email_unverified') {
+          localStorage.removeItem('token');
+          setToken(null);
+          localStorage.setItem(SSO_BLOCKED_KEY,
+            body.message || 'Please verify your email, then sign in again.');
+          throw new Error('email_unverified');
+        }
+      }
+      throw new Error(await errorMessage(res, 'Could not establish your session.'));
+    }
     const data = await res.json();
     // CrimsonRaven gives us a real name (profile scope) — prefer the first name for the header.
     const name = oidcUser.profile.given_name || oidcUser.profile.name || undefined;
@@ -137,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // lands logged-out (AuthProvider seeds user/token from these on mount).
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem(SSO_BLOCKED_KEY);
     if (mgr && oidcUser) {
       // End the CrimsonRaven session and leave the page. Crucially, do NOT setUser(null)
       // first: that remounts LoginPage, whose Raven-first effect fires signinRedirect and

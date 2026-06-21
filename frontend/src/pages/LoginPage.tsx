@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, SSO_BLOCKED_KEY } from '../context/AuthContext';
 import { useOidcLogo } from '../hooks/useOidcLogo';
 import '../styles/login.css';
 
@@ -70,16 +70,34 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, register, loginWithSSO, ssoOnline, ssoConfigured, authReady } = useAuth();
+  const { login, register, loginWithSSO, logout, ssoOnline, ssoConfigured, authReady } = useAuth();
+  // Set by the SSO callback when the backend held this sign-in (unverified email matching an
+  // existing account). While set, we must NOT auto-redirect to CrimsonRaven — its session is
+  // live, so it would re-auth and 403 in an endless loop. Show the way-out form instead.
+  const [ssoBlocked, setSsoBlocked] = useState(() => localStorage.getItem(SSO_BLOCKED_KEY));
 
   // CrimsonRaven is the front door: when it's online, send the user straight there — no
   // choice. The legacy email/password form below is only reached when Raven is down or
-  // unconfigured (break-glass / local dev).
+  // unconfigured (break-glass / local dev), or when a sign-in is held (ssoBlocked).
   useEffect(() => {
-    if (!authReady || !ssoOnline) return;
+    if (!authReady || !ssoOnline || ssoBlocked) return;
     loginWithSSO().catch((err) =>
       setError(err instanceof Error ? err.message : 'Could not reach CrimsonRaven.'));
-  }, [authReady, ssoOnline, loginWithSSO]);
+  }, [authReady, ssoOnline, ssoBlocked, loginWithSSO]);
+
+  // Held sign-in actions: retry the IdP (after verifying the email) or fully log out of it.
+  const retrySso = () => {
+    localStorage.removeItem(SSO_BLOCKED_KEY);
+    setSsoBlocked(null);
+    setError('');
+    loginWithSSO().catch((e) =>
+      setError(e instanceof Error ? e.message : 'Could not reach CrimsonRaven.'));
+  };
+  const exitSso = () => {
+    localStorage.removeItem(SSO_BLOCKED_KEY);
+    setSsoBlocked(null);
+    logout();
+  };
 
   // CrimsonRaven's own logo (themed), pulled live from the IdP — shown on the redirect screen.
   const logoSrc = useOidcLogo();
@@ -135,8 +153,9 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   };
 
   // Until we know whether CrimsonRaven is up — or while bouncing to it — show a spinner,
-  // never the legacy form (no flash, and SSO is the only path when Raven is online).
-  if (!authReady || ssoOnline) {
+  // never the legacy form (no flash, and SSO is the only path when Raven is online). When a
+  // sign-in is held (ssoBlocked) we skip the redirect and fall through to the way-out form.
+  if (!authReady || (ssoOnline && !ssoBlocked)) {
     return (
       <div className="login-page">
         <div className="login-container">
@@ -165,12 +184,25 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
     <div className="login-page">
       <div className="login-container">
         <h1>Indigo Swallow</h1>
-        {ssoConfigured && (
+        {ssoBlocked ? (
+          <div className="maintenance-note">
+            <strong>Verify your email to finish signing in.</strong> {ssoBlocked} Or sign in below
+            with your email &amp; password to reach your data now.
+            <div className="blocked-actions" style={{ display: 'flex', gap: '0.75rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+              <button type="button" className="toggle-button" onClick={retrySso}>
+                I've verified — try again
+              </button>
+              <button type="button" className="toggle-button" onClick={exitSso}>
+                Log out of CrimsonRaven
+              </button>
+            </div>
+          </div>
+        ) : ssoConfigured ? (
           <div className="maintenance-note">
             <strong>CrimsonRaven is offline.</strong> Sign in or register with the same email to
             reach your data until it's back.
           </div>
-        )}
+        ) : null}
         <p className="login-subtitle">{SUBTITLES[view]}</p>
 
         <form onSubmit={handleSubmit} className="login-form">

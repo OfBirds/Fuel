@@ -16,6 +16,7 @@ vi.mock('../context/AuthContext', () => ({
     ssoOnline, ssoConfigured, authReady, logout: vi.fn(),
   }),
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SSO_BLOCKED_KEY: 'sso_blocked',
 }));
 
 import LoginPage from './LoginPage';
@@ -45,7 +46,7 @@ describe('LoginPage password requirements', () => {
 });
 
 describe('LoginPage — CrimsonRaven-first', () => {
-  beforeEach(() => { vi.clearAllMocks(); ssoOnline = false; ssoConfigured = false; authReady = true; window.location.hash = ''; });
+  beforeEach(() => { vi.clearAllMocks(); ssoOnline = false; ssoConfigured = false; authReady = true; window.location.hash = ''; localStorage.clear(); });
 
   it('redirects straight to CrimsonRaven when it is online — no form, no choice', async () => {
     ssoOnline = true;
@@ -67,5 +68,15 @@ describe('LoginPage — CrimsonRaven-first', () => {
     render(<LoginPage onLoginSuccess={() => {}} />);
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
     expect(screen.queryByText(/CrimsonRaven is offline/i)).toBeNull();
+  });
+
+  it('held sign-in (unverified email) breaks the loop: shows the way-out form, no auto-redirect', () => {
+    ssoConfigured = true; ssoOnline = true;                       // Raven up — would normally auto-redirect
+    localStorage.setItem('sso_blocked', 'Please verify your email, then sign in again.');
+    render(<LoginPage onLoginSuccess={() => {}} />);
+    expect(loginWithSSO).not.toHaveBeenCalled();                  // the critical bit: NO redirect loop
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();   // legacy email+password reachable
+    expect(screen.getByText(/Verify your email to finish signing in/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Log out of CrimsonRaven/i })).toBeInTheDocument();
   });
 });
