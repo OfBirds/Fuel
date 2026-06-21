@@ -115,7 +115,7 @@ function AppContent() {
           <NavLink to="/settings" className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>Settings</NavLink>
         </nav>
         <div className="app-header-right">
-          <span className="app-header-email">{user.email}</span>
+          <span className="app-header-email">{user.name || user.email}</span>
           <ThemeToggle />
           <button className="logout-button" onClick={logout}>Logout</button>
         </div>

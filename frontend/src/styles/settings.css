@@ -1,13 +1,15 @@
+/* Match the other pages (.day-view / .catalogue-page): centered, same max-width, and
+   NO own padding — the outer .app-main already pads. The old `padding: 1.5rem 1rem 3rem`
+   double-padded the sides (looked narrower) and pushed the title down (header sat lower). */
 .settings-page {
-  max-width: 640px;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 1.5rem 1rem 3rem;
 }
 
 .settings-title {
   font-family: 'Merriweather', serif;
   color: var(--primary);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .settings-section {

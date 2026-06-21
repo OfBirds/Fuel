@@ -4,6 +4,9 @@ import { getUserManager, loadRuntimeConfig } from '../lib/oidc';
 interface User {
   id: string;
   email: string;
+  /** Display name from CrimsonRaven (OIDC `given_name`/`name`). Absent on the local
+   *  email/password path — the header falls back to email when this is empty. */
+  name?: string;
 }
 
 interface AuthContextType {
@@ -122,7 +125,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) throw new Error(await errorMessage(res, 'Could not establish your session.'));
     const data = await res.json();
-    setSession(accessToken, { id: data.userId, email: data.email });
+    // CrimsonRaven gives us a real name (profile scope) — prefer the first name for the header.
+    const name = oidcUser.profile.given_name || oidcUser.profile.name || undefined;
+    setSession(accessToken, { id: data.userId, email: data.email, name });
   };
 
   const logout = async () => {

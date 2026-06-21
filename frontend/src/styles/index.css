@@ -43,6 +43,9 @@ body {
   color: var(--text);
   background-color: var(--bg);
   line-height: 1.6;
+  /* Belt-and-suspenders: never let an oversized header (large font scale) make the
+     whole viewport pan sideways on mobile. The header itself wraps; this guards the rest. */
+  overflow-x: hidden;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
