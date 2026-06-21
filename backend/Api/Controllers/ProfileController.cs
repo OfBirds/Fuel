@@ -141,6 +141,7 @@ public class ProfileController(AppDbContext db, IProfileService profileService) 
         Guid userId,
         [FromQuery] DateTime? intakeAtUtc,
         [FromQuery] string? mealType,
+        [FromQuery] int tzOffsetMinutes,
         CancellationToken ct)
     {
         var user = await db.Users.FindAsync([userId], ct);
@@ -156,7 +157,7 @@ public class ProfileController(AppDbContext db, IProfileService profileService) 
             return Ok(response);
 
         // ── Meal-order check (independent of pause config) ──
-        var (orderMsg, orderAt) = GetMealOrderWarning(userId, mealType, intakeAtUtc.Value);
+        var (orderMsg, orderAt) = GetMealOrderWarning(userId, mealType, intakeAtUtc.Value, tzOffsetMinutes);
         response.MealOrderWarning = orderMsg;
         response.MealOrderConflictAtUtc = orderAt;
 
@@ -203,15 +204,19 @@ public class ProfileController(AppDbContext db, IProfileService profileService) 
     // Returns the warning text (no time — the client appends the conflict time in the
     // viewer's local zone) and the conflicting entry's UTC instant.
     private (string? Message, DateTime? At) GetMealOrderWarning(
-        Guid userId, string? mealType, DateTime intakeAtUtc)
+        Guid userId, string? mealType, DateTime intakeAtUtc, int tzOffsetMinutes)
     {
         if (string.IsNullOrWhiteSpace(mealType)
             || string.Equals(mealType.Trim(), "Snack", StringComparison.OrdinalIgnoreCase))
             return (null, null);
 
         var mt = mealType.Trim();
-        // Use the intake date in local terms — same calendar day.
-        var dayStart = intakeAtUtc.Date;
+        // Group by the user's LOCAL calendar day, not the UTC date. Entries are stored in UTC and the
+        // client passes its offset, so a late dinner and the next morning's breakfast — which can fall
+        // on the same UTC date — aren't wrongly grouped across the user's midnight (the cause of the
+        // "Breakfast is after yesterday's Dinner" false warning).
+        var offset = TimeSpan.FromMinutes(tzOffsetMinutes);
+        var dayStart = (intakeAtUtc + offset).Date - offset;
         var dayEnd = dayStart.AddDays(1);
 
         var sameDay = db.FoodEntries

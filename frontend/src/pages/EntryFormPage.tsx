@@ -290,7 +290,11 @@ function EntryFormPage() {
     const timer = setTimeout(async () => {
       try {
         const dt = new Date(intakeAtUtc).toISOString();
-        const res = await apiFetch(`/api/user/${user.id}/meal-pause-check?intakeAtUtc=${encodeURIComponent(dt)}&mealType=${encodeURIComponent(mealType)}`);
+        // Minutes to add to UTC to get the user's local wall-clock (e.g. +120 for UTC+2), so the
+        // server scopes the meal-order check to the user's LOCAL day — otherwise a late dinner and the
+        // next morning's breakfast can share a UTC date and trip a false "breakfast after dinner".
+        const tzOffsetMinutes = -new Date(intakeAtUtc).getTimezoneOffset();
+        const res = await apiFetch(`/api/user/${user.id}/meal-pause-check?intakeAtUtc=${encodeURIComponent(dt)}&mealType=${encodeURIComponent(mealType)}&tzOffsetMinutes=${tzOffsetMinutes}`);
         if (res.ok) {
           const check = await res.json();
           if (check.isWithinPause) {

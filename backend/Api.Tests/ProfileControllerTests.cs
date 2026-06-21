@@ -175,7 +175,7 @@ public class ProfileControllerTests : IDisposable
         await _db.SaveChangesAsync();
 
         var result = await _controller.CheckMealPause(
-            _userId, now, "Dinner", CancellationToken.None);
+            _userId, now, "Dinner", 0, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
@@ -201,7 +201,7 @@ public class ProfileControllerTests : IDisposable
         await _db.SaveChangesAsync();
 
         var result = await _controller.CheckMealPause(
-            _userId, now, "Dinner", CancellationToken.None);
+            _userId, now, "Dinner", 0, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
@@ -212,7 +212,7 @@ public class ProfileControllerTests : IDisposable
     public async Task MealPauseCheck_NoPauseConfigured_ReturnsNoWarning()
     {
         var result = await _controller.CheckMealPause(
-            _userId, DateTime.UtcNow, "Lunch", CancellationToken.None);
+            _userId, DateTime.UtcNow, "Lunch", 0, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
@@ -237,7 +237,7 @@ public class ProfileControllerTests : IDisposable
         await _db.SaveChangesAsync();
 
         var result = await _controller.CheckMealPause(
-            _userId, now, "Lunch", CancellationToken.None);
+            _userId, now, "Lunch", 0, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
@@ -264,7 +264,7 @@ public class ProfileControllerTests : IDisposable
 
         // Second Lunch, 30 min later — should NOT warn (same meal, second helping)
         var result = await _controller.CheckMealPause(
-            _userId, now, "Lunch", CancellationToken.None);
+            _userId, now, "Lunch", 0, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
@@ -290,7 +290,7 @@ public class ProfileControllerTests : IDisposable
 
         // Dinner 1h after Lunch → within pause → returns "Pizza"
         var result = await _controller.CheckMealPause(
-            _userId, now, "Dinner", CancellationToken.None);
+            _userId, now, "Dinner", 0, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
@@ -319,7 +319,7 @@ public class ProfileControllerTests : IDisposable
         // Snack logged 30 min after Dinner — non-snack scope means snacks are
         // never checked, so no warning even though it's within the pause window.
         var result = await _controller.CheckMealPause(
-            _userId, now, "Snack", CancellationToken.None);
+            _userId, now, "Snack", 0, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
@@ -343,7 +343,55 @@ public class ProfileControllerTests : IDisposable
         // Logging Dinner at 10:00 — before Lunch — should trigger order warning.
         var dinnerTime = now.Date.AddHours(10);
         var result = await _controller.CheckMealPause(
-            _userId, dinnerTime, "Dinner", CancellationToken.None);
+            _userId, dinnerTime, "Dinner", 0, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
+        Assert.NotNull(check.MealOrderWarning);
+        Assert.Contains("Dinner is the last meal", check.MealOrderWarning);
+    }
+
+    [Fact]
+    public async Task MealPauseCheck_MealOrder_UsesLocalDay_NotUtcDay()
+    {
+        // User at UTC-5. Yesterday's Dinner (local 2026-06-20 19:00) = 2026-06-21 00:00 UTC, which
+        // shares a UTC date with today's Breakfast (local 2026-06-21 08:00 = 13:00 UTC). The order
+        // check must scope to the LOCAL day, so yesterday's dinner is NOT counted against breakfast.
+        const int tz = -300; // UTC-5
+        _db.FoodEntries.Add(new FoodEntry
+        {
+            UserId = _userId, FoodName = "Steak", MealType = MealType.Dinner,
+            Quantity = 200, UoM = "g", Calories = 500,
+            IntakeAtUtc = new DateTime(2026, 6, 21, 0, 0, 0, DateTimeKind.Utc),
+        });
+        await _db.SaveChangesAsync();
+
+        var breakfastUtc = new DateTime(2026, 6, 21, 13, 0, 0, DateTimeKind.Utc);
+        var result = await _controller.CheckMealPause(
+            _userId, breakfastUtc, "Breakfast", tz, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
+        Assert.Null(check.MealOrderWarning); // different local day → no false warning
+    }
+
+    [Fact]
+    public async Task MealPauseCheck_MealOrder_SameLocalDay_WithOffset_StillWarns()
+    {
+        // Control for the fix above: within ONE local day the order check still fires. UTC-5; both on
+        // local 2026-06-21 — Lunch local 13:00 (18:00 UTC), logging Dinner local 10:00 (15:00 UTC).
+        const int tz = -300;
+        _db.FoodEntries.Add(new FoodEntry
+        {
+            UserId = _userId, FoodName = "Salad", MealType = MealType.Lunch,
+            Quantity = 100, UoM = "g", Calories = 200,
+            IntakeAtUtc = new DateTime(2026, 6, 21, 18, 0, 0, DateTimeKind.Utc),
+        });
+        await _db.SaveChangesAsync();
+
+        var dinnerUtc = new DateTime(2026, 6, 21, 15, 0, 0, DateTimeKind.Utc); // local 10:00, before Lunch
+        var result = await _controller.CheckMealPause(
+            _userId, dinnerUtc, "Dinner", tz, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var check = Assert.IsType<MealPauseCheckResponse>(ok.Value);
