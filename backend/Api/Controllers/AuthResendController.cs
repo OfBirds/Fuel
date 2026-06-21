@@ -5,13 +5,15 @@ using Microsoft.IdentityModel.JsonWebTokens;
 namespace Api.Controllers;
 
 /// <summary>
-/// Resends the CrimsonRaven email-verification mail for a <b>held</b> sign-in (unverified email).
-/// The held principal still carries the IdP <c>sub</c> (numeric Zitadel user id — not yet rewritten to
-/// a GUID), which is who we resend for. We call CrimsonRaven's self-service
-/// <c>POST /v2/users/{sub}/email/resend</c> with a <b>role-less</b> machine PAT (<c>CR_MAILER_PAT</c>):
-/// the user's own JWT can't be used (CrimsonRaven's API rejects it over the instance's http://…:443
-/// audience), but an opaque PAT validates directly. The PAT has no privileges — <c>ResendEmailCode</c> is
-/// permission "authenticated" — so it can only trigger verification mail. See the CrimsonRaven repo's
+/// Sends a fresh CrimsonRaven email-verification mail for a <b>held</b> sign-in (unverified email).
+/// The held principal still carries the IdP <c>sub</c> (numeric Zitadel user id — not yet rewritten to a
+/// GUID), which is who we send for. We call CrimsonRaven's <c>SendEmailCode</c>
+/// (<c>POST /v2/users/{sub}/email/send</c>) — which <b>generates and sends</b> a new code. (We do NOT use
+/// <c>ResendEmailCode</c>: it only re-sends an <i>existing</i> code and fails with "Code is empty" once it
+/// has expired.) We use the <c>app-mailer</c> machine PAT (<c>CR_MAILER_PAT</c>) rather than the user's own
+/// token: CrimsonRaven's API rejects a user JWT over the instance's <c>http://…:443</c> audience, but an
+/// opaque PAT validates directly. Sending a code for <i>another</i> user requires <c>user.write</c>, so the
+/// app-mailer holds <c>IAM_USER_MANAGER</c>. See the CrimsonRaven repo's
 /// <c>docs/app-email-verification-resend.md</c>. Exempted from EmailVerificationHoldMiddleware so a held
 /// user can reach it.
 /// </summary>
@@ -39,7 +41,7 @@ public class AuthResendController(
         }
 
         var client = httpClientFactory.CreateClient();
-        using var req = new HttpRequestMessage(HttpMethod.Post, $"{authority.TrimEnd('/')}/v2/users/{sub}/email/resend");
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{authority.TrimEnd('/')}/v2/users/{sub}/email/send");
         req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {pat}");
         req.Content = new StringContent("{\"sendCode\":{}}", Encoding.UTF8, "application/json");
         using var resp = await client.SendAsync(req, ct);
@@ -47,7 +49,7 @@ public class AuthResendController(
         if (!resp.IsSuccessStatusCode)
         {
             var body = await resp.Content.ReadAsStringAsync(ct);
-            logger.LogWarning("ResendEmailCode for {Sub} failed: {Status} {Body}", sub, (int)resp.StatusCode, body);
+            logger.LogWarning("SendEmailCode for {Sub} failed: {Status} {Body}", sub, (int)resp.StatusCode, body);
             return StatusCode(StatusCodes.Status502BadGateway,
                 new { error = "send_failed", message = "Could not send the verification email. Please try again." });
         }
