@@ -75,6 +75,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   // existing account). While set, we must NOT auto-redirect to CrimsonRaven — its session is
   // live, so it would re-auth and 403 in an endless loop. Show the way-out form instead.
   const [ssoBlocked, setSsoBlocked] = useState(() => localStorage.getItem(SSO_BLOCKED_KEY));
+  const [showLegacy, setShowLegacy] = useState(false); // held screen: reveal the password form on demand
 
   // CrimsonRaven is the front door: when it's online, send the user straight there — no
   // choice. The legacy email/password form below is only reached when Raven is down or
@@ -179,23 +180,44 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
     );
   }
 
-  // Legacy email/password — reached only when CrimsonRaven is down or not configured here.
+  // Held sign-in (unverified email): a focused "verify your email" screen — NOT the full legacy
+  // login, which confuses CrimsonRaven users (a Log-out button next to a password form). The
+  // email/password path is tucked behind a disclosure for the migration users who actually have one.
+  if (ssoBlocked && !showLegacy) {
+    return (
+      <div className="login-page">
+        <div className="login-container">
+          <h1>Indigo Swallow</h1>
+          <p className="login-subtitle">Verify your email to finish signing in</p>
+          <div className="maintenance-note">{ssoBlocked}</div>
+          {error && <div className="error-message">{error}</div>}
+          <button type="button" className="submit-button" onClick={retrySso}>
+            I've verified — try again
+          </button>
+          <div className="login-toggle" style={{ marginTop: '0.75rem' }}>
+            <button type="button" className="toggle-button" onClick={exitSso}>
+              Log out / use a different account
+            </button>
+            <button type="button" className="toggle-button" onClick={() => { setError(''); setShowLegacy(true); }}>
+              Sign in with a password instead
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Legacy email/password — reached when CrimsonRaven is down/unconfigured, or when a held user
+  // explicitly chose the password path above.
   return (
     <div className="login-page">
       <div className="login-container">
         <h1>Indigo Swallow</h1>
         {ssoBlocked ? (
           <div className="maintenance-note">
-            <strong>Verify your email to finish signing in.</strong> {ssoBlocked} Or sign in below
-            with your email &amp; password to reach your data now.
-            <div className="blocked-actions" style={{ display: 'flex', gap: '0.75rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
-              <button type="button" className="toggle-button" onClick={retrySso}>
-                I've verified — try again
-              </button>
-              <button type="button" className="toggle-button" onClick={exitSso}>
-                Log out of CrimsonRaven
-              </button>
-            </div>
+            Signing in with your email &amp; password reaches your data now. To use CrimsonRaven,
+            verify your email first, then{' '}
+            <button type="button" className="toggle-button" onClick={retrySso}>try again</button>.
           </div>
         ) : ssoConfigured ? (
           <div className="maintenance-note">

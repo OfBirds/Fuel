@@ -70,13 +70,16 @@ describe('LoginPage — CrimsonRaven-first', () => {
     expect(screen.queryByText(/CrimsonRaven is offline/i)).toBeNull();
   });
 
-  it('held sign-in (unverified email) breaks the loop: shows the way-out form, no auto-redirect', () => {
+  it('held sign-in (unverified email): focused verify screen, no loop, password tucked away', async () => {
+    const user = userEvent.setup();
     ssoConfigured = true; ssoOnline = true;                       // Raven up — would normally auto-redirect
     localStorage.setItem('sso_blocked', 'Please verify your email, then sign in again.');
     render(<LoginPage onLoginSuccess={() => {}} />);
     expect(loginWithSSO).not.toHaveBeenCalled();                  // the critical bit: NO redirect loop
-    expect(screen.getByLabelText('Email')).toBeInTheDocument();   // legacy email+password reachable
     expect(screen.getByText(/Verify your email to finish signing in/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Log out of CrimsonRaven/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Log out \/ use a different account/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Email')).toBeNull();          // confusing legacy form hidden by default
+    await user.click(screen.getByRole('button', { name: /Sign in with a password instead/i }));
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();   // revealed only on demand
   });
 });
