@@ -286,7 +286,16 @@ if (app.Environment.IsDevelopment())
 // Serve the bundled SPA (built frontend copied into wwwroot) and fall back to
 // index.html for client-side routes. API controllers are matched first; the
 // fallback only handles non-/api, non-file requests.
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    // The service worker is a stable URL with mutable content — never let it be stale-cached (by
+    // browsers or any proxy), or installed PWAs freeze on an old build. Always revalidate.
+    OnPrepareResponse = ctx =>
+    {
+        if (ctx.File.Name.Equals("sw.js", StringComparison.OrdinalIgnoreCase))
+            ctx.Context.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+    }
+});
 app.UseAuthentication();
 // A held (unverified-email) OIDC login is authenticated but unmapped — block it with a clear 403
 // before it can reach any endpoint. No-op unless OidcUserProvisioner stamped the hold marker.
