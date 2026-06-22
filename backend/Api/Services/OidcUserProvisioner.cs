@@ -44,16 +44,30 @@ public class OidcUserProvisioner(
     public const string HoldClaimType = "auth_hold";
     /// <summary>Value of <see cref="HoldClaimType"/> for the unverified-email hold.</summary>
     public const string EmailUnverifiedHold = "email_unverified";
+    /// <summary>Marker stamped once a principal has been mapped (or held), so the possibly-multiple
+    /// IClaimsTransformation invocations per request stay idempotent.</summary>
+    private const string ProvisionedClaim = "cr_provisioned";
 
     public async Task<ClaimsPrincipal> TransformAsync(ClaimsPrincipal principal)
     {
         if (principal.Identity is not ClaimsIdentity { IsAuthenticated: true } identity)
             return principal;
 
+        // Already mapped/held this principal — nothing to do (idempotent across re-invocations).
+        if (identity.HasClaim(ProvisionedClaim, "1"))
+            return principal;
+
         var sub = identity.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-        // A GUID sub means a Fuel-issued token or an already-mapped principal — nothing to do.
-        // (Zitadel subjects are numeric snowflake ids, never GUIDs.)
-        if (string.IsNullOrEmpty(sub) || Guid.TryParse(sub, out _))
+        if (string.IsNullOrEmpty(sub))
+            return principal;
+
+        // Only CrimsonRaven (OIDC) principals get mapped; locally-issued app JWTs (a different issuer,
+        // sub already = User.Id) are left alone. Discriminate by ISSUER, not sub shape — Keycloak subjects
+        // are GUIDs, so the old `Guid.TryParse(sub)` test no longer tells external from local apart.
+        var authority = config["OIDC_AUTHORITY"]?.TrimEnd('/');
+        var iss = identity.FindFirst("iss")?.Value?.TrimEnd('/');
+        if (string.IsNullOrEmpty(authority)
+            || !string.Equals(iss, authority, StringComparison.OrdinalIgnoreCase))
             return principal;
 
         var user = await db.Users.FirstOrDefaultAsync(u => u.ExternalSubject == sub);
@@ -86,6 +100,7 @@ public class OidcUserProvisioner(
                     "Unverified login (sub {Sub}) matches existing user {UserId}; holding until the email is verified",
                     sub, emailOwner.Id);
                 identity.AddClaim(new Claim(HoldClaimType, EmailUnverifiedHold));
+                identity.AddClaim(new Claim(ProvisionedClaim, "1"));
                 return principal;
             }
 
@@ -107,6 +122,7 @@ public class OidcUserProvisioner(
         foreach (var c in identity.FindAll(JwtRegisteredClaimNames.Sub).ToList())
             identity.RemoveClaim(c);
         identity.AddClaim(new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()));
+        identity.AddClaim(new Claim(ProvisionedClaim, "1"));
         return principal;
     }
 
@@ -132,7 +148,9 @@ public class OidcUserProvisioner(
         try
         {
             var client = httpClientFactory.CreateClient();
-            using var req = new HttpRequestMessage(HttpMethod.Get, $"{authority.TrimEnd('/')}/oidc/v1/userinfo");
+            // CrimsonRaven is Keycloak — userinfo lives under the realm. (Keycloak usually carries
+            // email/email_verified in the token, so this fallback rarely fires.)
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{authority.TrimEnd('/')}/protocol/openid-connect/userinfo");
             req.Headers.TryAddWithoutValidation("Authorization", raw);
             using var resp = await client.SendAsync(req);
             if (!resp.IsSuccessStatusCode) return (null, false);

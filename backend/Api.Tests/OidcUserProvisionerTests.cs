@@ -42,7 +42,10 @@ public class OidcUserProvisionerTests : IDisposable
     // deps) is never exercised — empty stubs suffice. No HttpContext → userinfo no-ops.
     private OidcUserProvisioner Provisioner() => new(
         _db, new StubHttpClientFactory(), new HttpContextAccessor(),
-        new ConfigurationBuilder().Build(), NullLogger<OidcUserProvisioner>.Instance);
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["OIDC_AUTHORITY"] = Issuer })
+            .Build(),
+        NullLogger<OidcUserProvisioner>.Instance);
 
     private sealed class StubHttpClientFactory : IHttpClientFactory
     {
