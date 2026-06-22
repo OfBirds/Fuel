@@ -1,5 +1,12 @@
 # Auth — CrimsonRaven SSO (dual-auth, data-preserving)
 
+> **Update (2026-06-22): CrimsonRaven is Keycloak now.** It hosts the themed login + **native
+> email-verification, resend and forgot-password**, so the Zitadel-era app-side workarounds were
+> ripped out: the unverified-email **hold middleware**, the **resend** endpoint + `app-mailer` PAT,
+> and the IdP **logo-scrape** are gone, and `OidcUserProvisioner` now **links by email
+> unconditionally** (Keycloak's `verifyEmail` is the sole gate). See the CrimsonRaven repo's
+> `docs/keycloak-migration.md`. The dual-auth / break-glass design below still holds.
+
 > Status: **live** (dual-auth, CrimsonRaven-first). The app accepts **both** CrimsonRaven
 > (OIDC) tokens **and** its own legacy HMAC JWT. The login screen is **CrimsonRaven-first**:
 > when the IdP is reachable the user is sent straight to it; the email/password form is only
