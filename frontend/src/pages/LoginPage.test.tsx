@@ -13,10 +13,9 @@ let authReady = true;
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
     user: null, token: null, login, register, loginWithSSO,
-    ssoOnline, ssoConfigured, authReady, logout: vi.fn(), resendVerification: vi.fn(),
+    ssoOnline, ssoConfigured, authReady, logout: vi.fn(),
   }),
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  SSO_BLOCKED_KEY: 'sso_blocked',
 }));
 
 import LoginPage from './LoginPage';
@@ -68,19 +67,5 @@ describe('LoginPage — CrimsonRaven-first', () => {
     render(<LoginPage onLoginSuccess={() => {}} />);
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
     expect(screen.queryByText(/CrimsonRaven is offline/i)).toBeNull();
-  });
-
-  it('held sign-in (unverified email): focused verify screen, no loop, password tucked away', async () => {
-    const user = userEvent.setup();
-    ssoConfigured = true; ssoOnline = true;                       // Raven up — would normally auto-redirect
-    localStorage.setItem('sso_blocked', 'Please verify your email, then sign in again.');
-    render(<LoginPage onLoginSuccess={() => {}} />);
-    expect(loginWithSSO).not.toHaveBeenCalled();                  // the critical bit: NO redirect loop
-    expect(screen.getByText(/Verify your email to finish signing in/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Resend verification email/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Log out \/ use a different account/i })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Email')).toBeNull();          // confusing legacy form hidden by default
-    await user.click(screen.getByRole('button', { name: /Sign in with a password instead/i }));
-    expect(screen.getByLabelText('Email')).toBeInTheDocument();   // revealed only on demand
   });
 });

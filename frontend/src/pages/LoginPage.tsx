@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAuth, SSO_BLOCKED_KEY } from '../context/AuthContext';
-import { useOidcLogo } from '../hooks/useOidcLogo';
+import { useAuth } from '../context/AuthContext';
 import '../styles/login.css';
 
 function EyeIcon({ visible }: { visible: boolean }) {
@@ -70,51 +69,16 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, register, loginWithSSO, logout, resendVerification, ssoOnline, ssoConfigured, authReady } = useAuth();
-  const [resending, setResending] = useState(false);
-  const [resendMsg, setResendMsg] = useState('');
-  // Set by the SSO callback when the backend held this sign-in (unverified email matching an
-  // existing account). While set, we must NOT auto-redirect to CrimsonRaven — its session is
-  // live, so it would re-auth and 403 in an endless loop. Show the way-out form instead.
-  const [ssoBlocked, setSsoBlocked] = useState(() => localStorage.getItem(SSO_BLOCKED_KEY));
-  const [showLegacy, setShowLegacy] = useState(false); // held screen: reveal the password form on demand
+  const { login, register, loginWithSSO, ssoOnline, ssoConfigured, authReady } = useAuth();
 
-  // CrimsonRaven is the front door: when it's online, send the user straight there — no
-  // choice. The legacy email/password form below is only reached when Raven is down or
-  // unconfigured (break-glass / local dev), or when a sign-in is held (ssoBlocked).
+  // CrimsonRaven (Keycloak) is the front door: when it's online, send the user straight there — it
+  // hosts the themed login, registration, verify-email and forgot-password pages. The legacy
+  // email/password form below is only reached when Raven is down or unconfigured (break-glass / dev).
   useEffect(() => {
-    if (!authReady || !ssoOnline || ssoBlocked) return;
+    if (!authReady || !ssoOnline) return;
     loginWithSSO().catch((err) =>
       setError(err instanceof Error ? err.message : 'Could not reach CrimsonRaven.'));
-  }, [authReady, ssoOnline, ssoBlocked, loginWithSSO]);
-
-  // Held sign-in actions: retry the IdP (after verifying the email) or fully log out of it.
-  const retrySso = () => {
-    localStorage.removeItem(SSO_BLOCKED_KEY);
-    setSsoBlocked(null);
-    setError('');
-    loginWithSSO().catch((e) =>
-      setError(e instanceof Error ? e.message : 'Could not reach CrimsonRaven.'));
-  };
-  const exitSso = () => {
-    localStorage.removeItem(SSO_BLOCKED_KEY);
-    setSsoBlocked(null);
-    logout();
-  };
-  const handleResend = async () => {
-    setResending(true); setError(''); setResendMsg('');
-    try {
-      await resendVerification();
-      setResendMsg('Verification email sent — check your inbox, click the link, then "try again".');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send the verification email.');
-    } finally {
-      setResending(false);
-    }
-  };
-
-  // CrimsonRaven's own logo (themed), pulled live from the IdP — shown on the redirect screen.
-  const logoSrc = useOidcLogo();
+  }, [authReady, ssoOnline, loginWithSSO]);
 
   const resetForm = () => {
     setError('');
@@ -167,9 +131,8 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   };
 
   // Until we know whether CrimsonRaven is up — or while bouncing to it — show a spinner,
-  // never the legacy form (no flash, and SSO is the only path when Raven is online). When a
-  // sign-in is held (ssoBlocked) we skip the redirect and fall through to the way-out form.
-  if (!authReady || (ssoOnline && !ssoBlocked)) {
+  // never the legacy form (no flash, and SSO is the only path when Raven is online).
+  if (!authReady || ssoOnline) {
     return (
       <div className="login-page">
         <div className="login-container">
@@ -183,65 +146,24 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
               </button>
             </>
           ) : (
-            <>
-              {ssoOnline && logoSrc && <img src={logoSrc} alt="CrimsonRaven" className="redirect-logo" />}
-              <p className="login-subtitle">{ssoOnline ? 'Redirecting to CrimsonRaven…' : 'Loading…'}</p>
-            </>
+            <p className="login-subtitle">{ssoOnline ? 'Redirecting to CrimsonRaven…' : 'Loading…'}</p>
           )}
         </div>
       </div>
     );
   }
 
-  // Held sign-in (unverified email): a focused "verify your email" screen — NOT the full legacy
-  // login, which confuses CrimsonRaven users (a Log-out button next to a password form). The
-  // email/password path is tucked behind a disclosure for the migration users who actually have one.
-  if (ssoBlocked && !showLegacy) {
-    return (
-      <div className="login-page">
-        <div className="login-container">
-          <h1>Indigo Swallow</h1>
-          <p className="login-subtitle">Verify your email to finish signing in</p>
-          <div className="maintenance-note">{ssoBlocked}</div>
-          {resendMsg && <div className="success-message">{resendMsg}</div>}
-          {error && <div className="error-message">{error}</div>}
-          <button type="button" className="submit-button" onClick={handleResend} disabled={resending}>
-            {resending ? 'Sending…' : 'Resend verification email'}
-          </button>
-          <button type="button" className="submit-button" style={{ marginTop: '0.5rem' }} onClick={retrySso}>
-            I've verified — try again
-          </button>
-          <div className="login-toggle" style={{ marginTop: '0.75rem' }}>
-            <button type="button" className="toggle-button" onClick={exitSso}>
-              Log out / use a different account
-            </button>
-            <button type="button" className="toggle-button" onClick={() => { setError(''); setShowLegacy(true); }}>
-              Sign in with a password instead
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Legacy email/password — reached when CrimsonRaven is down/unconfigured, or when a held user
-  // explicitly chose the password path above.
+  // Legacy email/password — reached only when CrimsonRaven is down/unconfigured (break-glass).
   return (
     <div className="login-page">
       <div className="login-container">
         <h1>Indigo Swallow</h1>
-        {ssoBlocked ? (
-          <div className="maintenance-note">
-            Signing in with your email &amp; password reaches your data now. To use CrimsonRaven,
-            verify your email first, then{' '}
-            <button type="button" className="toggle-button" onClick={retrySso}>try again</button>.
-          </div>
-        ) : ssoConfigured ? (
+        {ssoConfigured && (
           <div className="maintenance-note">
             <strong>CrimsonRaven is offline.</strong> Sign in or register with the same email to
             reach your data until it's back.
           </div>
-        ) : null}
+        )}
         <p className="login-subtitle">{SUBTITLES[view]}</p>
 
         <form onSubmit={handleSubmit} className="login-form">

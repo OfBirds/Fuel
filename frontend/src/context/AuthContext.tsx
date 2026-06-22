@@ -1,15 +1,6 @@
 import { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { getUserManager, loadRuntimeConfig } from '../lib/oidc';
 
-/** Set when an SSO sign-in is held by the backend (unverified email matching an existing
- *  account). Its presence tells LoginPage to stop auto-redirecting to the IdP and offer a way
- *  out instead; the value is the human message to show. Cleared on any successful session/logout. */
-export const SSO_BLOCKED_KEY = 'sso_blocked';
-
-/** Holds the still-valid IdP token + subject of a held sign-in, so the "resend verification email"
- *  action can call CrimsonRaven's self-service ResendEmailCode with the user's OWN token (no admin role). */
-export const SSO_PENDING_KEY = 'sso_pending';
-
 interface User {
   id: string;
   email: string;
@@ -35,8 +26,6 @@ interface AuthContextType {
   loginWithSSO: () => Promise<void>;
   /** Finish the OIDC redirect (called from /auth/callback). */
   completeSsoCallback: () => Promise<void>;
-  /** Resend the verification email for a held (unverified) sign-in — CR self-service, user's own token. */
-  resendVerification: () => Promise<void>;
   logout: () => void;
 }
 
@@ -90,8 +79,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setSession = (newToken: string, newUser: User) => {
-    localStorage.removeItem(SSO_BLOCKED_KEY); // a real session clears any prior "verify email" hold
-    localStorage.removeItem(SSO_PENDING_KEY);
     setUser(newUser);
     setToken(newToken);
     persist(newToken, newUser);
@@ -127,7 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Completes the code exchange, then asks the backend who we are: the OIDC token's `sub`
   // is the IdP subject, but the backend maps it to (and returns) our Fuel User.Id, which
-  // is what every api/user/{id} route needs.
+  // is what every api/user/{id} route needs. CrimsonRaven (Keycloak) has already gated email
+  // verification before issuing the token, so there's no app-side hold to handle.
   const completeSsoCallback = async () => {
     const mgr = await getUserManager();
     if (!mgr) throw new Error('SSO is not configured.');
@@ -137,46 +125,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(accessToken);
     const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) {
-      // Email-unverified HOLD: the IdP signed us in, but the backend won't map the session until
-      // the email is verified. We must NOT fall back into the SSO redirect — the IdP session is
-      // live, so it would silently re-auth and 403 forever (the dead loop). Flag it so LoginPage
-      // shows a way out (use email+password, or log out) instead, and drop the unusable token.
-      if (res.status === 403) {
-        const body = await res.json().catch(() => ({} as { error?: string; message?: string }));
-        if (body?.error === 'email_unverified') {
-          localStorage.removeItem('token');
-          setToken(null);
-          // Keep the (still-valid) token + subject so the held screen can resend the verification
-          // email via CR self-service. sub = the IdP subject (Zitadel userId).
-          localStorage.setItem(SSO_PENDING_KEY,
-            JSON.stringify({ token: accessToken, sub: oidcUser.profile.sub }));
-          localStorage.setItem(SSO_BLOCKED_KEY,
-            body.message || 'Please verify your email, then sign in again.');
-          throw new Error('email_unverified');
-        }
-      }
+      localStorage.removeItem('token');
+      setToken(null);
       throw new Error(await errorMessage(res, 'Could not establish your session.'));
     }
     const data = await res.json();
     // CrimsonRaven gives us a real name (profile scope) — prefer the first name for the header.
     const name = oidcUser.profile.given_name || oidcUser.profile.name || undefined;
     setSession(accessToken, { id: data.userId, email: data.email, name });
-  };
-
-  // Resend the email-verification mail for a held sign-in, using the user's OWN (still-valid) token
-  // against CrimsonRaven's self-service ResendEmailCode — permission "authenticated", no admin role.
-  const resendVerification = async () => {
-    const raw = localStorage.getItem(SSO_PENDING_KEY);
-    if (!raw) throw new Error('Your session expired — sign in again to resend.');
-    const { token: heldToken } = JSON.parse(raw) as { token: string };
-    // Our backend proxies to CrimsonRaven with a role-less PAT — the user's own JWT can't call CR's
-    // API directly (the instance audience bug). The held token only authenticates us to our backend,
-    // which reads the sub from it and triggers the resend.
-    const res = await fetch('/api/auth/resend-verification', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${heldToken}` },
-    });
-    if (!res.ok) throw new Error(await errorMessage(res, 'Could not send the verification email.'));
   };
 
   const logout = async () => {
@@ -186,8 +142,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // lands logged-out (AuthProvider seeds user/token from these on mount).
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    localStorage.removeItem(SSO_BLOCKED_KEY);
-    localStorage.removeItem(SSO_PENDING_KEY);
     if (mgr && oidcUser) {
       // End the CrimsonRaven session and leave the page. Crucially, do NOT setUser(null)
       // first: that remounts LoginPage, whose Raven-first effect fires signinRedirect and
@@ -207,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, ssoOnline, ssoConfigured, authReady, login, register, loginWithSSO, completeSsoCallback, resendVerification, logout }}>
+      value={{ user, token, ssoOnline, ssoConfigured, authReady, login, register, loginWithSSO, completeSsoCallback, logout }}>
       {children}
     </AuthContext.Provider>
   );
