@@ -1,5 +1,7 @@
 ### What's new in 1.8
 
+We've moved Indigo Swallow to a new, more secure sign-in system. Here's what changed — and the one quick thing you'll need to do next time you sign in.
+
 - **We've upgraded sign-in and account security to the latest standards.** Indigo Swallow now
   uses a rebuilt, more secure login — with email verification, password reset and "resend
   confirmation" all built in.
