@@ -12,13 +12,47 @@ export interface RuntimeConfig {
   oidcClientId?: string;
 }
 
-let configPromise: Promise<RuntimeConfig> | null = null;
+let cachedConfig: RuntimeConfig | null = null;
+let inflight: Promise<RuntimeConfig> | null = null;
 
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Load the SPA's runtime config (OIDC authority + live reachability) from the backend.
+ *
+ * This gates whether a user is sent to CrimsonRaven or dropped onto the legacy break-glass
+ * form, so it must be resilient: a single flaky request on a poor mobile link must NOT strand
+ * a CR-only account on a password form it can't use. So we
+ *   - retry a few times with backoff before giving up;
+ *   - cache only a *successful* answer — a failure is never memoised, so the next call
+ *     (a reload, an AuthContext re-check, regained connectivity) tries again from scratch;
+ *   - never throw — on total failure we resolve to a transient, UN-cached `oidcEnabled:false`.
+ */
 export function loadRuntimeConfig(): Promise<RuntimeConfig> {
-  configPromise ??= fetch('/api/config')
-    .then((r) => (r.ok ? r.json() : { oidcEnabled: false }))
-    .catch(() => ({ oidcEnabled: false }) as RuntimeConfig);
-  return configPromise;
+  if (cachedConfig) return Promise.resolve(cachedConfig);
+  inflight ??= (async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const r = await fetch('/api/config', { cache: 'no-store' });
+        if (!r.ok) throw new Error(`/api/config responded ${r.status}`);
+        cachedConfig = (await r.json()) as RuntimeConfig;
+        return cachedConfig;
+      } catch {
+        if (attempt < 2) await delay(300 * 2 ** attempt); // 300ms, then 600ms
+      }
+    }
+    return { oidcEnabled: false } as RuntimeConfig; // transient — deliberately not cached
+  })().finally(() => {
+    inflight = null;
+  });
+  return inflight;
+}
+
+/** Drop any cached config and re-load it — used to re-check CrimsonRaven after the network
+ *  recovers (the cached value may be a stale "offline"/"disabled" from a flaky moment). */
+export function refreshRuntimeConfig(): Promise<RuntimeConfig> {
+  cachedConfig = null;
+  return loadRuntimeConfig();
 }
 
 let manager: UserManager | null = null;

@@ -1,5 +1,5 @@
 import { createContext, useState, useContext, useEffect, ReactNode } from 'react';
-import { getUserManager, loadRuntimeConfig } from '../lib/oidc';
+import { getUserManager, loadRuntimeConfig, refreshRuntimeConfig, type RuntimeConfig } from '../lib/oidc';
 
 interface User {
   id: string;
@@ -62,20 +62,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // legacy form is just the normal login. Also keep the stored bearer fresh on OIDC renewal.
   useEffect(() => {
     let alive = true;
-    (async () => {
-      const cfg = await loadRuntimeConfig();
+
+    const apply = (cfg: RuntimeConfig) => {
       if (!alive) return;
       setSsoConfigured(!!cfg.oidcEnabled);
       setSsoOnline(!!(cfg.oidcEnabled && cfg.oidcOnline));
       setAuthReady(true);
-      if (!cfg.oidcEnabled) return;
+    };
+
+    (async () => {
+      const cfg = await loadRuntimeConfig();
+      apply(cfg);
+      if (!alive || !cfg.oidcEnabled) return;
       const mgr = await getUserManager();
       mgr?.events.addUserLoaded((u) => {
         setToken(u.access_token);
         localStorage.setItem('token', u.access_token);
       });
     })();
-    return () => { alive = false; };
+
+    // If the first load couldn't resolve CrimsonRaven (e.g. a flaky mobile link dropped
+    // /api/config, leaving a CR-only user stranded on the break-glass form), re-check when
+    // the browser regains connectivity or the tab is refocused — recovering without a manual
+    // reload. Skip once signed in (token present) to avoid needless refetches.
+    const recheck = () => {
+      if (localStorage.getItem('token')) return;
+      refreshRuntimeConfig().then(apply).catch(() => {});
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') recheck(); };
+    window.addEventListener('online', recheck);
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      alive = false;
+      window.removeEventListener('online', recheck);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   const setSession = (newToken: string, newUser: User) => {
