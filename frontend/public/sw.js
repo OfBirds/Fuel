@@ -2,7 +2,11 @@
 // Strategy: never touch /api (always network, so auth'd data is never cached/stale);
 // network-first for navigations so a new deploy is picked up immediately, falling back to
 // the cached shell when offline; cache-first for hashed static assets (immutable, fast).
-const CACHE = 'indigo-swallow-v1';
+// Cache name is stamped with the build version (APP_VERSION) at build time — see the
+// stamp-service-worker plugin in vite.config.ts. A new version ⇒ a new cache name ⇒ the
+// activate handler below deletes the previous cache, so old hashed assets from prior deploys
+// don't accumulate (the bug behind "fuel alone had ~150 cached items").
+const CACHE = 'indigo-swallow-__APP_VERSION__';
 const SHELL = ['/', '/index.html', '/manifest.json', '/indigo-swallow.svg'];
 
 self.addEventListener('install', (event) => {
