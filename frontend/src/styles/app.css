@@ -16,32 +16,128 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* Primary navigation — rendered as clearly-clickable tabs. */
-.app-nav {
+/* Far-left home affordance — a house icon that jumps to the Diary (home) view. */
+.app-header-left {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
 }
 
-.nav-link {
-  padding: 0.45rem 0.95rem;
+.home-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
   border-radius: 8px;
-  font-size: 0.95rem;
-  font-weight: 600;
   color: var(--text-light);
-  text-decoration: none;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
-.nav-link:hover {
+.home-link:hover {
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 8%, transparent);
   opacity: 1;
 }
 
-.nav-link.active {
+.home-link.active {
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+/* The user's name is the navigation menu trigger. */
+.user-menu {
+  position: relative;
+}
+
+.user-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 16rem;
+  background: none;
+  border: 2px solid var(--border);
+  color: var(--text);
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.user-menu-trigger:hover,
+.user-menu-trigger[aria-expanded='true'] {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.user-menu-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu-caret {
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.user-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 50;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.user-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0.5rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.user-menu-item:hover {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  color: var(--primary);
+  opacity: 1;
+}
+
+.user-menu-item.active {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+}
+
+.user-menu-divider {
+  height: 1px;
+  margin: 0.35rem 0.2rem;
+  background: var(--border);
+}
+
+.user-menu-logout {
+  color: var(--error);
+}
+
+.user-menu-logout:hover {
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+  color: var(--error);
 }
 
 .app-header-right {
@@ -129,30 +225,6 @@
   color: var(--primary);
 }
 
-.app-header-email {
-  font-size: 0.9rem;
-  color: var(--text-light);
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.logout-button {
-  background: none;
-  border: 2px solid var(--primary);
-  color: var(--primary);
-  padding: 0.4rem 1rem;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.logout-button:hover {
-  background: var(--primary);
-  color: white;
-}
-
 .app-main {
   flex: 1;
   padding: 2rem;
@@ -165,16 +237,11 @@
   .app-main {
     padding: 1rem;
   }
-  .app-nav {
-    flex-wrap: wrap;
-    gap: 0.15rem;
-  }
-  .nav-link {
-    padding: 0.35rem 0.7rem;
-    font-size: 0.85rem;
-  }
   .app-header {
     padding: 0.5rem 1rem;
     gap: 0.5rem;
+  }
+  .user-menu-trigger {
+    max-width: 9rem;
   }
 }

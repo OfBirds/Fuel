@@ -1,17 +1,17 @@
-### What's new in 1.8
+### What's new in 1.9
 
-We've moved Indigo Swallow to a new, more secure sign-in system. Here's what changed — and the one quick thing you'll need to do next time you sign in.
+This release is about getting around faster and seeing the bigger picture — a tidier top bar, and a brand-new Stats view.
 
-- **We've upgraded sign-in and account security to the latest standards.** Indigo Swallow now
-  uses a rebuilt, more secure login — with email verification, password reset and "resend
-  confirmation" all built in.
+- **Your name is now your menu.** The top bar is cleaner: a **Diary** (home) icon on the far
+  left jumps you straight back to today, and everything else — Catalogue, Weight, the new
+  Stats page, Settings and sign-out — now lives in a tidy dropdown under your name on the
+  right. (What used to be called "Home" is now **Diary**.)
 
-- **Please sign in again — and register with the same email.** Because the login system was
-  upgraded, your previous password won't carry over. On the sign-in screen choose **Register**
-  and use the **same email address** you used before. Signing up with the same email
-  automatically reconnects your food log, weigh-ins and profile — none of your data is lost.
+- **A brand-new Stats page shows the bigger picture.** Switch between **Week**, **Month** and
+  **Year** to see your registered calories as a bar chart — by day, by week or by month — and
+  step back through earlier periods to spot your trends.
 
-- **Email verification is now required.** You'll confirm your email before your first sign-in.
-  If the message doesn't arrive, use the **Resend** link right on the verification screen.
-
-- **Forgot your password?** You can now reset it yourself, straight from the login page.
+- **See how you're tracking against your goal.** Above each chart, your **daily average** and
+  your **highest** and **lowest** days each show as a percentage of your goal, using the same
+  progress ring as your daily view. And your goal is drawn right across the bars as a dashed
+  line, so it's easy to see which days came in over or under target.

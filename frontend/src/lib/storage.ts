@@ -65,3 +65,8 @@ export const saveGroupedUnits = (on: boolean) => write('groupedUnits', on);
 // --- Onboarding completed flag (set on skip or completion) ---
 export const getOnboardingCompleted = () => read<boolean>('onboardingCompleted') ?? false;
 export const saveOnboardingCompleted = () => write('onboardingCompleted', true);
+
+// --- Stats range (week / month / year) — remembers the last range picked on the Stats page ---
+export type StatsRange = 'week' | 'month' | 'year';
+export const getStatsRange = (): StatsRange => read<StatsRange>('statsRange') ?? 'week';
+export const saveStatsRange = (range: StatsRange) => write('statsRange', range);
