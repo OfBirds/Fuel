@@ -1,17 +1,24 @@
-### What's new in 1.9
+### What's new in 1.10
 
-This release is about getting around faster and seeing the bigger picture — a tidier top bar, and a brand-new Stats view.
+This release tidies up how you add meals and gives the AI estimator a clearer, three-way layout.
 
-- **Your name is now your menu.** The top bar is cleaner: a **Diary** (home) icon on the far
-  left jumps you straight back to today, and everything else — Catalogue, Weight, the new
-  Stats page, Settings and sign-out — now lives in a tidy dropdown under your name on the
-  right. (What used to be called "Home" is now **Diary**.)
+- **Adding a meal by hand is cleaner.** The "can't find it?" link now reads **"Add it to the
+  catalogue,"** and the AI option has moved to a clear **"✨ Use AI Instead"** button at the
+  bottom of the screen. The food **sort order** no longer clutters the add screen — it now lives
+  in **Settings → Preferences** as **"Sort foods by."**
 
-- **A brand-new Stats page shows the bigger picture.** Switch between **Week**, **Month** and
-  **Year** to see your registered calories as a bar chart — by day, by week or by month — and
-  step back through earlier periods to spot your trends.
+- **The AI estimator now has three tabs: Text, Photo and Barcode.** Barcode scanning has its own
+  tab instead of hiding under Photo, so each way of logging — describe it, snap it, or scan it —
+  is one tap away.
 
-- **See how you're tracking against your goal.** Above each chart, your **daily average** and
-  your **highest** and **lowest** days each show as a percentage of your goal, using the same
-  progress ring as your daily view. And your goal is drawn right across the bars as a dashed
-  line, so it's easy to see which days came in over or under target.
+- **Confirm with a tap.** Estimating, capturing a photo and looking up a barcode are now a single,
+  bold **checkmark** button — and **Estimate** stays disabled until you've actually typed
+  something.
+
+- **Snapping a photo is simpler.** Photo and Barcode each have one **"Upload"** button: on a phone
+  it opens the camera, on a computer it asks to use your webcam. The in-app camera preview is
+  smaller now, so the confirm button stays in view.
+
+- **Settings, reorganised.** The sections are in a more natural order — Daily Goal first, then
+  Profile and Metabolism — with a new **Preferences** section for "Sort foods by." New-version
+  emails are now on by default.
