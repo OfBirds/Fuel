@@ -24,21 +24,6 @@
   position: relative;
 }
 
-.food-search-toolbar {
-  margin-bottom: 0.35rem;
-}
-
-.search-sort {
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 0.85rem;
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  min-width: 105px;
-}
-
 .search-result-ponder {
   font-size: 0.75rem;
   color: var(--text-light);
@@ -119,6 +104,21 @@
 .ai-describe-link:hover {
   background: var(--primary);
   color: white;
+}
+
+/* Bottom-right CTA wrapper for the "Use AI Instead" button. */
+.ai-entry-cta-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+/* Inline variant of the dashed-indigo AI button: sized to content, not full-width. */
+.ai-entry-cta-row .ai-describe-link {
+  display: inline-block;
+  width: auto;
+  margin: 0;
+  padding: 0.55rem 1.1rem;
 }
 
 .inline-define-link {

@@ -287,6 +287,33 @@
   opacity: 0.6;
 }
 
+/* Shared icon-only confirm button (camera capture, barcode look-up, AI estimate). Same
+   indigo palette as .save-btn but square and text-free — see components/CheckButton.tsx. */
+.check-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.625rem;
+  height: 2.625rem;
+  padding: 0;            /* override the global button padding, which would shrink the glyph */
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.check-btn:hover:not(:disabled) { opacity: 0.9; }
+.check-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+/* In a .ai-photo-actions row (camera capture), beat the generic `> *` padding/flex so the
+   checkmark stays a fixed square with a full-size glyph rather than a stretched, padded box. */
+.ai-photo-actions > .check-btn {
+  flex: 0 0 auto;
+  width: 2.625rem;
+  padding: 0;
+}
+
 /* ── Photo capture ── */
 .ai-photo-actions {
   display: flex;
@@ -317,6 +344,16 @@
   cursor: pointer;
 }
 
+/* A lone "Upload" control keeps the right-hand button's *previous* size — half the row, the
+   width it had as one of the two original flex:1 buttons — rather than stretching full-width. */
+.ai-photo-actions.single {
+  justify-content: flex-end;
+}
+.ai-photo-actions.single > * {
+  flex: 0 0 auto;
+  width: calc(50% - 0.3rem);
+}
+
 /* Upload labels need their text vertically centred like the sibling buttons.
    The base classes (cancel-btn / bc-btn-outline) have equal specificity to
    .ai-photo-actions > * so the padding winner is a coin flip.  This compound
@@ -344,7 +381,9 @@
 .ai-camera-preview,
 .ai-photo-img {
   width: 100%;
-  max-height: 60vh;
+  /* ~70% of the old 60vh — keeps the in-app camera's confirm (✓) and Cancel on-screen
+     without scrolling, which was pushing them out of view on phones. */
+  max-height: 42vh;
   object-fit: contain;
   border-radius: 8px;
   background: #000;

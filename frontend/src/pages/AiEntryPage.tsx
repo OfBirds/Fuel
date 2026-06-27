@@ -8,11 +8,14 @@ import { loadCatalogueByName, type CatalogueFood } from '../lib/foods';
 import { useShowMacros } from '../hooks/useShowMacros';
 import { UnitSelect } from '../components/UnitSelect';
 import { NumberInput } from '../components/NumberInput';
+import { CheckButton } from '../components/CheckButton';
 import '../styles/entryform.css';
 import '../styles/aientry.css';
 
 const MEAL_OPTIONS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 const LOW_CONFIDENCE = 0.5;
+
+type AiMode = 'text' | 'photo' | 'barcode';
 
 interface ApiRow {
   name: string;
@@ -98,7 +101,7 @@ function AiEntryPage() {
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const [supportsText, setSupportsText] = useState(false);
   const [supportsImages, setSupportsImages] = useState(false);
-  const [mode, setMode] = useState<'text' | 'photo'>('text');
+  const [mode, setMode] = useState<AiMode>('text');
   const [description, setDescription] = useState('');
   const [rows, setRows] = useState<Row[] | null>(null);
   // Snapshot of the AI's suggestion as returned, so manual edits can be undone back to it
@@ -114,6 +117,9 @@ function AiEntryPage() {
   const [imageBlob, setImageBlob] = useState<Blob | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
+  // Camera couldn't open on a secure origin (no device / permission denied) → drop back to the
+  // file input so the user is never left without a way to add a photo.
+  const [cameraFailed, setCameraFailed] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -122,6 +128,7 @@ function AiEntryPage() {
   // so it stays a dedicated path; a hit becomes a matched review row.
   const [barcodeEnabled, setBarcodeEnabled] = useState(false);
   const [barcodeCameraOn, setBarcodeCameraOn] = useState(false);
+  const [barcodeCameraFailed, setBarcodeCameraFailed] = useState(false);
   const [barcodeCode, setBarcodeCode] = useState('');
   const [barcodeBusy, setBarcodeBusy] = useState(false);
   const [barcodeMsg, setBarcodeMsg] = useState<string | null>(null);
@@ -165,8 +172,8 @@ function AiEntryPage() {
       setSupportsText(sText);
       setSupportsImages(sImg);
       setBarcodeEnabled(bcOn);
-      // No text input configured but photo/barcode is → start on the Photo tab.
-      if (!sText && (sImg || bcOn)) setMode('photo');
+      // Start on the first enabled modality (text → photo → barcode).
+      setMode(sText ? 'text' : sImg ? 'photo' : bcOn ? 'barcode' : 'text');
     })();
     return () => { alive = false; };
   }, []);
@@ -226,8 +233,9 @@ function AiEntryPage() {
       streamRef.current = stream;
       setCameraOn(true);
     } catch {
-      // Permission denied / no camera → the upload fallback always works.
-      setError('Camera unavailable — choose or take a photo with the file picker below.');
+      // Permission denied / no camera → reveal the file input so they can still upload/snap.
+      setCameraFailed(true);
+      setError('Camera unavailable — use Upload to choose or take a photo instead.');
     }
   };
 
@@ -336,7 +344,10 @@ function AiEntryPage() {
       const result = await reader.decodeOnceFromVideoElement(video);
       if (result) await lookupBarcode(result.getText());
     } catch {
-      // Denied / cancelled / no barcode → upload or manual entry still work.
+      // If the stream never opened, the camera itself is unavailable (denied / no device) →
+      // silently drop to the upload fallback (which works fine — no message needed). A later
+      // decode failure leaves the stream set, so we don't flip the fallback for "no barcode".
+      if (!barcodeStreamRef.current) setBarcodeCameraFailed(true);
     } finally {
       barcodeStreamRef.current?.getTracks().forEach((t) => t.stop());
       barcodeStreamRef.current = null;
@@ -367,9 +378,10 @@ function AiEntryPage() {
     }
   };
 
-  const switchMode = (m: 'text' | 'photo') => {
+  const switchMode = (m: AiMode) => {
     if (m === mode) return;
-    if (m === 'text') { stopCamera(); stopBarcodeScan(); }
+    if (m !== 'photo') stopCamera();
+    if (m !== 'barcode') stopBarcodeScan();
     setMode(m);
     setError(null);
   };
@@ -528,22 +540,35 @@ function AiEntryPage() {
         <>
           {error && <p className="form-error" role="alert">{error}</p>}
 
-          {supportsText && (supportsImages || barcodeEnabled) && (
+          {[supportsText, supportsImages, barcodeEnabled].filter(Boolean).length > 1 && (
             <div className="ai-mode-toggle" role="tablist" aria-label="Input method">
-              <button
-                role="tab" type="button"
-                aria-selected={mode === 'text'}
-                className={mode === 'text' ? 'active' : ''}
-                onClick={() => switchMode('text')}
-                disabled={pending}
-              >Describe</button>
-              <button
-                role="tab" type="button"
-                aria-selected={mode === 'photo'}
-                className={mode === 'photo' ? 'active' : ''}
-                onClick={() => switchMode('photo')}
-                disabled={pending}
-              >Photo</button>
+              {supportsText && (
+                <button
+                  role="tab" type="button"
+                  aria-selected={mode === 'text'}
+                  className={mode === 'text' ? 'active' : ''}
+                  onClick={() => switchMode('text')}
+                  disabled={pending}
+                >Text</button>
+              )}
+              {supportsImages && (
+                <button
+                  role="tab" type="button"
+                  aria-selected={mode === 'photo'}
+                  className={mode === 'photo' ? 'active' : ''}
+                  onClick={() => switchMode('photo')}
+                  disabled={pending}
+                >Photo</button>
+              )}
+              {barcodeEnabled && (
+                <button
+                  role="tab" type="button"
+                  aria-selected={mode === 'barcode'}
+                  className={mode === 'barcode' ? 'active' : ''}
+                  onClick={() => switchMode('barcode')}
+                  disabled={pending}
+                >Barcode</button>
+              )}
             </div>
           )}
 
@@ -563,86 +588,91 @@ function AiEntryPage() {
                 disabled={pending}
               />
             </div>
-          ) : (
+          ) : mode === 'photo' ? (
             <div className="form-section ai-photo">
-              {supportsImages && (
-                <>
-                  <label>Snap or upload a photo of your meal</label>
+              <label>Snap or upload a photo of your meal</label>
 
-                  {cameraOn ? (
-                    <div className="ai-camera">
-                      <video ref={videoRef} autoPlay playsInline muted className="ai-camera-preview" />
-                      <div className="ai-photo-actions">
-                        <button type="button" className="save-btn" onClick={capturePhoto}>Capture</button>
-                        <button type="button" className="cancel-btn" onClick={stopCamera}>Cancel</button>
-                      </div>
-                    </div>
-                  ) : imageUrl ? (
-                    <div className="ai-photo-preview">
-                      <img src={imageUrl} alt="Meal to estimate" className="ai-photo-img" />
-                      <button type="button" className="cancel-btn" onClick={clearImage} disabled={pending}>Retake / remove</button>
-                    </div>
-                  ) : (
-                    <div className="ai-photo-actions">
-                      <button type="button" className="save-btn" onClick={startCamera}>Use camera</button>
-                      <label className="cancel-btn ai-upload-btn">
-                        Upload a file
-                        <input type="file" accept="image/*" capture="environment" onChange={onFile} hidden aria-label="Upload a meal photo" />
-                      </label>
-                    </div>
-                  )}
-
-                  <p className="ai-photo-hint">Your photo is sent for estimation and never stored — it stays in this browser until you save or leave.</p>
-                </>
-              )}
-
-              {barcodeEnabled && (
-                <div className="ai-barcode">
-                  {supportsImages && <div className="ai-barcode-sep"><span>or</span></div>}
-                  <label className="ai-barcode-label">Snap or upload a photo of a barcode (EAN/UPC)</label>
-
-                  {barcodeCameraOn ? (
-                    <div className="ai-barcode-camera">
-                      <video ref={barcodeVideoRef} autoPlay playsInline muted className="ai-camera-preview" />
-                      <p className="ai-barcode-hint">Hold the barcode steady in the frame…</p>
-                      <div className="ai-photo-actions">
-                        <button type="button" className="bc-btn-outline" onClick={stopBarcodeScan}>Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="ai-photo-actions">
-                      <button type="button" className="bc-btn" onClick={startBarcodeScan} disabled={pending || barcodeBusy}>
-                        Use camera
-                      </button>
-                      <label className="bc-btn-outline ai-upload-btn">
-                        Upload a file
-                        <input type="file" accept="image/*" capture="environment" onChange={onBarcodeFile} hidden aria-label="Upload a barcode photo" />
-                      </label>
-                    </div>
-                  )}
-
-                  <details className="ai-barcode-typed">
-                    <summary>Or type the digits</summary>
-                    <div className="ai-barcode-manual">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="Barcode digits (8–14)"
-                        value={barcodeCode}
-                        onChange={(e) => setBarcodeCode(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') lookupBarcode(barcodeCode); }}
-                        disabled={barcodeBusy}
-                      />
-                      <button type="button" className="bc-btn" onClick={() => lookupBarcode(barcodeCode)} disabled={barcodeBusy || !barcodeCode.trim()}>
-                        {barcodeBusy ? 'Looking…' : 'Look up'}
-                      </button>
-                    </div>
-                  </details>
-
-                  {barcodeBusy && !barcodeCameraOn && <p className="ai-barcode-hint">Reading barcode…</p>}
-                  {barcodeMsg && <p className="ai-barcode-msg" role="alert">{barcodeMsg}</p>}
+              {cameraOn ? (
+                <div className="ai-camera">
+                  <video ref={videoRef} autoPlay playsInline muted className="ai-camera-preview" />
+                  <div className="ai-photo-actions">
+                    <CheckButton label="Capture photo" onClick={capturePhoto} />
+                    <button type="button" className="cancel-btn" onClick={stopCamera}>Cancel</button>
+                  </div>
+                </div>
+              ) : imageUrl ? (
+                <div className="ai-photo-preview">
+                  <img src={imageUrl} alt="Meal to estimate" className="ai-photo-img" />
+                  <button type="button" className="cancel-btn" onClick={clearImage} disabled={pending}>Retake / remove</button>
+                </div>
+              ) : secureCamera() && !cameraFailed ? (
+                /* Secure origin (HTTPS / localhost): open the live camera — this is what shows
+                   the device-permission prompt on a computer and the rear camera on a phone. */
+                <div className="ai-photo-actions single">
+                  <button type="button" className="save-btn ai-upload-btn" onClick={startCamera}>Upload</button>
+                </div>
+              ) : (
+                /* Non-secure origin (e.g. LAN http): getUserMedia is blocked, so fall back to the
+                   native file input — which still surfaces the camera on phones via capture. */
+                <div className="ai-photo-actions single">
+                  <label className="save-btn ai-upload-btn">
+                    Upload
+                    <input type="file" accept="image/*" capture="environment" onChange={onFile} hidden aria-label="Upload a meal photo" />
+                  </label>
                 </div>
               )}
+
+              <p className="ai-photo-hint">Your photo is sent for estimation and never stored — it stays in this browser until you save or leave.</p>
+            </div>
+          ) : (
+            <div className="form-section ai-barcode">
+              <label className="ai-barcode-label">Snap or upload a photo of a barcode (EAN/UPC)</label>
+
+              {barcodeCameraOn ? (
+                <div className="ai-barcode-camera">
+                  <video ref={barcodeVideoRef} autoPlay playsInline muted className="ai-camera-preview" />
+                  <p className="ai-barcode-hint">Hold the barcode steady in the frame…</p>
+                  <div className="ai-photo-actions">
+                    <button type="button" className="bc-btn-outline" onClick={stopBarcodeScan}>Cancel</button>
+                  </div>
+                </div>
+              ) : secureCamera() && !barcodeCameraFailed ? (
+                /* Secure origin: live barcode scan (camera permission prompt on a computer,
+                   rear camera on a phone). */
+                <div className="ai-photo-actions single">
+                  <button type="button" className="bc-btn" onClick={startBarcodeScan} disabled={pending || barcodeBusy}>
+                    Upload
+                  </button>
+                </div>
+              ) : (
+                /* Non-secure origin: upload/snap a barcode photo (camera on phones via capture),
+                   decoded locally — getUserMedia is blocked here. */
+                <div className="ai-photo-actions single">
+                  <label className="bc-btn ai-upload-btn">
+                    Upload
+                    <input type="file" accept="image/*" capture="environment" onChange={onBarcodeFile} hidden aria-label="Upload a barcode photo" />
+                  </label>
+                </div>
+              )}
+
+              <details className="ai-barcode-typed">
+                <summary>Or type the digits</summary>
+                <div className="ai-barcode-manual">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Barcode digits (8–14)"
+                    value={barcodeCode}
+                    onChange={(e) => setBarcodeCode(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') lookupBarcode(barcodeCode); }}
+                    disabled={barcodeBusy}
+                  />
+                  <CheckButton label="Look up barcode" busy={barcodeBusy} onClick={() => lookupBarcode(barcodeCode)} disabled={barcodeBusy || !barcodeCode.trim()} />
+                </div>
+              </details>
+
+              {barcodeBusy && !barcodeCameraOn && <p className="ai-barcode-hint">Reading barcode…</p>}
+              {barcodeMsg && <p className="ai-barcode-msg" role="alert">{barcodeMsg}</p>}
             </div>
           )}
 
@@ -654,9 +684,11 @@ function AiEntryPage() {
             </div>
           ) : (mode === 'text' || (mode === 'photo' && supportsImages)) && !cameraOn && (
             <div className="ai-estimate-row">
-              <button className="save-btn ai-estimate-btn" onClick={onEstimate} disabled={mode === 'photo' && !imageBlob}>
-                {rows ? 'Re-estimate' : 'Estimate'}
-              </button>
+              <CheckButton
+                label={rows ? 'Re-estimate' : 'Estimate'}
+                onClick={onEstimate}
+                disabled={mode === 'photo' ? !imageBlob : !description.trim()}
+              />
             </div>
           )}
 

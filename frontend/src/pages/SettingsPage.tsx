@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { getGroupedUnits, saveGroupedUnits, saveShowMacros } from '../lib/storage';
+import {
+  getGroupedUnits, saveGroupedUnits, saveShowMacros,
+  getFoodSortMode, saveFoodSortMode, FOOD_SORT_LABELS, type FoodSortMode,
+} from '../lib/storage';
 import '../styles/settings.css';
 
 interface Prefs {
@@ -48,6 +51,7 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [groupedUnits, setGroupedUnits] = useState(getGroupedUnits());
+  const [foodSortMode, setFoodSortModeState] = useState(getFoodSortMode());
 
   // Draft states for debounced profile fields
   const [hDraft, setHDraft] = useState('');
@@ -216,22 +220,6 @@ function SettingsPage() {
         <p className="settings-muted">Loading your settings…</p>
       ) : (
         <>
-          {/* Notifications */}
-          <Section title="Notifications">
-            <label className="settings-row" title="Get an email when a new version of Indigo Swallow is released.">
-              <input
-                type="checkbox"
-                checked={prefs?.notifyReleases ?? false}
-                disabled={saving || !prefs}
-                onChange={(e) => prefs && updatePrefs({ ...prefs, notifyReleases: e.target.checked })}
-              />
-              <span className="settings-row-label">
-                Email me about new versions
-                <span className="settings-row-help">A short note when Indigo Swallow is updated. Nothing else — and no data leaves the app.</span>
-              </span>
-            </label>
-          </Section>
-
           {/* Daily Goal */}
           <Section title="Daily Goal">
             <label className="settings-row">
@@ -314,6 +302,25 @@ function SettingsPage() {
             </div>
           </Section>
 
+          {/* Metabolism */}
+          <Section title="Metabolism">
+            {metaLoading ? (
+              <p className="settings-muted">Calculating…</p>
+            ) : metabolism ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                <ReadOnlyStat label="BMR" value={`${metabolism.bmr} kcal/day`} />
+                <ReadOnlyStat label="TDEE" value={`${metabolism.tdee} kcal/day`} />
+                <ReadOnlyStat label="BMI" value={String(metabolism.bmi)} />
+                <ReadOnlyStat label="Activity" value={metabolism.activityLevel} />
+                {metabolism.idealWeightMin != null && (
+                  <ReadOnlyStat label="Ideal weight" value={`${metabolism.idealWeightMin}–${metabolism.idealWeightMax} kg`} />
+                )}
+              </div>
+            ) : (
+              <p className="settings-muted">Add a weigh-in and complete your profile to see metabolism stats.</p>
+            )}
+          </Section>
+
           {/* Display */}
           <Section title="Display">
             <label className="settings-row">
@@ -335,6 +342,26 @@ function SettingsPage() {
                 <span className="settings-row-help">Offer the full metric / imperial / other unit list when defining a food. Off shows just g, ml, and piece.</span>
               </span>
             </label>
+          </Section>
+
+          {/* Preferences */}
+          <Section title="Preferences">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <SettingsField label="Sort foods by">
+                <select
+                  value={foodSortMode}
+                  onChange={(e) => {
+                    const m = e.target.value as FoodSortMode;
+                    setFoodSortModeState(m);
+                    saveFoodSortMode(m);
+                  }}
+                >
+                  {(Object.keys(FOOD_SORT_LABELS) as FoodSortMode[]).map((m) => (
+                    <option key={m} value={m}>{FOOD_SORT_LABELS[m]}</option>
+                  ))}
+                </select>
+              </SettingsField>
+            </div>
           </Section>
 
           {/* Meal Pause */}
@@ -359,23 +386,20 @@ function SettingsPage() {
             </span>
           </Section>
 
-          {/* Metabolism */}
-          <Section title="Metabolism">
-            {metaLoading ? (
-              <p className="settings-muted">Calculating…</p>
-            ) : metabolism ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                <ReadOnlyStat label="BMR" value={`${metabolism.bmr} kcal/day`} />
-                <ReadOnlyStat label="TDEE" value={`${metabolism.tdee} kcal/day`} />
-                <ReadOnlyStat label="BMI" value={String(metabolism.bmi)} />
-                <ReadOnlyStat label="Activity" value={metabolism.activityLevel} />
-                {metabolism.idealWeightMin != null && (
-                  <ReadOnlyStat label="Ideal weight" value={`${metabolism.idealWeightMin}–${metabolism.idealWeightMax} kg`} />
-                )}
-              </div>
-            ) : (
-              <p className="settings-muted">Add a weigh-in and complete your profile to see metabolism stats.</p>
-            )}
+          {/* Notifications */}
+          <Section title="Notifications">
+            <label className="settings-row" title="Get an email when a new version of Indigo Swallow is released.">
+              <input
+                type="checkbox"
+                checked={prefs?.notifyReleases ?? true}
+                disabled={saving || !prefs}
+                onChange={(e) => prefs && updatePrefs({ ...prefs, notifyReleases: e.target.checked })}
+              />
+              <span className="settings-row-label">
+                Email me about new versions
+                <span className="settings-row-help">A short note when Indigo Swallow is updated. Nothing else — and no data leaves the app.</span>
+              </span>
+            </label>
           </Section>
         </>
       )}

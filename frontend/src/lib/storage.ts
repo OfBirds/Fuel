@@ -62,6 +62,18 @@ export const saveShowMacros = (on: boolean) => write('showMacros', on);
 export const getGroupedUnits = () => read<boolean>('groupedUnits') ?? true;
 export const saveGroupedUnits = (on: boolean) => write('groupedUnits', on);
 
+// --- Food sort order (default order of the catalogue search while logging) ---
+// Pure UI preference (no server round-trip), set in Settings and read by the entry form.
+export type FoodSortMode = 'priority' | 'alphabetical' | 'most-used' | 'recent';
+export const FOOD_SORT_LABELS: Record<FoodSortMode, string> = {
+  priority: 'Priority',
+  alphabetical: 'A–Z',
+  'most-used': 'Most-used',
+  recent: 'Recent',
+};
+export const getFoodSortMode = (): FoodSortMode => read<FoodSortMode>('foodSortMode') ?? 'priority';
+export const saveFoodSortMode = (mode: FoodSortMode) => write('foodSortMode', mode);
+
 // --- Onboarding completed flag (set on skip or completion) ---
 export const getOnboardingCompleted = () => read<boolean>('onboardingCompleted') ?? false;
 export const saveOnboardingCompleted = () => write('onboardingCompleted', true);

@@ -72,7 +72,7 @@ req("PUT", f"/api/user/{uid}/profile", {
     "activityLevel": "moderate", "mealPauseHours": 3, "mealPauseScope": "non-snack",
     "showMacros": True,
 }, tok)
-req("PUT", f"/api/user/{uid}/prefs", {"notifyReleases": False, "dailyCalorieGoal": 2200}, tok)
+req("PUT", f"/api/user/{uid}/prefs", {"notifyReleases": True, "dailyCalorieGoal": 2200}, tok)
 
 # --- catalogue foods (per-unit nutrition; varied units exercise the unit picker) -
 # name: (uom, cal, protein, carbs, fat) per single unit

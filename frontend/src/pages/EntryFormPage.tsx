@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getLastMealType, saveLastMealType } from '../lib/storage';
+import { getLastMealType, saveLastMealType, getFoodSortMode } from '../lib/storage';
 import { type CatalogueFood } from '../lib/foods';
 import { useShowMacros } from '../hooks/useShowMacros';
 import { UnitSelect } from '../components/UnitSelect';
@@ -20,15 +20,6 @@ interface FoodItem {
   usageCount: number | null;
   lastUsedAtUtc: string | null;
 }
-
-type SortMode = 'priority' | 'alphabetical' | 'most-used' | 'recent';
-
-const SORT_LABELS: Record<SortMode, string> = {
-  priority: 'Priority',
-  alphabetical: 'A–Z',
-  'most-used': 'Most-used',
-  recent: 'Recent',
-};
 
 interface FoodDetail extends FoodItem {
   proteinPerUnit: number | null;
@@ -81,7 +72,8 @@ function EntryFormPage() {
   const [searchResults, setSearchResults] = useState<FoodItem[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
-  const [sortMode, setSortMode] = useState<SortMode>('priority');
+  // Sort order is a Settings preference now (read once per visit), not an on-screen control.
+  const sortMode = getFoodSortMode();
   const [selectedFood, setSelectedFood] = useState<FoodDetail | null>(null);
   const [showInlineForm, setShowInlineForm] = useState(false);
 
@@ -390,31 +382,11 @@ function EntryFormPage() {
         </p>
       )}
 
-      {!isEdit && aiEnabled && !selectedFood && (
-        <button
-          className="ai-describe-link"
-          onClick={() => navigate(`/entry/ai?meal=${encodeURIComponent(mealType)}&date=${queryDate}`)}
-        >
-          ✨ Describe it with AI instead
-        </button>
-      )}
-
       {/* Food search */}
       {!selectedFood ? (
         <>
           <div className="form-section">
             <label>Search foods</label>
-            <div className="food-search-toolbar">
-              <select
-                className="search-sort"
-                value={sortMode}
-                onChange={(e) => setSortMode(e.target.value as SortMode)}
-              >
-                {(['priority', 'alphabetical', 'most-used', 'recent'] as SortMode[]).map((m) => (
-                  <option key={m} value={m}>{SORT_LABELS[m]}</option>
-                ))}
-              </select>
-            </div>
             <div className="food-search">
               <input
                 className="food-search-input"
@@ -452,7 +424,7 @@ function EntryFormPage() {
               )}
             </div>
             <button className="inline-define-link" onClick={() => setShowInlineForm(!showInlineForm)}>
-              {showInlineForm ? 'Cancel' : "Can't find it? Define a new food"}
+              {showInlineForm ? 'Cancel' : "Can't find it? Add it to the catalogue"}
             </button>
           </div>
 
@@ -484,6 +456,17 @@ function EntryFormPage() {
               </div>
               <button className="add-entry-btn" onClick={submitInlineFood}>
                 Create &amp; Select
+              </button>
+            </div>
+          )}
+
+          {!isEdit && aiEnabled && (
+            <div className="ai-entry-cta-row">
+              <button
+                className="ai-describe-link"
+                onClick={() => navigate(`/entry/ai?meal=${encodeURIComponent(mealType)}&date=${queryDate}`)}
+              >
+                ✨ Use AI Instead
               </button>
             </div>
           )}

@@ -85,7 +85,7 @@ describe('EntryFormPage', () => {
     mockFetch.mockResolvedValueOnce(mockAiStatus()).mockResolvedValueOnce(mockMealPauseNotConfigured());
     renderEntryForm();
     await waitFor(() => {
-      const links = screen.getAllByText("Can't find it? Define a new food");
+      const links = screen.getAllByText("Can't find it? Add it to the catalogue");
       expect(links.length).toBeGreaterThan(0);
     });
   });
