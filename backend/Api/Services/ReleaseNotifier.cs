@@ -4,10 +4,15 @@ using Microsoft.EntityFrameworkCore;
 namespace Api.Services;
 
 /// <summary>
-/// On startup, if NOTIFY_ON_DEPLOY is on and this is a version we haven't
-/// announced yet, emails every opted-in user that a new version is out. Runs
-/// once per process start; idempotent via the last_notified_version setting, so
-/// restarts/redeploys of the same version never re-send.
+/// On startup, if NOTIFY_ON_DEPLOY is on and the MAJOR.MINOR release line hasn't
+/// been announced yet, emails every opted-in user that a new version is out. Runs
+/// once per process start; idempotent via the last_notified_version setting.
+///
+/// Notifications key off the MAJOR.MINOR "release line" only (see <see cref="ReleaseLine"/>),
+/// not the full build version. APP_VERSION is "MAJOR.MINOR.&lt;CI run number&gt;" and that
+/// last segment auto-increments on every deploy, so keying off the full string would
+/// email users on every redeploy. Keying off MAJOR.MINOR means only a hand bump of the
+/// VERSION file (1.10 → 1.11) announces; rebuilds/redeploys at the same line stay silent.
 /// </summary>
 public class ReleaseNotifier(
     IServiceScopeFactory scopeFactory,
@@ -32,23 +37,31 @@ public class ReleaseNotifier(
 
         var enabled = string.Equals(config["NOTIFY_ON_DEPLOY"], "true",
             StringComparison.OrdinalIgnoreCase);
-        var version = config["APP_VERSION"];
+        var buildVersion = config["APP_VERSION"];
 
         // Off on staging/local, and we never announce an unversioned dev build.
-        if (!enabled || string.IsNullOrWhiteSpace(version) || version == "dev")
+        if (!enabled || string.IsNullOrWhiteSpace(buildVersion) || buildVersion == "dev")
         {
             logger.LogInformation(
-                "Release notifier idle (enabled={Enabled}, version={Version}).", enabled, version);
+                "Release notifier idle (enabled={Enabled}, version={Version}).", enabled, buildVersion);
             return;
         }
+
+        // Announce on MAJOR.MINOR only — the build segment (CI run number) changes
+        // every deploy and must not trigger emails.
+        var releaseLine = ReleaseLine(buildVersion);
 
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+        // Normalize the stored value too, so a legacy full version ("1.10.43" from
+        // before this keyed off MAJOR.MINOR) is recognized as already-announced "1.10".
         var setting = await db.SystemSettings.FindAsync([LastNotifiedKey], ct);
-        if (setting?.Value == version)
+        if (setting is not null && ReleaseLine(setting.Value) == releaseLine)
         {
-            logger.LogInformation("Version {Version} already announced; skipping.", version);
+            logger.LogInformation(
+                "Release line {ReleaseLine} already announced (build {Build}); skipping.",
+                releaseLine, buildVersion);
             return;
         }
 
@@ -59,41 +72,55 @@ public class ReleaseNotifier(
             .ToListAsync(ct);
 
         logger.LogInformation(
-            "Release announcement starting for {Version}: {Recipients} opted-in user(s), link {Link}",
-            version, recipients.Count, baseUrl);
+            "Release announcement starting for {ReleaseLine} (build {Build}): {Recipients} opted-in user(s), link {Link}",
+            releaseLine, buildVersion, recipients.Count, baseUrl);
 
         var sent = 0;
         var failed = 0;
         foreach (var r in recipients)
         {
             var unsubscribe = $"{baseUrl}/api/unsubscribe?token={r.UnsubscribeToken}";
-            var (subject, html, text) = BuildEmail(version, baseUrl, unsubscribe, releaseNotes);
+            var (subject, html, text) = BuildEmail(releaseLine, baseUrl, unsubscribe, releaseNotes);
             try
             {
                 await email.SendAsync(r.Email, subject, html, text, ct);
                 sent++;
                 logger.LogInformation(
-                    "Release email sent to {Recipient} for {Version}", r.Email, version);
+                    "Release email sent to {Recipient} for {ReleaseLine}", r.Email, releaseLine);
             }
             catch (Exception ex)
             {
                 // Best-effort: log and keep going so one bad address can't block the rest.
                 failed++;
                 logger.LogError(ex,
-                    "Release email FAILED for {Recipient} on {Version}", r.Email, version);
+                    "Release email FAILED for {Recipient} on {ReleaseLine}", r.Email, releaseLine);
             }
         }
 
-        // Record once the batch has been attempted so a restart doesn't re-send.
+        // Record the MAJOR.MINOR line we announced so future deploys at the same
+        // line (and process restarts) don't re-send.
         if (setting is null)
-            db.SystemSettings.Add(new() { Key = LastNotifiedKey, Value = version });
+            db.SystemSettings.Add(new() { Key = LastNotifiedKey, Value = releaseLine });
         else
-            setting.Value = version;
+            setting.Value = releaseLine;
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation(
-            "Release announcement complete for {Version}: {Sent} sent, {Failed} failed of {Total}",
-            version, sent, failed, recipients.Count);
+            "Release announcement complete for {ReleaseLine}: {Sent} sent, {Failed} failed of {Total}",
+            releaseLine, sent, failed, recipients.Count);
+    }
+
+    /// <summary>
+    /// The MAJOR.MINOR notification key for a build version. APP_VERSION is
+    /// "MAJOR.MINOR.&lt;CI run number&gt;"; the run number auto-increments every deploy,
+    /// so we strip it and key notifications off MAJOR.MINOR only. "1.10.47" → "1.10".
+    /// Inputs with fewer than two segments are returned trimmed as-is.
+    /// </summary>
+    internal static string ReleaseLine(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version)) return version ?? "";
+        var parts = version.Trim().Split('.');
+        return parts.Length >= 2 ? $"{parts[0]}.{parts[1]}" : version.Trim();
     }
 
     internal static (string subject, string html, string text) BuildEmail(

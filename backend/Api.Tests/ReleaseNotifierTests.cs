@@ -163,7 +163,7 @@ public class ReleaseNotifierTests
         new(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(dbName).Options);
 
     [Fact]
-    public async Task ExecuteAsync_WhenEnabled_SendsAndRecordsVersion()
+    public async Task ExecuteAsync_WhenEnabled_SendsAndRecordsReleaseLine()
     {
         var (notifier, dbName, fake) = CreateNotifier(enabled: true, version: "1.2.3");
 
@@ -171,11 +171,59 @@ public class ReleaseNotifierTests
 
         Assert.Single(fake.Sent);
         Assert.Equal("user@example.com", fake.Sent[0].to);
+        // Subject announces MAJOR.MINOR, not the build segment.
+        Assert.Contains("1.2", fake.Sent[0].subject);
+        Assert.DoesNotContain("1.2.3", fake.Sent[0].subject);
 
         using var db = NewDb(dbName);
         var setting = await db.SystemSettings.FindAsync("last_notified_version");
         Assert.NotNull(setting);
-        Assert.Equal("1.2.3", setting!.Value);
+        Assert.Equal("1.2", setting!.Value); // stored normalized, not "1.2.3"
+    }
+
+    [Theory]
+    [InlineData("1.1.47", "1.1")]
+    [InlineData("1.1", "1.1")]
+    [InlineData("2.0.0.5", "2.0")]
+    [InlineData("3", "3")]
+    [InlineData("", "")]
+    public void ReleaseLine_StripsBuildSegment(string input, string expected)
+    {
+        Assert.Equal(expected, ReleaseNotifier.ReleaseLine(input));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_SameReleaseLine_NewBuildSegment_DoesNotResend()
+    {
+        // Stored legacy full version from before MAJOR.MINOR keying.
+        var (notifier, dbName, fake) = CreateNotifier(enabled: true, version: "1.1.99");
+        using (var db = NewDb(dbName))
+        {
+            db.SystemSettings.Add(new SystemSetting { Key = "last_notified_version", Value = "1.1.43" });
+            await db.SaveChangesAsync();
+        }
+
+        await notifier.RunAsync(CancellationToken.None);
+
+        Assert.Empty(fake.Sent); // 1.1.43 and 1.1.99 are both release line "1.1"
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_MinorBump_Resends()
+    {
+        var (notifier, dbName, fake) = CreateNotifier(enabled: true, version: "1.2.7");
+        using (var db = NewDb(dbName))
+        {
+            db.SystemSettings.Add(new SystemSetting { Key = "last_notified_version", Value = "1.1.43" });
+            await db.SaveChangesAsync();
+        }
+
+        await notifier.RunAsync(CancellationToken.None);
+
+        Assert.Single(fake.Sent);
+        using var verify = NewDb(dbName);
+        var setting = await verify.SystemSettings.FindAsync("last_notified_version");
+        Assert.Equal("1.2", setting!.Value);
     }
 
     [Fact]
