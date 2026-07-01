@@ -85,6 +85,28 @@ describe('HomePage', () => {
     expect(screen.getByText('34%')).toBeInTheDocument();
   });
 
+  it('shows a per-row time for snacks but not for main meals', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: '1', foodId: null, foodName: 'Eggs', intakeAtUtc: '2026-06-14T08:00:00Z', mealType: 'Breakfast', quantity: 2, uoM: 'piece', calories: 160, protein: 12, carbs: 2, fat: 10, source: 'Manual', aiConfidence: null },
+          { id: '2', foodId: null, foodName: 'Almonds', intakeAtUtc: '2026-06-14T15:30:00Z', mealType: 'Snack', quantity: 30, uoM: 'g', calories: 174, protein: 6, carbs: 6, fat: 15, source: 'Manual', aiConfidence: null },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ notifyReleases: true, dailyCalorieGoal: 2000 }) });
+
+    const view = renderHomePage();
+    await waitFor(() => {
+      expect(screen.getAllByText('Almonds').length).toBeGreaterThan(0);
+    });
+
+    // Exactly one row carries its own logged-at time — the snack. It reads as HH:MM.
+    const times = view.container.querySelectorAll('.entry-row-time');
+    expect(times).toHaveLength(1);
+    expect(times[0].textContent).toMatch(/^\d{2}:\d{2}$/);
+  });
+
   it('shows add buttons for each meal section', async () => {
     mockFetch
       .mockResolvedValueOnce({ ok: true, json: async () => [] })

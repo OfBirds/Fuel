@@ -111,9 +111,9 @@ function HomePage() {
   const grouped = MEAL_ORDER.map((meal) => {
     const mealEntries = entries.filter((e) => e.mealType === meal);
     const mealTotal = mealEntries.reduce((sum, e) => sum + e.calories, 0);
-    // The "finished at" marker is the latest intake time in the meal. Only meaningful
-    // for the main meals (snacks are scattered through the day, so no single time).
-    const finishedAt = meal !== 'Snack' && mealEntries.length > 0
+    // The header "finished at" marker is the latest intake time in the meal — shown
+    // for every meal, snacks included (their per-row times still carry the detail).
+    const finishedAt = mealEntries.length > 0
       ? formatTime(mealEntries.reduce((a, b) => (a.intakeAtUtc > b.intakeAtUtc ? a : b)).intakeAtUtc)
       : null;
     return { meal, entries: mealEntries, mealTotal, finishedAt };
@@ -188,47 +188,56 @@ function HomePage() {
         <p className="settings-muted" style={{ textAlign: 'center', marginTop: '2rem' }}>Loading…</p>
       ) : (
         <>
-          {grouped.map(({ meal, entries: mealEntries, mealTotal, finishedAt }) => (
-            <section key={meal} className="meal-section" aria-labelledby={`meal-${meal}`}>
-              <div className="meal-section-header">
-                <h2 id={`meal-${meal}`} className="meal-section-title">
-                  {meal}
-                  {finishedAt && <span className="meal-section-time"> ({finishedAt})</span>}
-                </h2>
-                <div className="meal-section-header-right">
-                  <span className="meal-section-calories">{mealTotal} cal</span>
-                  <button
-                    className="meal-add-btn"
-                    onClick={() => addEntry(meal)}
-                    aria-label={`Add ${meal}`}
-                  >+</button>
-                </div>
-              </div>
-              {mealEntries.map((entry) => (
-                <div key={entry.id} className="entry-row">
-                  <div className="entry-row-main">
-                    <div className="entry-row-name">{entry.foodName}</div>
-                    <div className="entry-row-qty">{entry.quantity} {entry.uoM}</div>
-                  </div>
-                  <span className="entry-row-calories">{entry.calories} cal</span>
-                  <div className="entry-row-actions">
+          {grouped.map(({ meal, entries: mealEntries, mealTotal, finishedAt }) => {
+            // Snacks are eaten throughout the day, so beyond the header time (the last
+            // snack) each snack row also carries its own logged-at time, tucked in just
+            // before the calories — the header alone can't place a snack in the day.
+            const isSnack = meal === 'Snack';
+            return (
+              <section key={meal} className="meal-section" aria-labelledby={`meal-${meal}`}>
+                <div className="meal-section-header">
+                  <h2 id={`meal-${meal}`} className="meal-section-title">
+                    {meal}
+                    {finishedAt && <span className="meal-section-time"> ({finishedAt})</span>}
+                  </h2>
+                  <div className="meal-section-header-right">
+                    <span className="meal-section-calories">{mealTotal} cal</span>
                     <button
-                      className="entry-icon-btn edit"
-                      onClick={() => navigate(`/entry/${entry.id}/edit`)}
-                      aria-label="Edit entry"
-                      title="Edit"
-                    >✎</button>
-                    <button
-                      className="entry-icon-btn del"
-                      onClick={() => deleteEntry(entry.id)}
-                      aria-label="Delete entry"
-                      title="Delete"
-                    >✕</button>
+                      className="meal-add-btn"
+                      onClick={() => addEntry(meal)}
+                      aria-label={`Add ${meal}`}
+                    >+</button>
                   </div>
                 </div>
-              ))}
-            </section>
-          ))}
+                {mealEntries.map((entry) => (
+                  <div key={entry.id} className="entry-row">
+                    <div className="entry-row-main">
+                      <div className="entry-row-name">{entry.foodName}</div>
+                      <div className="entry-row-qty">{entry.quantity} {entry.uoM}</div>
+                    </div>
+                    {isSnack && (
+                      <span className="entry-row-time" title="Logged at">{formatTime(entry.intakeAtUtc)}</span>
+                    )}
+                    <span className="entry-row-calories">{entry.calories} cal</span>
+                    <div className="entry-row-actions">
+                      <button
+                        className="entry-icon-btn edit"
+                        onClick={() => navigate(`/entry/${entry.id}/edit`)}
+                        aria-label="Edit entry"
+                        title="Edit"
+                      >✎</button>
+                      <button
+                        className="entry-icon-btn del"
+                        onClick={() => deleteEntry(entry.id)}
+                        aria-label="Delete entry"
+                        title="Delete"
+                      >✕</button>
+                    </div>
+                  </div>
+                ))}
+              </section>
+            );
+          })}
         </>
       )}
     </div>

@@ -235,6 +235,15 @@
   font-size: 0.85rem;
 }
 
+/* Per-snack logged-at time. Snacks have no header time (they're scattered through the
+   day), so each row carries its own HH:MM, tucked in just before the calories. */
+.entry-row-time {
+  flex: none;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-light);
+}
+
 .entry-row-calories {
   font-weight: 600;
   white-space: nowrap;
