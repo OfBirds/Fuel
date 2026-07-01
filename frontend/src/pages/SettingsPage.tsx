@@ -4,7 +4,12 @@ import { useAuth } from '../context/AuthContext';
 import {
   getGroupedUnits, saveGroupedUnits, saveShowMacros,
   getFoodSortMode, saveFoodSortMode, FOOD_SORT_LABELS, type FoodSortMode,
+  getFontScale, getSpacingScale,
 } from '../lib/storage';
+import {
+  FONT_MIN, FONT_MAX, FONT_STEP, SPACING_MIN, SPACING_MAX, SPACING_STEP,
+  setFontScale, setSpacingScale,
+} from '../lib/appearance';
 import '../styles/settings.css';
 
 interface Prefs {
@@ -52,6 +57,8 @@ function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [groupedUnits, setGroupedUnits] = useState(getGroupedUnits());
   const [foodSortMode, setFoodSortModeState] = useState(getFoodSortMode());
+  const [fontScale, setFontScaleState] = useState(getFontScale);
+  const [spacingScale, setSpacingScaleState] = useState(getSpacingScale);
 
   // Draft states for debounced profile fields
   const [hDraft, setHDraft] = useState('');
@@ -362,6 +369,18 @@ function SettingsPage() {
                 </select>
               </SettingsField>
             </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <SettingsField label="Text size">
+                <Stepper value={fontScale} min={FONT_MIN} max={FONT_MAX} step={FONT_STEP}
+                  decLabel="A−" incLabel="A+" title="Text size"
+                  onChange={(v) => setFontScaleState(setFontScale(v))} />
+              </SettingsField>
+              <SettingsField label="Spacing">
+                <Stepper value={spacingScale} min={SPACING_MIN} max={SPACING_MAX} step={SPACING_STEP}
+                  decLabel="−" incLabel="+" title="Spacing"
+                  onChange={(v) => setSpacingScaleState(setSpacingScale(v))} />
+              </SettingsField>
+            </div>
           </Section>
 
           {/* Meal Pause */}
@@ -413,10 +432,30 @@ function SettingsPage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="settings-section" style={{ marginBottom: '1rem' }}>
+    <section className="settings-section">
       <h2 className="settings-section-title">{title}</h2>
       {children}
     </section>
+  );
+}
+
+// The +/−/reset stepper for a percentage appearance pref (text size / spacing), sized to sit
+// inside a Preferences grid cell. The value doubles as a reset button (→ 100%). Reuses the
+// header's .font-control styles.
+function Stepper({
+  value, min, max, step, decLabel, incLabel, title, onChange,
+}: {
+  value: number; min: number; max: number; step: number;
+  decLabel: string; incLabel: string; title: string;
+  onChange: (value: number) => void;
+}) {
+  const name = title.toLowerCase();
+  return (
+    <div className="font-control" title={title}>
+      <button onClick={() => onChange(value - step)} disabled={value <= min} aria-label={`Decrease ${name}`}>{decLabel}</button>
+      <button className="font-control-value" onClick={() => onChange(100)} title="Reset to 100%" aria-label={`Reset ${name}`}>{value}%</button>
+      <button onClick={() => onChange(value + step)} disabled={value >= max} aria-label={`Increase ${name}`}>{incLabel}</button>
+    </div>
   );
 }
 

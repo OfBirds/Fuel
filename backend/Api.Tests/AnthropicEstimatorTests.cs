@@ -78,12 +78,24 @@ public class AnthropicEstimatorTests
         var body = Reply($"{{\"type\":\"text\",\"text\":\"{ItemsJson}\"}}");
 
         await Estimator(body, capturedBodies: captured)
-            .EstimateFromImageAsync([1, 2, 3], "image/png", [], default);
+            .EstimateFromImageAsync([1, 2, 3], "image/png", null, [], default);
 
         var sent = Assert.Single(captured);
         Assert.Contains("\"type\":\"image\"", sent);
         Assert.Contains("image/png", sent);
         Assert.Contains(Convert.ToBase64String([1, 2, 3]), sent);
+    }
+
+    [Fact]
+    public async Task ImageRequest_WithDescription_IncludesItInPrompt()
+    {
+        var captured = new List<string>();
+        var body = Reply($"{{\"type\":\"text\",\"text\":\"{ItemsJson}\"}}");
+
+        await Estimator(body, capturedBodies: captured)
+            .EstimateFromImageAsync([1, 2, 3], "image/png", "leftover pad thai", [], default);
+
+        Assert.Contains("leftover pad thai", Assert.Single(captured));
     }
 
     private sealed class StubHandler(string responseBody, List<string>? capturedBodies) : HttpMessageHandler

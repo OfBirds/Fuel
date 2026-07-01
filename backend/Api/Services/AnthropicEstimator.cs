@@ -28,7 +28,7 @@ public class AnthropicEstimator(HttpClient http, ProviderConnection connection, 
     }
 
     public async Task<NutritionEstimate> EstimateFromImageAsync(
-        byte[] image, string contentType, IReadOnlyList<string> notes, CancellationToken ct)
+        byte[] image, string contentType, string? description, IReadOnlyList<string> notes, CancellationToken ct)
     {
         var b64 = Convert.ToBase64String(image);
         var mediaType = string.IsNullOrWhiteSpace(contentType) ? "image/jpeg" : contentType;
@@ -39,7 +39,7 @@ public class AnthropicEstimator(HttpClient http, ProviderConnection connection, 
                 type = "image",
                 source = new { type = "base64", media_type = mediaType, data = b64 },
             },
-            BuildTextBlock("Estimate the food in this photo.", notes),
+            BuildTextBlock(EstimatePrompts.ImageInstruction(description), notes),
         };
         return await CallAsync(userContent, ct);
     }

@@ -21,6 +21,11 @@
   resize: vertical;
 }
 
+/* Optional free-text hint shown under the photo capture area, before estimating. */
+.ai-photo-note {
+  margin-top: 0.75rem;
+}
+
 .ai-manual-fallback {
   font-size: 0.85rem;
   color: var(--text-light);

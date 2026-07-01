@@ -131,7 +131,7 @@ public class EstimatorChainIntegrationTests
         // No vision-capable provider configured → the image chain is empty → AiUnavailable,
         // and nothing is sent upstream.
         await Assert.ThrowsAsync<AiUnavailableException>(
-            () => chain.EstimateFromImageAsync([1, 2, 3], "image/png", [], CancellationToken.None));
+            () => chain.EstimateFromImageAsync([1, 2, 3], "image/png", null, [], CancellationToken.None));
         Assert.Empty(wire.Server.LogEntries);
     }
 

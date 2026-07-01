@@ -48,6 +48,12 @@ export const saveAutoUpdate = (on: boolean) => write('autoUpdate', on);
 export const getFontScale = () => read<number>('fontScale') ?? 100;
 export const saveFontScale = (pct: number) => write('fontScale', pct);
 
+// --- Spacing scale (percent, e.g. 100) ---
+// Multiplies the key paddings/gaps across the app (via the --density CSS var) so users can
+// tighten the layout to fit more on screen, or loosen it for comfort. See lib/appearance.ts.
+export const getSpacingScale = () => read<number>('spacingScale') ?? 100;
+export const saveSpacingScale = (pct: number) => write('spacingScale', pct);
+
 // --- Last used meal type (preselected on entry form) ---
 export const getLastMealType = () => read<string>('lastMealType') ?? 'Breakfast';
 export const saveLastMealType = (mealType: string) => write('lastMealType', mealType);

@@ -10,7 +10,7 @@ public interface IEstimatorChain
     bool SupportsText { get; }
     bool SupportsImages { get; }
     Task<NutritionEstimate> EstimateFromTextAsync(string description, IReadOnlyList<string> notes, CancellationToken ct);
-    Task<NutritionEstimate> EstimateFromImageAsync(byte[] image, string contentType, IReadOnlyList<string> notes, CancellationToken ct);
+    Task<NutritionEstimate> EstimateFromImageAsync(byte[] image, string contentType, string? description, IReadOnlyList<string> notes, CancellationToken ct);
 }
 
 /// <summary>
@@ -39,8 +39,8 @@ public class EstimatorChain(
         => RunChainAsync("text", est => est.EstimateFromTextAsync(description, notes, ct), ct);
 
     public Task<NutritionEstimate> EstimateFromImageAsync(
-        byte[] image, string contentType, IReadOnlyList<string> notes, CancellationToken ct)
-        => RunChainAsync("vision", est => est.EstimateFromImageAsync(image, contentType, notes, ct), ct);
+        byte[] image, string contentType, string? description, IReadOnlyList<string> notes, CancellationToken ct)
+        => RunChainAsync("vision", est => est.EstimateFromImageAsync(image, contentType, description, notes, ct), ct);
 
     /// <summary>Enabled, capability-matching providers with a base URL, ordered (lowest first).</summary>
     private List<AiProvider> Chain(string capability)

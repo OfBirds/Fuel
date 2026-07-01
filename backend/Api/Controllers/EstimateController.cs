@@ -94,7 +94,7 @@ public class EstimateController(
             await request.Image.CopyToAsync(ms, ct);
 
             var estimate = await estimator.EstimateFromImageAsync(
-                ms.ToArray(), request.Image.ContentType, request.Notes ?? [], ct);
+                ms.ToArray(), request.Image.ContentType, request.Description, request.Notes ?? [], ct);
             var rows = await ResolveAsync(estimate, ct);
             return Ok(new EstimateResponse
             {

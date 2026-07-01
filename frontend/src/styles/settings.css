@@ -15,7 +15,10 @@
 .settings-section {
   border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
   border-radius: 12px;
-  padding: 1.25rem 1.5rem;
+  padding: calc(1.25rem * var(--density)) calc(1.5rem * var(--density));
+  /* Scale the gap between section cards too, so the Spacing control affects the whole page
+     rhythm — not just the padding inside each card. */
+  margin-bottom: calc(1rem * var(--density));
   background: var(--surface, transparent);
 }
 
@@ -47,6 +50,21 @@
 .settings-row-help {
   font-size: 0.85rem;
   color: var(--text-light);
+}
+
+/* The percentage doubles as a reset button; strip the boxed look its +/− siblings get
+   from `.font-control button` so it reads as a value, not a third button. The two-class
+   selector outweighs `.font-control button`, so these overrides win. */
+.font-control .font-control-value {
+  border: none;
+  width: auto;
+  height: auto;
+  padding: 0 0.35rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+.font-control .font-control-value:hover {
+  color: var(--primary);
 }
 
 /* The 1fr-1fr grids use inline styles.  Grid items default to min-width:auto

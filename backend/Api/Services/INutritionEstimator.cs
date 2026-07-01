@@ -20,8 +20,23 @@ public interface INutritionEstimator
     Task<NutritionEstimate> EstimateFromTextAsync(
         string description, IReadOnlyList<string> notes, CancellationToken ct);
 
+    /// <summary><paramref name="description"/> is the optional free-text hint the user attaches
+    /// to the photo on the first estimate; it is folded into the initial prompt so the model
+    /// weighs it together with the image. Null/blank when the user just snaps a photo.</summary>
     Task<NutritionEstimate> EstimateFromImageAsync(
-        byte[] image, string contentType, IReadOnlyList<string> notes, CancellationToken ct);
+        byte[] image, string contentType, string? description, IReadOnlyList<string> notes, CancellationToken ct);
+}
+
+/// <summary>Prompt fragments shared by the concrete estimators so the wording of the
+/// image instruction (and how the optional user description is woven in) stays identical
+/// across the OpenAI and Anthropic conventions.</summary>
+internal static class EstimatePrompts
+{
+    public static string ImageInstruction(string? description) =>
+        string.IsNullOrWhiteSpace(description)
+            ? "Estimate the food in this photo."
+            : "Estimate the food in this photo. The user adds this context, which should inform "
+              + $"your estimate: {description.Trim()}";
 }
 
 /// <summary>One estimate = a list of editable line-items plus an overall confidence.</summary>

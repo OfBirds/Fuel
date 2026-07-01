@@ -116,6 +116,9 @@ function AiEntryPage() {
   // re-sent on each refine turn — never persisted (docs/ai-estimation.md §Image lifetime).
   const [imageBlob, setImageBlob] = useState<Blob | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  // Optional free-text hint the user attaches to the photo — rides with the FIRST estimate
+  // (and every re-send) so the model weighs it alongside what it sees. Refine notes are separate.
+  const [photoNote, setPhotoNote] = useState('');
   const [cameraOn, setCameraOn] = useState(false);
   // Camera couldn't open on a secure origin (no device / permission denied) → drop back to the
   // file input so the user is never left without a way to add a photo.
@@ -404,6 +407,7 @@ function AiEntryPage() {
       if (mode === 'photo') {
         const fd = new FormData();
         fd.append('image', imageBlob!, 'meal.jpg');
+        if (photoNote.trim()) fd.append('description', photoNote.trim());
         accumNotes.forEach((n) => fd.append('notes', n));
         res = await apiFetch(`/api/user/${user.id}/estimate/image`, {
           method: 'POST', body: fd, signal: controller.signal,
@@ -433,7 +437,7 @@ function AiEntryPage() {
       setPending(false);
       abortRef.current = null;
     }
-  }, [user, pending, mode, description, imageBlob]);
+  }, [user, pending, mode, description, imageBlob, photoNote]);
 
   const onEstimate = () => { setNotes([]); runEstimate([]); };
 
@@ -623,6 +627,19 @@ function AiEntryPage() {
               )}
 
               <p className="ai-photo-hint">Your photo is sent for estimation and never stored — it stays in this browser until you save or leave.</p>
+
+              <div className="ai-photo-note">
+                <label htmlFor="ai-photo-note">Add a note to guide recognition (optional)</label>
+                <textarea
+                  id="ai-photo-note"
+                  className="ai-desc-input"
+                  rows={2}
+                  placeholder="e.g. the sauce is olive-oil based, the portion is large, includes 2 fried eggs"
+                  value={photoNote}
+                  onChange={(e) => setPhotoNote(e.target.value)}
+                  disabled={pending}
+                />
+              </div>
             </div>
           ) : (
             <div className="form-section ai-barcode">

@@ -11,6 +11,9 @@
   /* surfaces — referenced instead of hard-coded #FFF so the theme can flip them */
   --bg: #FFFFFF;
   --surface: #FFFFFF;
+  /* Spacing multiplier for key paddings/gaps (Settings → Display → Spacing). JS overrides
+     this on the root; 1 = default. Referenced as calc(<rem> * var(--density)). */
+  --density: 1;
 }
 
 [data-theme='dark'] {

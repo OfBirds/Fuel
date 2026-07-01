@@ -3,7 +3,8 @@ import { apiFetch } from './lib/api';
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
-import { getFontScale, saveFontScale, getOnboardingCompleted, saveOnboardingCompleted } from './lib/storage';
+import { getOnboardingCompleted, saveOnboardingCompleted } from './lib/storage';
+import { applyStoredAppearance } from './lib/appearance';
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import SettingsPage from './pages/SettingsPage';
@@ -16,14 +17,6 @@ import OnboardingPage from './pages/OnboardingPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import './styles/app.css';
 
-const FONT_MIN = 40;
-const FONT_MAX = 200;
-const FONT_STEP = 20;
-
-function applyFontScale(pct: number) {
-  document.documentElement.style.setProperty('--font-scale', String(pct / 100));
-}
-
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
   return (
@@ -35,26 +28,6 @@ function ThemeToggle() {
     >
       {theme === 'dark' ? '☀️' : '🌙'}
     </button>
-  );
-}
-
-function FontSizeControl() {
-  const [scale, setScale] = useState(getFontScale);
-
-  useEffect(() => {
-    applyFontScale(scale);
-    saveFontScale(scale);
-  }, [scale]);
-
-  const adjust = (delta: number) =>
-    setScale(s => Math.min(FONT_MAX, Math.max(FONT_MIN, s + delta)));
-
-  return (
-    <div className="font-control" title="Text size">
-      <button onClick={() => adjust(-FONT_STEP)} disabled={scale <= FONT_MIN} aria-label="Smaller text">A−</button>
-      <span className="font-control-value">{scale}%</span>
-      <button onClick={() => adjust(FONT_STEP)} disabled={scale >= FONT_MAX} aria-label="Larger text">A+</button>
-    </div>
   );
 }
 
@@ -204,7 +177,6 @@ function AppContent() {
           </NavLink>
         </div>
         <div className="app-header-right">
-          <FontSizeControl />
           <ThemeToggle />
           <UserMenu />
         </div>
@@ -230,7 +202,7 @@ function AppContent() {
 
 function App() {
   useEffect(() => {
-    applyFontScale(getFontScale());
+    applyStoredAppearance();
   }, []);
 
   return (

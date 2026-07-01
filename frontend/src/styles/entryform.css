@@ -10,7 +10,7 @@
 }
 
 .form-section {
-  margin-bottom: 1.25rem;
+  margin-bottom: calc(1.25rem * var(--density));
 }
 
 .form-section label {
@@ -265,7 +265,7 @@
 .form-actions {
   display: flex;
   gap: 0.75rem;
-  margin-top: 1.5rem;
+  margin-top: calc(1.5rem * var(--density));
 }
 
 .save-btn {

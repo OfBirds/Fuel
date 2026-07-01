@@ -48,12 +48,22 @@ public class OpenAiEstimatorTests
     {
         var bodies = new List<string>();
         await Estimator(ItemsJson, capturedBodies: bodies)
-            .EstimateFromImageAsync([1, 2, 3], "image/png", [], default);
+            .EstimateFromImageAsync([1, 2, 3], "image/png", null, [], default);
 
         var sent = Assert.Single(bodies);
         Assert.Contains("\"type\":\"image_url\"", sent);
         Assert.Contains("data:image/png;base64,", sent);
         Assert.Contains(Convert.ToBase64String([1, 2, 3]), sent);
+    }
+
+    [Fact]
+    public async Task ImageRequest_WithDescription_IncludesItInPrompt()
+    {
+        var bodies = new List<string>();
+        await Estimator(ItemsJson, capturedBodies: bodies)
+            .EstimateFromImageAsync([1, 2, 3], "image/png", "grilled salmon with quinoa", [], default);
+
+        Assert.Contains("grilled salmon with quinoa", Assert.Single(bodies));
     }
 
     [Fact]

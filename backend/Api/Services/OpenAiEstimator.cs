@@ -26,14 +26,14 @@ public class OpenAiEstimator(HttpClient http, ProviderConnection connection, ILo
         => CallAsync(BuildText(description, notes), ct);
 
     public Task<NutritionEstimate> EstimateFromImageAsync(
-        byte[] image, string contentType, IReadOnlyList<string> notes, CancellationToken ct)
+        byte[] image, string contentType, string? description, IReadOnlyList<string> notes, CancellationToken ct)
     {
         var mediaType = string.IsNullOrWhiteSpace(contentType) ? "image/jpeg" : contentType;
         var dataUri = $"data:{mediaType};base64,{Convert.ToBase64String(image)}";
         // OpenAI multimodal: user content is an array of parts (text + image_url).
         var content = new object[]
         {
-            new { type = "text", text = BuildText("Estimate the food in this photo.", notes) },
+            new { type = "text", text = BuildText(EstimatePrompts.ImageInstruction(description), notes) },
             new { type = "image_url", image_url = new { url = dataUri } },
         };
         return CallAsync(content, ct);

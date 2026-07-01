@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  getAutoUpdate, getFontScale, saveFontScale,
+  getAutoUpdate, getFontScale, saveFontScale, getSpacingScale, saveSpacingScale,
   getTheme, saveTheme,
 } from '../lib/storage';
 
@@ -33,6 +33,17 @@ describe('storage', () => {
     it('round-trips a saved value', () => {
       saveFontScale(140);
       expect(getFontScale()).toBe(140);
+    });
+  });
+
+  describe('getSpacingScale', () => {
+    it('returns 100 by default', () => {
+      expect(getSpacingScale()).toBe(100);
+    });
+
+    it('round-trips a saved value', () => {
+      saveSpacingScale(80);
+      expect(getSpacingScale()).toBe(80);
     });
   });
 

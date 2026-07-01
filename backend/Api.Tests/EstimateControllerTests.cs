@@ -47,7 +47,8 @@ public class EstimateControllerTests : IDisposable
     private static EstimatedItem Item(string name, double qty, double cal, double conf = 0.8)
         => new() { Name = name, Quantity = qty, Uom = "g", Calories = cal, Confidence = conf };
 
-    private static EstimateImageRequest ImageReq(byte[]? bytes = null, string contentType = "image/jpeg", List<string>? notes = null)
+    private static EstimateImageRequest ImageReq(
+        byte[]? bytes = null, string contentType = "image/jpeg", List<string>? notes = null, string? description = null)
     {
         bytes ??= [1, 2, 3];
         var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "image", "meal.jpg")
@@ -55,7 +56,7 @@ public class EstimateControllerTests : IDisposable
             Headers = new HeaderDictionary(),
             ContentType = contentType,
         };
-        return new EstimateImageRequest { Image = file, Notes = notes };
+        return new EstimateImageRequest { Image = file, Notes = notes, Description = description };
     }
 
     // ── /api/ai/status ──
@@ -279,6 +280,17 @@ public class EstimateControllerTests : IDisposable
         Assert.Equal(notes, _chain.LastNotes);
     }
 
+    [Fact]
+    public async Task EstimateImage_PassesDescriptionToChain()
+    {
+        _chain.Result = new NutritionEstimate { Items = { Item("Ramen", 1, 500) } };
+
+        await NewController().EstimateImage(
+            _userId, ImageReq(description: "homemade tonkotsu ramen, large bowl"), default);
+
+        Assert.Equal("homemade tonkotsu ramen, large bowl", _chain.LastDescription);
+    }
+
     private sealed class FakeEstimatorChain : IEstimatorChain
     {
         public bool SupportsText { get; set; } = true;
@@ -289,20 +301,23 @@ public class EstimateControllerTests : IDisposable
         public bool TextCalled;
         public bool ImageCalled;
         public IReadOnlyList<string>? LastNotes;
+        public string? LastDescription;
 
         public Task<NutritionEstimate> EstimateFromTextAsync(
             string description, IReadOnlyList<string> notes, CancellationToken ct)
         {
             TextCalled = true;
             LastNotes = notes;
+            LastDescription = description;
             return Run();
         }
 
         public Task<NutritionEstimate> EstimateFromImageAsync(
-            byte[] image, string contentType, IReadOnlyList<string> notes, CancellationToken ct)
+            byte[] image, string contentType, string? description, IReadOnlyList<string> notes, CancellationToken ct)
         {
             ImageCalled = true;
             LastNotes = notes;
+            LastDescription = description;
             return Run();
         }
 

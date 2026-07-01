@@ -143,7 +143,7 @@ public class EstimatorIntegrationTests
         var estimator = new OpenAiEstimator(http, conn, NullLogger<OpenAiEstimator>.Instance);
 
         var image = new byte[] { 1, 2, 3 };
-        await estimator.EstimateFromImageAsync(image, "image/png", [], CancellationToken.None);
+        await estimator.EstimateFromImageAsync(image, "image/png", null, [], CancellationToken.None);
 
         var log = Assert.Single(wire.Server.LogEntries);
         var body = log.RequestMessage.Body;
@@ -208,7 +208,7 @@ public class EstimatorIntegrationTests
         var estimator = new AnthropicEstimator(http, conn, NullLogger<AnthropicEstimator>.Instance);
 
         var image = new byte[] { 1, 2, 3 };
-        await estimator.EstimateFromImageAsync(image, "image/png", [], CancellationToken.None);
+        await estimator.EstimateFromImageAsync(image, "image/png", null, [], CancellationToken.None);
 
         var log = Assert.Single(wire.Server.LogEntries);
         var body = log.RequestMessage.Body;
