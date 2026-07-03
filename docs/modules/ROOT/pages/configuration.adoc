@@ -1,0 +1,224 @@
+= Configuration reference
+
+All configuration is passed to the app container as environment variables — in
+the quick-start setup, via the `environment:` block of `docker-compose.yml` and
+the `.env` file next to it. Everything except the database password and signing
+key is optional; unset features stay quietly off.
+
+== Core
+
+[cols="1,3"]
+|===
+| Variable | What it does
+
+| `DB_HOST` / `DB_PORT`
+| Where PostgreSQL is. `postgres` / `5432` in the bundled setup.
+
+| `DB_NAME` / `DB_USER`
+| Database name and user. `fuel` / `fuel` in the bundled setup.
+
+| `DB_PASSWORD`
+| Database password. Set once in `.env` before the first start. *Required.*
+
+| `JWT_SIGNING_KEY`
+| Secret that signs login sessions — any random string of at least 32
+  characters. *Required in practice:* if you leave it unset the app generates a
+  throwaway key at each start, which logs everyone out on every restart.
+
+| `JWT_EXPIRY_DAYS`
+| How long a login stays valid. Defaults to `30`.
+|===
+
+[#ai]
+== AI meal estimation (optional)
+
+Estimating a meal from a typed description or a photo is handled by an AI
+_provider_ that you choose and pay for (or self-host). The app reads a small
+JSON file listing one or more providers, and the secret keys come from separate
+environment variables — so no key is ever written into the provider list.
+
+Two variables wire it up:
+
+[cols="1,3"]
+|===
+| Variable | What it does
+
+| `AI_CONFIG_FILE`
+| Path *inside the container* to your provider-list JSON (below). Unset = AI off.
+
+| `AI_KEY_<NAME>`
+| The API key for a provider whose `keyRef` is `<name>` (lowercased). Example:
+  a provider with `"keyRef": "claude"` reads its key from `AI_KEY_CLAUDE`.
+  Local key-less servers (e.g. Ollama) need no key here.
+
+| `AI_TIMEOUT_SECONDS`
+| How long to wait on a provider before giving up. Defaults to `30`.
+|===
+
+A minimal provider list — one hosted provider (Anthropic's Claude) that handles
+both typed text and photos:
+
+[source,json]
+----
+{
+  "ai": {
+    "providers": [
+      {
+        "name": "claude",
+        "convention": "anthropic",
+        "capabilities": ["text", "vision"],
+        "baseUrl": "https://api.anthropic.com",
+        "model": "claude-haiku-4-5-20251001",
+        "order": 1,
+        "enabled": true,
+        "keyRef": "claude"
+      }
+    ]
+  }
+}
+----
+
+Each provider entry:
+
+* `convention` — the wire protocol: `anthropic`, or `openai` (which also covers
+  local OpenAI-compatible servers like Ollama and vLLM).
+* `capabilities` — `text`, `vision`, or both. A typed meal needs a `text`
+  provider; a photo needs a `vision` one.
+* `order` — lower runs first within each capability; if a provider fails, the
+  app falls through to the next one that can do the job.
+* `keyRef` — names the `AI_KEY_<NAME>` variable holding this provider's key;
+  omit it for a key-less local server.
+
+To use the file, save it next to your compose file (say `ai-providers.json`),
+mount it read-only into the container, and point `AI_CONFIG_FILE` at it:
+
+[source,yaml]
+----
+services:
+  app:
+    environment:
+      AI_CONFIG_FILE: /app/ai-providers.json
+      AI_KEY_CLAUDE: ${AI_KEY_CLAUDE:?set AI_KEY_CLAUDE in .env}
+    volumes:
+      - ./ai-providers.json:/app/ai-providers.json:ro
+----
+
+The file is re-read while the app runs, so you can add or reorder providers
+without a restart. A photo defaults to a vision-capable provider (e.g. Claude);
+text-only providers such as DeepSeek handle typed descriptions but not images.
+
+== Barcode lookup (optional)
+
+[cols="1,3"]
+|===
+| Variable | What it does
+
+| `BARCODE_ENABLED`
+| `true` shows the barcode scanner on the entry screen. Uses
+  https://world.openfoodfacts.org[Open Food Facts] — free, no key.
+
+| `BARCODE_BASE_URL`
+| The lookup service. Defaults to `https://world.openfoodfacts.org`.
+
+| `BARCODE_TIMEOUT_SECONDS`
+| How long to wait on a lookup. Defaults to `10`.
+|===
+
+== Single sign-on / OIDC (optional)
+
+By default Indigo Swallow uses its own email-and-password login. If you run an
+OIDC identity provider (Keycloak, Zitadel, Authentik, …), you can put SSO in
+front of it — the built-in login stays available as a fallback.
+
+[cols="1,3"]
+|===
+| Variable | What it does
+
+| `OIDC_AUTHORITY`
+| Your identity provider's issuer URL. Blank = SSO off (local login only).
+
+| `OIDC_CLIENT_ID`
+| The public/PKCE client id you registered for Indigo Swallow.
+
+| `OIDC_AUDIENCE`
+| The expected `aud` on the access token. *Required when `OIDC_AUTHORITY` is
+  set* — the app refuses to start without it, so tokens meant for another app
+  can't be accepted.
+|===
+
+Users are matched to their existing data by verified email, so an account keeps
+its history when you move it behind SSO.
+
+== Email & notifications (optional)
+
+Needed only if you want release-notification emails. Stays off when unset.
+
+[cols="1,3"]
+|===
+| Variable | What it does
+
+| `NOTIFY_ON_DEPLOY`
+| `true` to email opted-in users when a new *version line* ships (a rebuild of
+  the same version doesn't email).
+
+| `PUBLIC_BASE_URL`
+| The address your users reach the app at (e.g. `https://swallow.example.com`).
+  Used for links inside emails.
+
+| `SMTP_HOST` / `SMTP_PORT`
+| Your mail server. For Gmail: `smtp.gmail.com` / `587` (STARTTLS).
+
+| `SMTP_USER` / `SMTP_PASS`
+| Login for the mail server. For Gmail, `SMTP_PASS` is a 16-character
+  https://support.google.com/accounts/answer/185833[app password], not your
+  account password.
+
+| `SMTP_FROM`
+| The From address on outgoing mail (usually the same as `SMTP_USER`).
+
+| `SMTP_ACCEPT_ALL_CERTS`
+| `true` skips TLS certificate checks — only for self-signed mail servers on
+  your own LAN. Leave `false` otherwise.
+|===
+
+== Backups (optional)
+
+The app can write periodic JSON snapshots of user data, in addition to (not
+instead of) backing up the PostgreSQL volume.
+
+[cols="1,3"]
+|===
+| Variable | What it does
+
+| `BACKUP_ENABLED`
+| `true` to turn on periodic snapshots.
+
+| `BACKUP_INTERVAL`
+| How often, e.g. `daily` or `weekly`.
+
+| `BACKUP_DIR`
+| Where snapshots are written inside the container (default `backups`). Mount a
+  volume there to keep them on the host.
+
+| `BACKUP_KEEP`
+| How many snapshots to retain before pruning the oldest.
+|===
+
+== Logs & traces (optional)
+
+The app always logs to the container's console (`docker compose logs app`) and
+to a rolling file inside the container — you don't need any of this. Set these
+only if you want logs/traces in your own observability stack.
+
+[cols="1,3"]
+|===
+| Variable | What it does
+
+| `SEQ_URL`
+| Ship logs to a https://datalust.co/seq[Seq] server (e.g. `http://seq`), and
+  traces to the same Seq via its OTLP ingest.
+
+| `OTEL_EXPORTER_OTLP_ENDPOINT`
+| Send traces to any OTLP collector (Jaeger, Grafana Tempo/Alloy, an OTel
+  Collector). Give the collector's base HTTP URL, e.g. `http://collector:4318`.
+|===

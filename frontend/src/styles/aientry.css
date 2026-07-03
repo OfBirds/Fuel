@@ -1,0 +1,499 @@
+/* Info icon next to the textarea label */
+.ai-lang-info {
+  cursor: help;
+  font-size: 0.85rem;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.ai-lang-info:hover {
+  opacity: 1;
+}
+
+.ai-desc-input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 1rem;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+}
+
+/* Optional free-text hint shown under the photo capture area, before estimating. */
+.ai-photo-note {
+  margin-top: 0.75rem;
+}
+
+.ai-manual-fallback {
+  font-size: 0.85rem;
+  color: var(--text-light);
+  margin-top: 0.6rem;
+  text-align: center;
+}
+
+.ai-manual-fallback a,
+.ai-disabled-notice a {
+  color: var(--primary);
+}
+
+.ai-disabled-notice {
+  text-align: center;
+  color: var(--text-light);
+  padding: 2rem 1rem;
+}
+
+.ai-manual-link {
+  display: inline-block;
+  margin-top: 1rem;
+  text-decoration: none;
+}
+
+/* In-flight: spinner + Cancel, the only live control during an estimate. */
+.ai-pending {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-light);
+}
+
+.ai-spinner {
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: ai-spin 0.7s linear infinite;
+}
+
+.ai-pending .cancel-btn {
+  margin-left: auto;
+  padding: 0.4rem 0.9rem;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ai-review {
+  margin-top: 1.5rem;
+}
+
+.ai-review-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.ai-review-head h2 {
+  font-family: 'Merriweather', serif;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.ai-confidence {
+  font-size: 0.85rem;
+  color: var(--text-light);
+}
+
+/* Revert manual edits back to the AI's original suggestion (no re-estimate). Pushed to
+   the right of the review header. */
+.ai-undo-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ai-undo-btn:hover {
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+}
+
+.ai-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 0.6rem;
+  background: var(--surface);
+}
+
+.ai-row.low-confidence {
+  border-left: 4px solid var(--warning, #FFD966);
+}
+
+.ai-row.unmatched {
+  border-left: 4px solid var(--warning, #F0A030);
+  background: var(--neutral);
+}
+
+.ai-row-name.unmatched-name {
+  border-color: var(--warning, #F0A030);
+  background: var(--surface);
+}
+
+.ai-unmatched-hint {
+  font-size: 0.75rem;
+  color: var(--warning, #B8860B);
+  margin-top: 0.3rem;
+  padding-left: 0.2rem;
+}
+
+/* A "new" row whose name collides with an existing food — stronger than the plain
+   unmatched hint, since saving would mint a duplicate. */
+.ai-unmatched-hint.dup {
+  color: var(--error);
+  font-weight: 500;
+}
+
+.ai-row-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.ai-row-name {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.ai-row-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ai-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.ai-badge-new {
+  background: var(--primary);
+  color: white;
+}
+
+.ai-badge-conf {
+  background: var(--neutral);
+  color: var(--text-light);
+}
+
+.ai-row-fields {
+  display: grid;
+  /* minmax(0,1fr) — plain 1fr lets the number inputs' intrinsic min-width win,
+     blowing the grid past its container (the out-of-bounds review row). */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.ai-row-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.7rem;
+  color: var(--text-light);
+  min-width: 0;
+}
+
+.ai-row-fields input,
+.ai-row-fields select {
+  padding: 0.35rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  background: var(--surface);
+  color: var(--text);
+  min-width: 0;
+}
+
+.ai-refine {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: var(--neutral);
+  border-radius: 8px;
+}
+
+.ai-refine label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.ai-refine-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ai-refine-row input {
+  flex: 1;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  background: var(--surface);
+  color: var(--text);
+}
+
+@media (max-width: 520px) {
+  .ai-row-fields {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ── Input-method toggle (Describe / Photo) ── */
+.ai-mode-toggle {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  margin-bottom: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.ai-mode-toggle button {
+  flex: 1;
+  padding: 0.5rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-light);
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.ai-mode-toggle button.active {
+  background: var(--primary);
+  color: #fff;
+}
+.ai-mode-toggle button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Shared icon-only confirm button (camera capture, barcode look-up, AI estimate). Same
+   indigo palette as .save-btn but square and text-free — see components/CheckButton.tsx. */
+.check-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.625rem;
+  height: 2.625rem;
+  padding: 0;            /* override the global button padding, which would shrink the glyph */
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.check-btn:hover:not(:disabled) { opacity: 0.9; }
+.check-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+/* In a .ai-photo-actions row (camera capture), beat the generic `> *` padding/flex so the
+   checkmark stays a fixed square with a full-size glyph rather than a stretched, padded box. */
+.ai-photo-actions > .check-btn {
+  flex: 0 0 auto;
+  width: 2.625rem;
+  padding: 0;
+}
+
+/* ── Photo capture ── */
+.ai-photo-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: stretch;
+}
+/* Every action in the row gets an identical box — same flex, padding and line-height —
+   so a <button> and an upload <label> render at exactly the same height (the button
+   was rendering ~6px taller). Neither reads as the lesser option. */
+.ai-photo-actions > * {
+  flex: 1;
+  /* A native <button> renders a few px taller than the upload <label> even with equal
+     padding/line-height. An explicit height (with padding folded in via border-box)
+     makes every action exactly the same box — the camera button shrinks to match. */
+  box-sizing: border-box;
+  height: 2.625rem;
+  padding: 0 0.7rem;
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.2;
+  font-size: 1rem;
+}
+.ai-upload-btn {
+  cursor: pointer;
+}
+
+/* A lone "Upload" control keeps the right-hand button's *previous* size — half the row, the
+   width it had as one of the two original flex:1 buttons — rather than stretching full-width. */
+.ai-photo-actions.single {
+  justify-content: flex-end;
+}
+.ai-photo-actions.single > * {
+  flex: 0 0 auto;
+  width: calc(50% - 0.3rem);
+}
+
+/* Upload labels need their text vertically centred like the sibling buttons.
+   The base classes (cancel-btn / bc-btn-outline) have equal specificity to
+   .ai-photo-actions > * so the padding winner is a coin flip.  This compound
+   selector is two classes — it always wins. */
+.ai-photo-actions .ai-upload-btn {
+  padding-top: 0;
+  padding-bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The Estimate action sits to the right and a touch larger — it's the primary commit
+   for this screen, not a left-hugging afterthought. */
+.ai-estimate-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+.ai-estimate-btn {
+  flex: 0 0 auto;
+  padding: 0.8rem 2.2rem;
+  font-size: 1.05rem;
+}
+.ai-camera-preview,
+.ai-photo-img {
+  width: 100%;
+  /* ~70% of the old 60vh — keeps the in-app camera's confirm (✓) and Cancel on-screen
+     without scrolling, which was pushing them out of view on phones. */
+  max-height: 42vh;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #000;
+  margin-bottom: 0.6rem;
+}
+.ai-photo-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.ai-photo-hint {
+  font-size: 0.8rem;
+  color: var(--text-light);
+  margin-top: 0.5rem;
+}
+
+/* ── Barcode scan (inside Photo mode) ── */
+.ai-barcode {
+  margin-top: 0.75rem;
+}
+
+/* "or" divider between the photo actions and the barcode option */
+.ai-barcode-sep {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.9rem 0;
+  color: var(--text-light);
+  font-size: 0.8rem;
+}
+.ai-barcode-sep::before,
+.ai-barcode-sep::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.ai-barcode-label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.ai-barcode-hint {
+  font-size: 0.8rem;
+  color: var(--text-light);
+  margin: 0.4rem 0;
+}
+
+/* Barcode actions wear the lime accent (not the indigo of the photo-AI buttons) so
+   the two scanners read as different paths and you're less likely to tap the wrong one. */
+.bc-btn {
+  background: var(--accent);
+  color: #1F2433;            /* dark text — stays readable on lime in both themes */
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.bc-btn:hover:not(:disabled) { opacity: 0.9; }
+.bc-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.bc-btn-outline {
+  background: none;
+  border: 1px solid var(--accent);
+  color: var(--text);
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.bc-btn-outline:hover { background: rgba(132, 204, 22, 0.14); }
+
+.ai-barcode-typed {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+}
+.ai-barcode-typed summary {
+  cursor: pointer;
+  color: var(--text-light);
+  margin-bottom: 0.5rem;
+}
+.ai-barcode-manual {
+  display: flex;
+  gap: 0.5rem;
+}
+.ai-barcode-manual input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  background: var(--surface);
+  color: var(--text);
+}
+.ai-barcode-manual .bc-btn {
+  white-space: nowrap;
+  padding: 0.5rem 0.9rem;
+}
+.ai-barcode-msg {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--error);
+}

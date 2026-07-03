@@ -1,0 +1,109 @@
+# Parameterized stack template, shared by staging and prod.
+# Select an environment by pointing compose at its env file, e.g.:
+#   docker compose --env-file .env.staging up -d
+#   docker compose --env-file .env.prod    up -d
+# Project name, image tag, and host ports come from that env file, so the two
+# stacks get fully separate volumes/networks and never collide.
+
+name: ${COMPOSE_PROJECT_NAME}
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      # Published on the LAN so DBeaver can connect. Distinct host port per stack.
+      - "${DB_HOST_PORT}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  app:
+    image: ${APP_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      # Signed-JWT auth. JWT_SIGNING_KEY is REQUIRED in deploy stacks (>=32 chars);
+      # without it the app mints an ephemeral key and logs every user out on restart.
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+      JWT_EXPIRY_DAYS: ${JWT_EXPIRY_DAYS}
+      # CrimsonRaven SSO (OIDC). Blank OIDC_AUTHORITY → SSO off, local JWT only (dual-auth
+      # backup). Per-stack issuer/client; see docs/auth-crimsonraven.md.
+      OIDC_AUTHORITY: ${OIDC_AUTHORITY}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE}
+      # Release-notification settings (see docs/notifications.md).
+      NOTIFY_ON_DEPLOY: ${NOTIFY_ON_DEPLOY}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_ACCEPT_ALL_CERTS: ${SMTP_ACCEPT_ALL_CERTS}
+      # Periodic on-disk backups (BackupService). Off unless BACKUP_ENABLED=true.
+      BACKUP_ENABLED: ${BACKUP_ENABLED}
+      BACKUP_INTERVAL: ${BACKUP_INTERVAL}
+      # AI nutrition estimator (docs/ai-providers.md). The provider LIST lives in the
+      # mounted ai-providers.json (hot-reloaded, see volumes below); only secret key
+      # VALUES come from env as AI_KEY_<NAME>. Adding a new key = add a line here +
+      # redeploy; reorder/enable/model/url changes are live file edits, no redeploy.
+      AI_CONFIG_FILE: /app/ai-providers.json
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS}
+      AI_KEY_DEEPSEEK: ${AI_KEY_DEEPSEEK}
+      # Barcode / EAN lookup (docs/barcode-lookup.md). Open Food Facts is free and
+      # needs no API key. BARCODE_ENABLED=true shows the scan affordance.
+      BARCODE_ENABLED: ${BARCODE_ENABLED}
+      BARCODE_BASE_URL: ${BARCODE_BASE_URL}
+      BARCODE_TIMEOUT_SECONDS: ${BARCODE_TIMEOUT_SECONDS}
+      AI_KEY_CLAUDE: ${AI_KEY_CLAUDE}
+      # Structured logs -> Seq (internal). UI is published below per stack.
+      SEQ_URL: http://seq
+    ports:
+      - "${APP_PORT}:8080"
+    networks:
+      - internal
+    volumes:
+      # Hot-reloadable AI provider registry, mounted read-only. Edit the host file
+      # (AI_CONFIG_HOST_PATH) → the app's IOptionsMonitor reloads it live (docs/ai-providers.md).
+      - ${AI_CONFIG_HOST_PATH}:/app/ai-providers.json:ro
+
+  seq:
+    image: datalust/seq:latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      # LAN-only log UI; skip auth. Set SEQ_FIRSTRUN_ADMINPASSWORD instead if you
+      # want a login (the UI port is only published on the LAN, never proxied out).
+      SEQ_FIRSTRUN_NOAUTHENTICATION: "true"
+    ports:
+      # Seq UI on the LAN (distinct host port per stack).
+      - "${SEQ_PORT}:80"
+    volumes:
+      - seqdata:/data
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+  seqdata:
+
+networks:
+  internal:

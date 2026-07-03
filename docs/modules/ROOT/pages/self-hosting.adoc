@@ -1,0 +1,138 @@
+= Self-hosting quick start
+
+This guide gets Indigo Swallow running on your own machine with Docker. No
+programming knowledge needed — you copy two small files, run one command, and
+open the app in your browser. You can turn on the AI meal-estimation later; the
+app works without it from the start (log by barcode or by hand).
+
+== What you need
+
+* A machine that is on when you want to use the app: a home server, a NAS that
+  can run containers, a Raspberry Pi–class box, or a small VPS.
+* https://docs.docker.com/engine/install/[Docker] with the Compose plugin
+  (`docker compose version` should print a version). Most NAS container
+  managers and any fresh Docker install already include it.
+
+The app ships as a single container image and brings its own database
+(PostgreSQL) alongside it.
+
+== Step 1 — create a folder with two files
+
+Make a folder for the app (for example `indigo-swallow/`) and put these two
+files in it.
+
+`docker-compose.yml` — describes the two containers (the app and its database):
+
+[source,yaml]
+----
+include::example$docker-compose.yml[]
+----
+
+`.env` — holds the two secrets you choose yourself:
+
+[source,properties]
+----
+DB_PASSWORD=pick-a-long-random-password
+JWT_SIGNING_KEY=paste-a-long-random-string-at-least-32-characters
+----
+
+[TIP]
+====
+`DB_PASSWORD` is used only between the app and its own database container.
+`JWT_SIGNING_KEY` signs your login sessions — any long random value works; on
+Linux/macOS `openssl rand -base64 48` prints a good one. Keep the `.env` file:
+the database needs the same `DB_PASSWORD` every start, and changing
+`JWT_SIGNING_KEY` later just logs everyone out.
+====
+
+== Step 2 — start it
+
+From inside the folder, run:
+
+[source,shell]
+----
+docker compose up -d
+----
+
+The first start downloads the images (a minute or two on a normal connection).
+Check that both containers are up:
+
+[source,shell]
+----
+docker compose ps
+----
+
+You should see `app` and `postgres` with status `running` / `healthy`.
+
+== Step 3 — open the app
+
+In a browser on the same network, open:
+
+----
+http://<address-of-your-machine>:8080
+----
+
+You should see the Indigo Swallow login screen. Register an account, and you can
+start logging right away — scan a barcode or add a food by hand. Turn on AI
+estimation whenever you like (next section).
+
+[NOTE]
+The app is now reachable on your local network only. If you want to use it from
+anywhere (e.g. on your phone away from home), put it behind a reverse proxy with
+HTTPS — any of the usual suspects (Caddy, nginx proxy manager, Traefik) works;
+point it at port `8080`. HTTPS is also what lets the "install to home screen"
+PWA work away from home.
+
+== Optional: turn on AI meal estimation
+
+Typing a meal in plain language or snapping a photo needs an AI provider. You
+bring your own — a hosted one like Anthropic's Claude (needs an API key), or a
+local model server such as https://ollama.com[Ollama] running on your own
+hardware (no key, no data leaves your network). You point the app at a small
+provider-list file and give it the key.
+
+The full setup — the provider file format, which providers do text vs. photos,
+and the key variables — is in the xref:configuration.adoc#ai[configuration
+reference, AI section]. Until you configure a provider, the app simply hides the
+AI options and everything else keeps working.
+
+== Optional: barcode, sign-on, and email
+
+* *Barcode scanning* is on in the compose file above (`BARCODE_ENABLED: "true"`)
+  and needs no key. Set it to `"false"` to hide the scanner.
+* *Single sign-on (OIDC)* and *email* (release-notification mail) are optional —
+  see the xref:configuration.adoc[configuration reference].
+
+== Updating
+
+New releases are announced on the
+https://github.com/OfBirds/Fuel/releases[GitHub releases page]. To update:
+
+[source,shell]
+----
+docker compose pull
+docker compose up -d
+----
+
+Your data lives in a Docker volume, not in the container, so updates never touch
+it. Database schema changes are applied automatically on startup. To pin a
+specific version instead of always taking the latest, replace `:latest` in the
+compose file with a version tag such as `:1.10`.
+
+== Backing up
+
+Everything worth keeping is in the PostgreSQL volume. A simple backup is one
+command (run it from the app folder):
+
+[source,shell]
+----
+docker compose exec postgres pg_dump -U fuel fuel > swallow-backup.sql
+----
+
+Run that on a schedule (cron, Task Scheduler, your NAS's backup tool) and copy
+the file somewhere safe. To restore onto a fresh install:
+
+[source,shell]
+----
+docker compose exec -T postgres psql -U fuel fuel < swallow-backup.sql
+----

@@ -1,0 +1,97 @@
+:root {
+  --primary: #4F46E5;       /* indigo — Fuel's brand, distinct from the coral template */
+  --accent: #84CC16;        /* lime — the "fuel" spark, used for highlights/progress */
+  --neutral: #F6F7FB;
+  --text: #1F2433;
+  --text-light: #6B7280;
+  --border: #E4E6F0;
+  --success: #16A34A;
+  --error: #EF4444;
+  --warning: #D9A441; /* amber — warnings, distinct from the red error */
+  /* surfaces — referenced instead of hard-coded #FFF so the theme can flip them */
+  --bg: #FFFFFF;
+  --surface: #FFFFFF;
+  /* Spacing multiplier for key paddings/gaps (Settings → Display → Spacing). JS overrides
+     this on the root; 1 = default. Referenced as calc(<rem> * var(--density)). */
+  --density: 1;
+}
+
+[data-theme='dark'] {
+  --neutral: #181B2E;
+  --text: #E6E8F2;
+  --text-light: #9CA0B5;
+  --border: #2C3150;
+  --bg: #0F1222;
+  --surface: #1A1E33;
+  --warning: #F5C451; /* lighter amber for contrast on dark */
+}
+
+html {
+  font-size: calc(16px * var(--font-scale, 1));
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  color: var(--text);
+  background-color: var(--bg);
+  line-height: 1.6;
+  /* Belt-and-suspenders: never let an oversized header (large font scale) make the
+     whole viewport pan sideways on mobile. The header itself wraps; this guards the rest. */
+  overflow-x: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Merriweather', serif;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+
+a:hover {
+  opacity: 0.8;
+}
+
+button {
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+input, textarea, select {
+  font-family: 'Inter', sans-serif;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}

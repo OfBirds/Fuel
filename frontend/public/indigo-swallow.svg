@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Indigo Swallow — brand mark. Rounded indigo tile (#4F46E5) so it reads well as a
+       maskable PWA/home-screen icon; white swallow in flight, wings swept up and back,
+       with the swallow's signature deep forked tail. -->
+  <rect width="32" height="32" rx="7" fill="#4F46E5"/>
+  <path d="M16 9c.9 0 1.6.7 1.9 1.8 2.7-2 5.3-3.4 8.6-4-2.6 2.6-4.7 4.7-6.8 6.1 1.4-.2 2.9-.7 4.5-1.5-1.8 2.2-3.9 3.4-6.4 3.8L19.4 24 16 20.4 12.6 24l1.6-8.8c-2.5-.4-4.6-1.6-6.4-3.8 1.6.8 3.1 1.3 4.5 1.5-2.1-1.4-4.2-3.5-6.8-6.1 3.3.6 5.9 2 8.6 4 .3-1.1 1-1.8 1.9-1.8z" fill="#FFFFFF"/>
+</svg>

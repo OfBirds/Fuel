@@ -1,0 +1,63 @@
+= What is Indigo Swallow?
+
+Indigo Swallow is a free, open-source *diet and calorie tracker* that you run on
+your own server. Log what you eat — by typing it in plain language, snapping a
+photo, or scanning a barcode — and it estimates the calories and macros, keeps a
+running day view against your goal, and tracks your weight over time.
+
+It is part of the https://ofbirds.org[ofbirds.org] flock, and it follows the
+flock's rules:
+
+* *Always self-hostable.* You install it on a machine you control — a home
+  server, a NAS, a small VPS. There is no hosted version to sign up for.
+* *Your data stays yours.* Your food log, weigh-ins, and photos live on your
+  server and never leave it.
+* *Money is optional.* The app is free and open source (AGPL). Donate if it
+  helped you; otherwise you only pay for whatever box you run it on.
+
+== What it does
+
+* *Log meals your way* — type "chicken breast 200 g with a cup of rice and a
+  side salad" and the app breaks it into items with calories and macros; or snap
+  a photo of the plate and let it estimate from the image; or just enter foods
+  by hand. Every estimate is shown for you to tweak before you save it.
+* *Scan barcodes* — point your phone at a grocery barcode and Indigo Swallow
+  pulls the official product from https://world.openfoodfacts.org[Open Food Facts].
+* *Day view* — everything you logged that day, grouped by meal (breakfast,
+  lunch, dinner, snacks) with per-item and per-meal times and a running calorie
+  total against your daily goal.
+* *A catalogue that learns* — the foods you log build up a personal catalogue
+  you can search, reuse, and sort by your own preference.
+* *Profile & weight* — set your details and a daily calorie goal, log your
+  weight, and watch the trend.
+* *Meal-pause reminders (optional)* — a gentle nudge if you like to space meals
+  apart.
+* *Works offline* — it is a progressive web app (PWA): add it to your phone's
+  home screen and it keeps working with cached data even without a connection.
+* *Comfortable to use* — mobile-first, light and dark themes, and adjustable
+  text size and spacing.
+
+== A note on the AI
+
+The numbers from a typed description or a photo are *estimates* — a good
+starting point you adjust before saving, not lab measurements. The more you
+correct, the better your catalogue gets. You decide which AI provider does the
+estimating (or turn it off entirely and log by hand or barcode) — the app talks
+to your chosen provider with your own key. Photos are sent only to estimate that
+one meal and are *never stored*.
+
+== What to expect
+
+Accounts are protected by a password (or single sign-on, if you wire it up), and
+each person's data is their own. Indigo Swallow is a tracker, not a coach: it
+records and adds up what you tell it, and leaves the judgement to you.
+
+== Ready to try it?
+
+Head to the xref:self-hosting.adoc[self-hosting quick start] — if you have
+Docker on a machine somewhere, you are about ten minutes away from a running
+app. AI estimation is optional; even without it you can log by barcode or by
+hand from the first minute.
+
+The source code, issue tracker, and release notes live on
+https://github.com/OfBirds/Fuel[GitHub].

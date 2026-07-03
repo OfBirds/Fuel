@@ -1,0 +1,4 @@
+* xref:index.adoc[What is Indigo Swallow?]
+* Self-hosting
+** xref:self-hosting.adoc[Quick start]
+** xref:configuration.adoc[Configuration reference]

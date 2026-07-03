@@ -1,0 +1,293 @@
+.stats-page {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.stats-title {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+/* Range toggle + period navigation sit on one row (wrap on narrow screens). */
+.stats-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Segmented week / month / year control. */
+.stats-range-toggle {
+  display: inline-flex;
+  padding: 0.2rem;
+  background: var(--neutral);
+  border-radius: 8px;
+}
+
+.stats-range-btn {
+  background: none;
+  border: none;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-light);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.stats-range-btn:hover {
+  color: var(--primary);
+}
+
+.stats-range-btn.active {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stats-period-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.stats-period-label {
+  min-width: 9rem;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.stats-nav-btn {
+  width: 2.1rem;
+  height: 2.1rem;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  font-size: 1.2rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.stats-nav-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.stats-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Summary: three rows (avg / max / min), each value | goal | progress ring. */
+.stats-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1.75rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: center;
+  gap: 1rem;
+}
+
+.stat-row + .stat-row {
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+}
+
+.stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.stat-cell-center {
+  align-items: center;
+}
+
+.stat-cell-right {
+  align-items: flex-end;
+}
+
+.stat-cell-label {
+  font-size: 0.78rem;
+  color: var(--text-light);
+}
+
+.stat-cell-value {
+  font-weight: 700;
+  font-size: 1.25rem;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+/* Progress ring — mirrors .cal-ring from the day view. */
+.stat-ring {
+  --pct: 0;
+  --ring: var(--primary);
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(var(--ring) calc(var(--pct) * 1%), var(--neutral) 0);
+  transition: background 0.3s ease;
+}
+
+.stat-ring::before {
+  content: '';
+  grid-area: 1 / 1;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.stat-ring-pct {
+  grid-area: 1 / 1;
+  font-weight: 700;
+  font-size: 0.65rem;
+  color: var(--text);
+}
+
+.stat-ring.warn { --ring: var(--warning); }
+.stat-ring.over { --ring: var(--error); }
+.stat-ring.warn .stat-ring-pct { color: var(--warning); }
+.stat-ring.over .stat-ring-pct { color: var(--error); }
+
+/* Bar chart — columns butt together (gap:0) so the per-bucket goal segments line up into
+   one continuous (stepped) threshold; the bars themselves are narrowed + centred for spacing. */
+.stats-chart {
+  padding: 1.6rem 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.stats-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  height: 200px;
+}
+
+.stats-bar-col {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+/* Track is the full column height; the fill measures its % against it, and the goal line
+   (a sibling, positioned against the same column) lands on the same scale. */
+.stats-bar-track {
+  width: 100%;
+  max-width: 2.4rem;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.stats-bar-fill {
+  position: relative;
+  width: 100%;
+  min-height: 2px;
+  background: linear-gradient(var(--primary), color-mix(in srgb, var(--primary) 70%, var(--accent)));
+  border-radius: 5px 5px 0 0;
+  transition: height 0.3s ease;
+}
+
+/* Bars that clear their goal get an amber cap so over-target buckets pop. */
+.stats-bar-fill.over {
+  background: linear-gradient(var(--warning), color-mix(in srgb, var(--warning) 70%, var(--primary)));
+}
+
+.stats-bar-value {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0.2rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--text-light);
+  white-space: nowrap;
+}
+
+/* Daily-goal target, scaled to the bucket's day count. Spans the full column; touching
+   columns make the segments read as a single line (flat for a week, stepped for month/year). */
+.stats-goal-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 2px dashed var(--accent);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.stats-axis {
+  display: flex;
+  gap: 0;
+  margin-top: 0.4rem;
+}
+
+.stats-bar-label {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  font-size: 0.68rem;
+  color: var(--text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stats-goal-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+  font-size: 0.75rem;
+  color: var(--text-light);
+}
+
+.stats-goal-swatch {
+  display: inline-block;
+  width: 1.5rem;
+  border-top: 2px dashed var(--accent);
+}
+
+@media (max-width: 768px) {
+  .stats-controls {
+    justify-content: center;
+  }
+  .stats-bar-value {
+    display: none;
+  }
+  .stats-bar-label {
+    font-size: 0.6rem;
+  }
+}

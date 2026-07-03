@@ -1,0 +1,42 @@
+# Indigo Swallow — self-host stack: the app + its own PostgreSQL.
+# Put DB_PASSWORD and JWT_SIGNING_KEY in a .env file next to this, then:
+#   docker compose up -d
+name: indigo-swallow
+
+services:
+  app:
+    image: ghcr.io/ofbirds/fuel:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: fuel
+      DB_USER: fuel
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      # Signs your login sessions — any long random string, at least 32 characters.
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?set JWT_SIGNING_KEY in .env}
+      # Free grocery-barcode lookup (Open Food Facts, no key). Set to "false" to hide the scanner.
+      BARCODE_ENABLED: "true"
+    ports:
+      - "8080:8080"
+
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fuel
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      POSTGRES_DB: fuel
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fuel -d fuel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

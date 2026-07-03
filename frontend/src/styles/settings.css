@@ -1,0 +1,95 @@
+/* Match the other pages (.day-view / .catalogue-page): centered, same max-width, and
+   NO own padding — the outer .app-main already pads. The old `padding: 1.5rem 1rem 3rem`
+   double-padded the sides (looked narrower) and pushed the title down (header sat lower). */
+.settings-page {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.settings-title {
+  font-family: 'Merriweather', serif;
+  color: var(--primary);
+  margin-bottom: 1rem;
+}
+
+.settings-section {
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
+  border-radius: 12px;
+  padding: calc(1.25rem * var(--density)) calc(1.5rem * var(--density));
+  /* Scale the gap between section cards too, so the Spacing control affects the whole page
+     rhythm — not just the padding inside each card. */
+  margin-bottom: calc(1rem * var(--density));
+  background: var(--surface, transparent);
+}
+
+.settings-section-title {
+  font-size: 1.1rem;
+  margin: 0 0 1rem;
+}
+
+.settings-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.settings-row input[type='checkbox'] {
+  margin-top: 0.2rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+
+.settings-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.settings-row-help {
+  font-size: 0.85rem;
+  color: var(--text-light);
+}
+
+/* The percentage doubles as a reset button; strip the boxed look its +/− siblings get
+   from `.font-control button` so it reads as a value, not a third button. The two-class
+   selector outweighs `.font-control button`, so these overrides win. */
+.font-control .font-control-value {
+  border: none;
+  width: auto;
+  height: auto;
+  padding: 0 0.35rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+.font-control .font-control-value:hover {
+  color: var(--primary);
+}
+
+/* The 1fr-1fr grids use inline styles.  Grid items default to min-width:auto
+   so they won't shrink past their content — the label + input together push the
+   column wider than the screen.  min-width:0 on the grid children fixes that. */
+.settings-section [style*="grid"] > * {
+  min-width: 0;
+}
+
+/* Shrink browser-default min-width on inputs/selects so the 1fr-1fr
+   grid columns don't overflow narrow screens.  ~⅓ of the typical 150 px
+   browser default = 50 px. */
+.settings-section input {
+  min-width: 50px;
+}
+.settings-section select {
+  min-width: 70px;
+}
+
+.settings-muted {
+  color: var(--text-light);
+}
+
+.settings-error {
+  margin-top: 1rem;
+  color: var(--error);
+  font-size: 0.9rem;
+}

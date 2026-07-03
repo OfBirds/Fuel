@@ -1,0 +1,169 @@
+name: deploy
+
+# main    -> staging stack (port 9223)
+# release -> prod stack    (port 9224)
+on:
+  push:
+    branches: [main, release]
+  # Manual redeploy/rollback from the Actions tab. Pick the branch to run from
+  # (main -> staging, release -> prod), same routing as a push.
+  workflow_dispatch:
+
+# Don't let two deploys of the same branch overlap; don't cancel one in flight.
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+# Least privilege by default; the build job widens to packages: write for GHCR.
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/ofbirds/fuel
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with: { dotnet-version: '10.0.x' }
+      - run: dotnet test backend/Fuel.slnx -c Release
+      - uses: actions/setup-node@v6
+        with: { node-version: '24', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test -- --run
+        working-directory: frontend
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve environment
+        id: env
+        run: |
+          if [ "${{ github.ref_name }}" = "release" ]; then
+            echo "tag=prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=staging" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute version
+        id: version
+        run: |
+          base=$(cat VERSION)                       # MAJOR.MINOR, hand-bumped
+          echo "version=${base}.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      # --- Generate the idempotent migration script (the explicit gate) ---
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Generate migration script
+        working-directory: backend/Api
+        run: |
+          dotnet tool install --global dotnet-ef --version 10.0.0
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet build -c Release
+          dotnet ef migrations script --idempotent --no-build --configuration Release \
+            -o "$GITHUB_WORKSPACE/migrate.sql"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: migrate-sql
+          path: migrate.sql
+
+      # --- Build & push the single app image ---
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Release builds also get the public-facing tags :latest and :<MAJOR.MINOR>
+      # (what the self-hosting docs point strangers at). Staging stays internal.
+      - name: Compute image tags
+        id: tags
+        run: |
+          {
+            echo 'list<<EOF'
+            echo "${{ env.IMAGE }}:${{ steps.env.outputs.tag }}"
+            echo "${{ env.IMAGE }}:${{ steps.version.outputs.version }}"
+            echo "${{ env.IMAGE }}:${{ github.sha }}"
+            if [ "${{ github.ref_name }}" = "release" ]; then
+              echo "${{ env.IMAGE }}:latest"
+              echo "${{ env.IMAGE }}:$(cat VERSION)"
+            fi
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
+            GIT_COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ steps.version.outputs.built }}
+          tags: ${{ steps.tags.outputs.list }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: [self-hosted]
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve environment
+        id: env
+        run: |
+          if [ "${{ github.ref_name }}" = "release" ]; then
+            echo "file=/opt/fuel/.env.prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "file=/opt/fuel/.env.staging" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: migrate-sql
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Pull image
+        working-directory: deploy
+        run: docker compose --env-file ${{ steps.env.outputs.file }} pull
+
+      - name: Start database
+        working-directory: deploy
+        run: docker compose --env-file ${{ steps.env.outputs.file }} up -d --wait postgres
+
+      # Apply migrations against the running DB BEFORE swapping the app.
+      # ON_ERROR_STOP=1 -> a bad migration fails the job here; the old app keeps
+      # running untouched. The script is idempotent, so re-runs are no-ops.
+      - name: Apply migrations
+        working-directory: deploy
+        run: |
+          docker compose --env-file ${{ steps.env.outputs.file }} exec -T postgres \
+            sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+            < "$GITHUB_WORKSPACE/migrate.sql"
+
+      - name: Deploy app
+        working-directory: deploy
+        run: docker compose --env-file ${{ steps.env.outputs.file }} up -d --wait
+
+      - name: Prune dangling images
+        run: docker image prune -f
