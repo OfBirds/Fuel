@@ -17,9 +17,16 @@ namespace Api.Controllers;
 public class ConfigController(IConfiguration config, IHttpClientFactory httpClientFactory) : ControllerBase
 {
     private static readonly SemaphoreSlim Gate = new(1, 1);
+    // Cache a positive (reachable) result longer than a negative one: a healthy IdP rarely
+    // flips, but a negative is usually a transient blip (Keycloak restart, slow DNS, NAT
+    // hairpin) we want to re-probe soon rather than show a false "offline" banner for a minute.
     private static readonly TimeSpan OnlineTtl = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan OfflineTtl = TimeSpan.FromSeconds(10);
     private static DateTime _checkedUtc = DateTime.MinValue;
     private static bool _online;
+
+    private static bool IsFresh() =>
+        DateTime.UtcNow - _checkedUtc < (_online ? OnlineTtl : OfflineTtl);
 
     [HttpGet]
     public async Task<ActionResult> Get(CancellationToken ct)
@@ -40,22 +47,39 @@ public class ConfigController(IConfiguration config, IHttpClientFactory httpClie
         });
     }
 
-    /// <summary>Is CrimsonRaven's OIDC metadata reachable? Cached for <see cref="OnlineTtl"/>.</summary>
+    /// <summary>Is CrimsonRaven's OIDC metadata reachable? Cached for <see cref="OnlineTtl"/>
+    /// (positive) / <see cref="OfflineTtl"/> (negative).</summary>
     private async Task<bool> IsOnlineAsync(string authority, CancellationToken ct)
     {
-        if (DateTime.UtcNow - _checkedUtc < OnlineTtl) return _online;
+        if (IsFresh()) return _online;
         await Gate.WaitAsync(ct);
         try
         {
-            if (DateTime.UtcNow - _checkedUtc < OnlineTtl) return _online;
-            var client = httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(2.5);
-            using var resp = await client.GetAsync(
-                $"{authority.TrimEnd('/')}/.well-known/openid-configuration", ct);
-            _online = resp.IsSuccessStatusCode;
+            if (IsFresh()) return _online;
+            try
+            {
+                var client = httpClientFactory.CreateClient();
+                client.Timeout = TimeSpan.FromSeconds(2.5);
+                using var resp = await client.GetAsync(
+                    $"{authority.TrimEnd('/')}/.well-known/openid-configuration", ct);
+                _online = resp.IsSuccessStatusCode;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // The caller (browser) aborted mid-probe — that says nothing about Raven's
+                // health. Don't record a verdict or stamp the cache; just let the request
+                // unwind. (A HttpClient *timeout* throws with a different token, so it falls
+                // through to the catch below and is correctly treated as offline.)
+                throw;
+            }
+            catch
+            {
+                // Timeout (2.5s), DNS/connection failure, or a non-success status → offline.
+                _online = false;
+            }
+            _checkedUtc = DateTime.UtcNow;
+            return _online;
         }
-        catch { _online = false; }
-        finally { _checkedUtc = DateTime.UtcNow; Gate.Release(); }
-        return _online;
+        finally { Gate.Release(); }
     }
 }
