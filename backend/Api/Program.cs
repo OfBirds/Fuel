@@ -106,9 +106,17 @@ builder.Services.AddSingleton<ITokenService>(
 const string FuelScheme = "Fuel";
 const string OidcScheme = "CrimsonRaven";
 
-var oidcAuthority = builder.Configuration["OIDC_AUTHORITY"];   // e.g. http://192.168.4.55:9100
+var oidcAuthority = builder.Configuration["OIDC_AUTHORITY"];   // e.g. https://idp.example.com
 var oidcAudience = builder.Configuration["OIDC_AUDIENCE"];     // expected `aud` in the access token
 var oidcEnabled = !string.IsNullOrWhiteSpace(oidcAuthority);
+
+// If OIDC is on, the audience MUST be validated. CrimsonRaven is a shared IdP; without an
+// audience check the app would accept any token that IdP issued — including ones minted for
+// a different client in the same realm (cross-app token replay). Fail fast rather than run
+// with the check silently disabled.
+if (oidcEnabled && string.IsNullOrWhiteSpace(oidcAudience))
+    throw new InvalidOperationException(
+        "OIDC_AUDIENCE must be set when OIDC_AUTHORITY is configured (the app validates the token `aud`).");
 
 var authBuilder = builder.Services.AddAuthentication(options =>
 {
@@ -159,14 +167,15 @@ if (oidcEnabled)
     authBuilder.AddJwtBearer(OidcScheme, options =>
     {
         options.Authority = oidcAuthority;
-        // homelab :9100 is http; the prod instance (raven.bearsoft.duckdns.org) is https.
+        // A plain-http authority (e.g. a LAN-only dev IdP) can't serve metadata over TLS;
+        // an https authority must. Derive the requirement from the scheme.
         options.RequireHttpsMetadata = oidcAuthority!.StartsWith("https", StringComparison.OrdinalIgnoreCase);
         options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidIssuer = oidcAuthority,
-            ValidateAudience = !string.IsNullOrWhiteSpace(oidcAudience),
+            ValidateAudience = true, // audience is guaranteed non-blank by the startup check above
             ValidAudience = oidcAudience,
             ValidateLifetime = true,
             NameClaimType = JwtRegisteredClaimNames.Sub,

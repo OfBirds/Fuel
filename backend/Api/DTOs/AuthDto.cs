@@ -22,9 +22,16 @@ public class AuthResponse
     public bool NotifyReleases { get; set; }
 }
 
-public class ResetPasswordRequest
+/// <summary>Step 1 of the local password reset: ask for a reset link by email.</summary>
+public class RequestPasswordResetRequest
 {
     public required string Email { get; set; }
+}
+
+/// <summary>Step 2: redeem the single-use token from the emailed link and set a new password.</summary>
+public class ResetPasswordRequest
+{
+    public required string Token { get; set; }
     public required string NewPassword { get; set; }
 }
 

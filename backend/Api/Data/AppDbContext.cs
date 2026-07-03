@@ -6,6 +6,7 @@ namespace Api.Data;
 public class AppDbContext : DbContext
 {
     public DbSet<User> Users { get; set; }
+    public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
     public DbSet<SystemSetting> SystemSettings { get; set; }
     public DbSet<Food> Foods { get; set; }
     public DbSet<FoodIngredient> FoodIngredients { get; set; }
@@ -37,6 +38,19 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Sex).HasConversion<string>();
             entity.Property(e => e.Constitution).HasConversion<string>();
             entity.Property(e => e.ShowMacros).HasDefaultValue(false);
+        });
+
+        modelBuilder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TokenHash).IsRequired();
+            // Lookups are by token hash; the raw token from the email link is hashed
+            // and matched here. Deleting a user voids their outstanding reset tokens.
+            entity.HasIndex(e => e.TokenHash);
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<SystemSetting>(entity =>

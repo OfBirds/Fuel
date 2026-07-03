@@ -11,11 +11,33 @@ public interface IAuthService
     Task<User?> RegisterAsync(string email, string password);
     Task<User?> LoginAsync(string email, string password);
     Task<bool> ValidatePasswordAsync(string password);
-    Task<bool> ResetPasswordAsync(string email, string newPassword);
+
+    /// <summary>
+    /// Issues a single-use reset token for the local login, or returns null if no
+    /// eligible account exists (unknown email, or an OIDC-only account with no local
+    /// password — those reset via CrimsonRaven). Callers must not reveal which case
+    /// occurred. The returned value is the RAW token to place in the emailed link;
+    /// only its hash is stored.
+    /// </summary>
+    Task<string?> CreatePasswordResetTokenAsync(string email);
+
+    /// <summary>Redeems a raw reset token and sets a new password. False if the token is unknown, expired, or already used.</summary>
+    Task<bool> ResetPasswordWithTokenAsync(string rawToken, string newPassword);
 }
 
 public class AuthService(AppDbContext context) : IAuthService
 {
+    // PBKDF2-SHA256 work factor. 600k iterations follows current OWASP guidance;
+    // stored hashes are self-describing (see HashPassword) so this can be raised again
+    // later without breaking existing passwords.
+    private const int Pbkdf2Iterations = 600_000;
+    private const int SaltSize = 16;
+    private const int KeySize = 32;
+
+    // Reset tokens are short-lived; a link that leaks (forwarded mail, shoulder-surf)
+    // stops working quickly.
+    private static readonly TimeSpan ResetTokenLifetime = TimeSpan.FromHours(1);
+
     /// <summary>User-facing description of the password policy enforced below.</summary>
     public const string PasswordPolicyMessage =
         "Password must be at least 8 characters and include a letter, a number, and a special character.";
@@ -55,16 +77,49 @@ public class AuthService(AppDbContext context) : IAuthService
         return user;
     }
 
-    public async Task<bool> ResetPasswordAsync(string email, string newPassword)
+    public async Task<string?> CreatePasswordResetTokenAsync(string email)
     {
-        if (!await ValidatePasswordAsync(newPassword))
-            return false;
-
         var user = await context.Users.FirstOrDefaultAsync(u => u.Email == email);
-        if (user == null)
+
+        // Only local accounts can reset a local password. Unknown email or an OIDC-only
+        // account (no local hash) → no token, so this flow can never mint a local password
+        // on an SSO account and bypass CrimsonRaven.
+        if (user == null || string.IsNullOrEmpty(user.PasswordHash))
+            return null;
+
+        // Invalidate any outstanding tokens so only the newest link works.
+        var outstanding = context.PasswordResetTokens
+            .Where(t => t.UserId == user.Id && t.ConsumedAt == null);
+        context.PasswordResetTokens.RemoveRange(outstanding);
+
+        var rawToken = Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+        context.PasswordResetTokens.Add(new PasswordResetToken
+        {
+            UserId = user.Id,
+            TokenHash = HashToken(rawToken),
+            ExpiresAt = DateTime.UtcNow.Add(ResetTokenLifetime),
+        });
+        await context.SaveChangesAsync();
+
+        return rawToken;
+    }
+
+    public async Task<bool> ResetPasswordWithTokenAsync(string rawToken, string newPassword)
+    {
+        if (!await ValidatePasswordAsync(newPassword) || string.IsNullOrWhiteSpace(rawToken))
             return false;
 
-        user.PasswordHash = HashPassword(newPassword);
+        var tokenHash = HashToken(rawToken);
+        var now = DateTime.UtcNow;
+        var token = await context.PasswordResetTokens
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.TokenHash == tokenHash && t.ConsumedAt == null && t.ExpiresAt > now);
+
+        if (token == null)
+            return false;
+
+        token.User.PasswordHash = HashPassword(newPassword);
+        token.ConsumedAt = now;
         await context.SaveChangesAsync();
         return true;
     }
@@ -87,47 +142,57 @@ public class AuthService(AppDbContext context) : IAuthService
             && password.Any(c => !char.IsLetterOrDigit(c));
     }
 
+    // Stored as a self-describing string: "pbkdf2$<iterations>$<salt_b64>$<hash_b64>".
+    // Encoding the iteration count lets us raise the work factor later while still
+    // verifying older hashes (see VerifyPassword's legacy branch).
     private static string HashPassword(string password)
     {
-        var salt = new byte[16];
-        using (var rng = RandomNumberGenerator.Create())
-        {
-            rng.GetBytes(salt);
-        }
-
+        var salt = RandomNumberGenerator.GetBytes(SaltSize);
         var hash = Rfc2898DeriveBytes.Pbkdf2(
-            password,
-            salt,
-            10000,
-            HashAlgorithmName.SHA256,
-            20);
+            password, salt, Pbkdf2Iterations, HashAlgorithmName.SHA256, KeySize);
 
-        var hashWithSalt = new byte[36];
-        Array.Copy(salt, 0, hashWithSalt, 0, 16);
-        Array.Copy(hash, 0, hashWithSalt, 16, 20);
-
-        return Convert.ToBase64String(hashWithSalt);
+        return $"pbkdf2${Pbkdf2Iterations}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
     }
 
     private static bool VerifyPassword(string password, string storedHash)
     {
-        var hashBytes = Convert.FromBase64String(storedHash);
-        var salt = new byte[16];
-        Array.Copy(hashBytes, 0, salt, 0, 16);
-
-        var hash = Rfc2898DeriveBytes.Pbkdf2(
-            password,
-            salt,
-            10000,
-            HashAlgorithmName.SHA256,
-            20);
-
-        for (int i = 0; i < 20; i++)
+        // Current format: pbkdf2$<iterations>$<salt>$<hash>.
+        if (storedHash.StartsWith("pbkdf2$", StringComparison.Ordinal))
         {
-            if (hashBytes[i + 16] != hash[i])
+            var parts = storedHash.Split('$');
+            if (parts.Length != 4 || !int.TryParse(parts[1], out var iterations))
                 return false;
+
+            var salt = Convert.FromBase64String(parts[2]);
+            var expected = Convert.FromBase64String(parts[3]);
+            var actual = Rfc2898DeriveBytes.Pbkdf2(
+                password, salt, iterations, HashAlgorithmName.SHA256, expected.Length);
+            return CryptographicOperations.FixedTimeEquals(actual, expected);
         }
 
-        return true;
+        // Legacy format: base64 of [16-byte salt][20-byte hash], PBKDF2-SHA256 @ 10k.
+        // Kept so passwords set before the work-factor bump still verify.
+        try
+        {
+            var hashBytes = Convert.FromBase64String(storedHash);
+            if (hashBytes.Length != 36)
+                return false;
+
+            var salt = hashBytes[..16];
+            var expected = hashBytes[16..];
+            var actual = Rfc2898DeriveBytes.Pbkdf2(
+                password, salt, 10000, HashAlgorithmName.SHA256, 20);
+            return CryptographicOperations.FixedTimeEquals(actual, expected);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
+
+    private static string HashToken(string rawToken) =>
+        Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
+
+    private static string Base64UrlEncode(byte[] bytes) =>
+        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 }

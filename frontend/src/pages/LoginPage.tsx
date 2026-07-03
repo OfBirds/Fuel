@@ -21,7 +21,7 @@ interface LoginPageProps {
   onLoginSuccess: () => void;
 }
 
-type View = 'login' | 'register' | 'forgot';
+type View = 'login' | 'register' | 'forgot' | 'reset';
 
 // Kept in sync with the backend policy in AuthService.IsPasswordValid.
 const PASSWORD_RULES: { label: string; test: (p: string) => boolean }[] = [
@@ -50,13 +50,23 @@ const SUBTITLES: Record<View, string> = {
   login: 'Welcome back',
   register: 'Create your account',
   forgot: 'Reset your password',
+  reset: 'Choose a new password',
 };
 
 function viewFromHash(): View {
   const h = window.location.hash;
   if (h === '#register') return 'register';
   if (h === '#forgot') return 'forgot';
+  if (h.startsWith('#reset')) return 'reset';
   return 'login';
+}
+
+// The emailed reset link is `<origin>/#reset?token=…`; pull the token out of the hash.
+function resetTokenFromHash(): string {
+  const h = window.location.hash;
+  const q = h.indexOf('?');
+  if (q === -1) return '';
+  return new URLSearchParams(h.slice(q + 1)).get('token') ?? '';
 }
 
 function LoginPage({ onLoginSuccess }: LoginPageProps) {
@@ -66,6 +76,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [view, setView] = useState<View>(viewFromHash);
+  const [resetToken] = useState<string>(resetTokenFromHash);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -101,10 +112,26 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
 
     try {
       if (view === 'forgot') {
+        // Step 1: ask for a reset link. The response is always generic (it never reveals
+        // whether the address has an account), so just show the same confirmation.
+        const res = await fetch('/api/auth/request-password-reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          let message = 'Request failed';
+          try { message = JSON.parse(text).error ?? message; } catch {}
+          throw new Error(message);
+        }
+        setSuccess('If an account with that email exists, a reset link is on its way — check your inbox.');
+      } else if (view === 'reset') {
+        // Step 2: redeem the single-use token from the emailed link.
         const res = await fetch('/api/auth/reset-password', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, newPassword }),
+          body: JSON.stringify({ token: resetToken, newPassword }),
         });
         if (!res.ok) {
           const text = await res.text();
@@ -114,6 +141,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
         }
         setSuccess('Password reset! You can now sign in.');
         setView('login');
+        window.location.hash = '';
         setPassword('');
         setNewPassword('');
       } else if (view === 'register') {
@@ -167,19 +195,27 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
         <p className="login-subtitle">{SUBTITLES[view]}</p>
 
         <form onSubmit={handleSubmit} className="login-form">
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="you@example.com"
-            />
-          </div>
+          {view === 'reset' && !resetToken && (
+            <div className="maintenance-note">
+              This reset link is missing its token. Request a new one from <strong>Forgot password?</strong>.
+            </div>
+          )}
 
-          {view !== 'forgot' && (
+          {view !== 'reset' && (
+            <div className="form-group">
+              <label htmlFor="email">Email</label>
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="you@example.com"
+              />
+            </div>
+          )}
+
+          {(view === 'login' || view === 'register') && (
             <div className="form-group">
               <label htmlFor="password">Password</label>
               <div className="password-wrapper">
@@ -199,7 +235,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
             </div>
           )}
 
-          {view === 'forgot' && (
+          {view === 'reset' && (
             <div className="form-group">
               <label htmlFor="newPassword">New Password</label>
               <div className="password-wrapper">
@@ -223,10 +259,12 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
           {error && <div className="error-message">{error}</div>}
           {success && <div className="success-message">{success}</div>}
 
-          <button type="submit" disabled={loading} className="submit-button">
+          <button type="submit" disabled={loading || (view === 'reset' && !resetToken)} className="submit-button">
             {loading
               ? 'Loading...'
               : view === 'forgot'
+              ? 'Send Reset Link'
+              : view === 'reset'
               ? 'Reset Password'
               : view === 'register'
               ? 'Create Account'
@@ -259,7 +297,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
           </div>
         )}
 
-        {view === 'forgot' && (
+        {(view === 'forgot' || view === 'reset') && (
           <div className="login-toggle">
             <p>
               Remember it after all?
