@@ -114,29 +114,20 @@ function AiEntryPage() {
 
   // Photo capture: the blob lives in browser memory for this review only and is
   // re-sent on each refine turn — never persisted (docs/ai-estimation.md §Image lifetime).
+  // Photos arrive through a native file input with no `capture` attribute, so phones offer
+  // the OS "Camera or Photo Library" chooser and the native camera's own shutter + retake.
   const [imageBlob, setImageBlob] = useState<Blob | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   // Optional free-text hint the user attaches to the photo — rides with the FIRST estimate
   // (and every re-send) so the model weighs it alongside what it sees. Refine notes are separate.
   const [photoNote, setPhotoNote] = useState('');
-  const [cameraOn, setCameraOn] = useState(false);
-  // Camera couldn't open on a secure origin (no device / permission denied) → drop back to the
-  // file input so the user is never left without a way to add a photo.
-  const [cameraFailed, setCameraFailed] = useState(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
-  // Barcode (EAN/UPC) scan — lives inside Photo mode alongside camera/upload.
-  // It's a precise digit decode (ZXing) + Open Food Facts lookup, not an AI guess,
-  // so it stays a dedicated path; a hit becomes a matched review row.
+  // Barcode (EAN/UPC) scan — its own tab. A precise digit decode (ZXing) run locally on the
+  // captured/chosen photo + Open Food Facts lookup, not an AI guess; a hit becomes a matched row.
   const [barcodeEnabled, setBarcodeEnabled] = useState(false);
-  const [barcodeCameraOn, setBarcodeCameraOn] = useState(false);
-  const [barcodeCameraFailed, setBarcodeCameraFailed] = useState(false);
   const [barcodeCode, setBarcodeCode] = useState('');
   const [barcodeBusy, setBarcodeBusy] = useState(false);
   const [barcodeMsg, setBarcodeMsg] = useState<string | null>(null);
-  const barcodeVideoRef = useRef<HTMLVideoElement | null>(null);
-  const barcodeStreamRef = useRef<MediaStream | null>(null);
 
   // Catalogue keyed by lowercased name — to flag a "new" row that actually duplicates
   // an existing food (we don't auto-merge yet; just warn so we stop minting dupes).
@@ -188,28 +179,11 @@ function AiEntryPage() {
     return () => { alive = false; };
   }, []);
 
-  // Abort any in-flight request and release both cameras if we leave the screen.
-  useEffect(() => () => {
-    abortRef.current?.abort();
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    barcodeStreamRef.current?.getTracks().forEach((t) => t.stop());
-  }, []);
+  // Abort any in-flight request if we leave the screen.
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   // Revoke the previous object URL when the photo changes or the screen unmounts.
   useEffect(() => () => { if (imageUrl) URL.revokeObjectURL(imageUrl); }, [imageUrl]);
-
-  const stopCamera = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    setCameraOn(false);
-  }, []);
-
-  // Attach the live stream once the <video> has mounted.
-  useEffect(() => {
-    if (cameraOn && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-    }
-  }, [cameraOn]);
 
   const useImage = async (blob: Blob) => {
     setRows(null); setNotes([]); setOverallConfidence(null); setError(null);
@@ -221,38 +195,6 @@ function AiEntryPage() {
     setImageUrl(URL.createObjectURL(normalized)); // prior URL revoked by the effect above
   };
 
-  const secureCamera = () => typeof window !== 'undefined'
-    && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia;
-
-  const startCamera = async () => {
-    setError(null);
-    if (!secureCamera()) {
-      // getUserMedia is blocked outside a secure context (e.g. http on the LAN).
-      setError('Camera needs a secure (HTTPS) connection — use “Choose a photo” to upload instead.');
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      streamRef.current = stream;
-      setCameraOn(true);
-    } catch {
-      // Permission denied / no camera → reveal the file input so they can still upload/snap.
-      setCameraFailed(true);
-      setError('Camera unavailable — use Upload to choose or take a photo instead.');
-    }
-  };
-
-  const capturePhoto = () => {
-    const video = videoRef.current;
-    if (!video || !video.videoWidth) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d')?.drawImage(video, 0, 0);
-    canvas.toBlob((blob) => { if (blob) useImage(blob); }, 'image/jpeg', 0.9);
-    stopCamera();
-  };
-
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) useImage(file);
@@ -261,14 +203,7 @@ function AiEntryPage() {
 
   const clearImage = () => { setImageBlob(null); setImageUrl(null); };
 
-  // ── Barcode scan (EAN/UPC) — its own camera/upload pair inside Photo mode ──
-  const stopBarcodeScan = useCallback(() => {
-    barcodeStreamRef.current?.getTracks().forEach((t) => t.stop());
-    barcodeStreamRef.current = null;
-    setBarcodeBusy(false);
-    setBarcodeCameraOn(false);
-  }, []);
-
+  // ── Barcode scan (EAN/UPC) — decode locally from a captured/chosen photo, then look up ──
   // A resolved product is already a real catalogue food (the backend caches it),
   // so it joins the review list as a matched row — not a "new" one.
   const addBarcodeFood = (food: BarcodeFood) => {
@@ -319,47 +254,8 @@ function AiEntryPage() {
     }
   }, []);
 
-  // Live camera scan: open the stream, let ZXing decode one barcode, then look it up.
-  const startBarcodeScan = useCallback(async () => {
-    setBarcodeMsg(null);
-    setBarcodeCode('');
-    if (!secureCamera()) {
-      setBarcodeMsg('Camera needs a secure (HTTPS) connection — upload a photo or type the digits below.');
-      return;
-    }
-    setBarcodeCameraOn(true);
-    try {
-      const { BrowserMultiFormatReader } = await import('@zxing/browser');
-      const reader = new BrowserMultiFormatReader();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
-      });
-      barcodeStreamRef.current = stream;
-      const video = barcodeVideoRef.current;
-      if (!video) { stream.getTracks().forEach((t) => t.stop()); setBarcodeCameraOn(false); return; }
-      video.srcObject = stream;
-      await new Promise<void>((resolve, reject) => {
-        video.onloadedmetadata = () => { video.play().then(() => resolve(), reject); };
-        video.onerror = () => reject(new Error('video'));
-      });
-      setBarcodeBusy(true);
-      const result = await reader.decodeOnceFromVideoElement(video);
-      if (result) await lookupBarcode(result.getText());
-    } catch {
-      // If the stream never opened, the camera itself is unavailable (denied / no device) →
-      // silently drop to the upload fallback (which works fine — no message needed). A later
-      // decode failure leaves the stream set, so we don't flip the fallback for "no barcode".
-      if (!barcodeStreamRef.current) setBarcodeCameraFailed(true);
-    } finally {
-      barcodeStreamRef.current?.getTracks().forEach((t) => t.stop());
-      barcodeStreamRef.current = null;
-      setBarcodeBusy(false);
-      setBarcodeCameraOn(false);
-    }
-  }, [lookupBarcode]);
-
-  // Upload path: decode a barcode straight from a chosen/snapped photo.
+  // Decode a barcode straight from a chosen/snapped photo (the native camera provides the
+  // shutter + retake), then look it up.
   const onBarcodeFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ''; // allow re-selecting the same file
@@ -383,8 +279,6 @@ function AiEntryPage() {
 
   const switchMode = (m: AiMode) => {
     if (m === mode) return;
-    if (m !== 'photo') stopCamera();
-    if (m !== 'barcode') stopBarcodeScan();
     setMode(m);
     setError(null);
   };
@@ -596,32 +490,19 @@ function AiEntryPage() {
             <div className="form-section ai-photo">
               <label>Snap or upload a photo of your meal</label>
 
-              {cameraOn ? (
-                <div className="ai-camera">
-                  <video ref={videoRef} autoPlay playsInline muted className="ai-camera-preview" />
-                  <div className="ai-photo-actions">
-                    <CheckButton label="Capture photo" onClick={capturePhoto} />
-                    <button type="button" className="cancel-btn" onClick={stopCamera}>Cancel</button>
-                  </div>
-                </div>
-              ) : imageUrl ? (
+              {imageUrl ? (
                 <div className="ai-photo-preview">
                   <img src={imageUrl} alt="Meal to estimate" className="ai-photo-img" />
                   <button type="button" className="cancel-btn" onClick={clearImage} disabled={pending}>Retake / remove</button>
                 </div>
-              ) : secureCamera() && !cameraFailed ? (
-                /* Secure origin (HTTPS / localhost): open the live camera — this is what shows
-                   the device-permission prompt on a computer and the rear camera on a phone. */
-                <div className="ai-photo-actions single">
-                  <button type="button" className="save-btn ai-upload-btn" onClick={startCamera}>Upload</button>
-                </div>
               ) : (
-                /* Non-secure origin (e.g. LAN http): getUserMedia is blocked, so fall back to the
-                   native file input — which still surfaces the camera on phones via capture. */
+                /* One native file control. With no `capture` attribute, phones show the OS
+                   "Camera or Photo Library" chooser (and the native camera brings its own
+                   shutter + use/retake); desktop gets a file picker. */
                 <div className="ai-photo-actions single">
                   <label className="save-btn ai-upload-btn">
-                    Upload
-                    <input type="file" accept="image/*" capture="environment" onChange={onFile} hidden aria-label="Upload a meal photo" />
+                    Take or upload a photo
+                    <input type="file" accept="image/*" onChange={onFile} hidden aria-label="Upload a meal photo" />
                   </label>
                 </div>
               )}
@@ -645,32 +526,15 @@ function AiEntryPage() {
             <div className="form-section ai-barcode">
               <label className="ai-barcode-label">Snap or upload a photo of a barcode (EAN/UPC)</label>
 
-              {barcodeCameraOn ? (
-                <div className="ai-barcode-camera">
-                  <video ref={barcodeVideoRef} autoPlay playsInline muted className="ai-camera-preview" />
-                  <p className="ai-barcode-hint">Hold the barcode steady in the frame…</p>
-                  <div className="ai-photo-actions">
-                    <button type="button" className="bc-btn-outline" onClick={stopBarcodeScan}>Cancel</button>
-                  </div>
-                </div>
-              ) : secureCamera() && !barcodeCameraFailed ? (
-                /* Secure origin: live barcode scan (camera permission prompt on a computer,
-                   rear camera on a phone). */
-                <div className="ai-photo-actions single">
-                  <button type="button" className="bc-btn" onClick={startBarcodeScan} disabled={pending || barcodeBusy}>
-                    Upload
-                  </button>
-                </div>
-              ) : (
-                /* Non-secure origin: upload/snap a barcode photo (camera on phones via capture),
-                   decoded locally — getUserMedia is blocked here. */
-                <div className="ai-photo-actions single">
-                  <label className="bc-btn ai-upload-btn">
-                    Upload
-                    <input type="file" accept="image/*" capture="environment" onChange={onBarcodeFile} hidden aria-label="Upload a barcode photo" />
-                  </label>
-                </div>
-              )}
+              {/* One native file control, decoded locally by ZXing. With no `capture` attribute,
+                  phones offer the OS "Camera or Photo Library" chooser and the native camera's
+                  own shutter/retake — which is how you snap a barcode. */}
+              <div className="ai-photo-actions single">
+                <label className="bc-btn ai-upload-btn">
+                  Take or upload a barcode photo
+                  <input type="file" accept="image/*" onChange={onBarcodeFile} hidden aria-label="Upload a barcode photo" disabled={barcodeBusy} />
+                </label>
+              </div>
 
               <details className="ai-barcode-typed">
                 <summary>Or type the digits</summary>
@@ -688,7 +552,7 @@ function AiEntryPage() {
                 </div>
               </details>
 
-              {barcodeBusy && !barcodeCameraOn && <p className="ai-barcode-hint">Reading barcode…</p>}
+              {barcodeBusy && <p className="ai-barcode-hint">Reading barcode…</p>}
               {barcodeMsg && <p className="ai-barcode-msg" role="alert">{barcodeMsg}</p>}
             </div>
           )}
@@ -699,7 +563,7 @@ function AiEntryPage() {
               <span>Estimating…</span>
               <button className="cancel-btn" onClick={cancel}>Cancel</button>
             </div>
-          ) : (mode === 'text' || (mode === 'photo' && supportsImages)) && !cameraOn && (
+          ) : (mode === 'text' || (mode === 'photo' && supportsImages)) && (
             <div className="ai-estimate-row">
               <CheckButton
                 label={rows ? 'Re-estimate' : 'Estimate'}
