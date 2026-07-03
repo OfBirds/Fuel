@@ -49,7 +49,7 @@ runner** on the VM connects *outbound* to GitHub and waits for jobs — **zero
 inbound ports**. On a push, GitHub Actions:
 
 1. Runs the test suites (gate).
-2. Builds the single image and pushes it to **GHCR** (`ghcr.io/trifunovich/fuel`),
+2. Builds the single image and pushes it to **GHCR** (`ghcr.io/ofbirds/fuel`),
    tagged per environment.
 3. Generates an **idempotent EF migration script** and applies it (the loud gate —
    a bad migration fails the deploy, old container keeps running).
@@ -57,8 +57,10 @@ inbound ports**. On a push, GitHub Actions:
    (`docker compose pull && docker compose up -d --wait`).
 
 **Runners are per-repo.** Fuel has its **own** runner instance under host user `at`
-at `/home/at/actions-runner-fuel` (service `actions.runner.Trifunovich-Fuel.fuel`),
-separate from other apps' runners. Fuel's workflow targets `runs-on: [self-hosted]`.
+at `/home/at/actions-runner-fuel` (systemd service named from the registration — still
+`actions.runner.Trifunovich-Fuel.fuel` from before the repo moved to the OfBirds org;
+the label is cosmetic and the runner followed the transfer), separate from other apps'
+runners. Fuel's workflow targets `runs-on: [self-hosted]`.
 See [deploy-runbook.md](deploy-runbook.md).
 
 ## Stack layout per environment

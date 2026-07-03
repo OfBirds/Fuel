@@ -22,7 +22,7 @@ public class OpenFoodFactsLookup : IBarcodeFoodLookup
         _http = httpFactory.CreateClient("barcode");
         _http.BaseAddress = new Uri(options.Value.BaseUrl);
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(
-            "Fuel/1.0 (self-hosted calorie tracker; https://github.com/Trifunovich/Fuel)");
+            "Fuel/1.0 (self-hosted calorie tracker; https://github.com/OfBirds/Fuel)");
         Enabled = options.Value.Enabled;
         _logger = logger;
     }

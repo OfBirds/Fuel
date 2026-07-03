@@ -33,7 +33,7 @@ these absolute paths. Ports are already Fuel's deconflicted block:
 ```
 # /opt/fuel/.env.staging
 COMPOSE_PROJECT_NAME=fuel-staging
-APP_IMAGE=ghcr.io/trifunovich/fuel:staging
+APP_IMAGE=ghcr.io/ofbirds/fuel:staging
 APP_PORT=9223
 DB_HOST_PORT=5435
 SEQ_PORT=9233
@@ -44,7 +44,7 @@ DB_PASSWORD=<real-staging-password>
 ```
 # /opt/fuel/.env.prod
 COMPOSE_PROJECT_NAME=fuel-prod
-APP_IMAGE=ghcr.io/trifunovich/fuel:prod
+APP_IMAGE=ghcr.io/ofbirds/fuel:prod
 APP_PORT=9224
 DB_HOST_PORT=5436
 SEQ_PORT=9234
@@ -73,7 +73,7 @@ mkdir -p ~/actions-runner-fuel && cd ~/actions-runner-fuel
 tar xzf ~/actions-runner/actions-runner-linux-x64-2.334.0.tar.gz
 
 ./config.sh \
-  --url https://github.com/Trifunovich/Fuel \
+  --url https://github.com/OfBirds/Fuel \
   --token <REGISTRATION_TOKEN_FROM_GITHUB> \
   --name fuel \
   --unattended --replace

@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 env:
-  IMAGE: ghcr.io/trifunovich/fuel
+  IMAGE: ghcr.io/ofbirds/fuel
 
 jobs:
   test:
