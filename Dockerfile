@@ -51,6 +51,13 @@ COPY RELEASE_NOTES.md /app/RELEASE_NOTES.md
 ENV APP_VERSION=$APP_VERSION \
     GIT_COMMIT=$GIT_COMMIT \
     BUILD_TIME=$BUILD_TIME
+# Run as the non-root user the aspnet image predefines (APP_UID=1654) so a code-exec bug
+# can't act as root on the host. Pre-create the two dirs the app writes to — Serilog's file
+# sink (logs/) and BackupService (backups/, unless BACKUP_DIR points elsewhere) — and hand
+# them to that user, since /app itself stays root-owned/read-only.
+# NOTE for deploy: if BACKUP_DIR is set to a mounted volume, that volume must be writable by UID 1654.
+RUN mkdir -p /app/logs /app/backups && chown -R $APP_UID:$APP_UID /app/logs /app/backups
+USER $APP_UID
 # The aspnet image listens on 8080 by default (ASPNETCORE_HTTP_PORTS=8080).
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "Api.dll"]

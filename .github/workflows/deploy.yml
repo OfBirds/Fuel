@@ -1,7 +1,7 @@
 name: deploy
 
-# main    -> staging stack (port 9123)
-# release -> prod stack    (port 9124)
+# main    -> staging stack (port 9223)
+# release -> prod stack    (port 9224)
 on:
   push:
     branches: [main, release]
@@ -13,6 +13,10 @@ on:
 concurrency:
   group: deploy-${{ github.ref_name }}
   cancel-in-progress: false
+
+# Least privilege by default; the build job widens to packages: write for GHCR.
+permissions:
+  contents: read
 
 env:
   IMAGE: ghcr.io/trifunovich/fuel
