@@ -1,0 +1,3 @@
+# Default owner for everything — the required reviewer once branch protection is on.
+# Switch to an org team (e.g. @OfBirds/maintainers) if this grows past one maintainer.
+* @Trifunovich
