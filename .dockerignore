@@ -1,0 +1,17 @@
+# Build outputs / deps — rebuilt inside the image
+**/bin
+**/obj
+**/node_modules
+frontend/dist
+backend/Api/wwwroot
+
+# Local runtime artifacts
+backend/Api/logs
+
+# VCS / tooling
+.git
+.github
+.claude
+docs
+*.md
+!RELEASE_NOTES.md

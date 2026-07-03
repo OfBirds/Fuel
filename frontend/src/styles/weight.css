@@ -1,0 +1,143 @@
+.weight-page {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.weight-page h1 {
+  font-family: 'Merriweather', serif;
+  color: var(--primary);
+  margin-bottom: 1rem;
+}
+
+.weight-add-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: calc(1.5rem * var(--density));
+  align-items: flex-end;
+}
+
+.weight-add-bar input,
+.weight-add-bar button {
+  box-sizing: border-box;
+  height: 2.4rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+  border-radius: 6px;
+  line-height: normal;
+}
+
+.weight-add-bar input {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.weight-add-bar .weight-value,
+.weight-add-bar .weight-date,
+.weight-add-bar button {
+  flex: 1;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  text-align: center;
+}
+.weight-add-btn {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  font-weight: 600;
+}
+
+.weight-add-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.weight-add-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.weight-add-bar .weight-add-cancel {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.weight-list {
+  list-style: none;
+  padding: 0;
+}
+
+.weight-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: calc(0.75rem * var(--density)) calc(1rem * var(--density));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: calc(0.5rem * var(--density));
+  background: var(--surface);
+}
+
+.weight-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.weight-row-value {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.weight-row-date {
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+
+.weight-delta {
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.weight-delta.negative {
+  color: var(--success);
+}
+
+.weight-delta.positive {
+  color: var(--error);
+}
+
+.weight-delta.neutral {
+  color: var(--text-light);
+}
+
+.weight-row-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: white;
+  background: var(--error);
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  flex-shrink: 0;
+}
+
+.weight-row-delete:hover {
+  opacity: 0.88;
+}
+
+.weight-empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-light);
+}

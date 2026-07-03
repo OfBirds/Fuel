@@ -1,0 +1,8 @@
+name: swallow
+title: Indigo Swallow
+# Unversioned while the docs site bootstraps. From the first release that
+# contains this file onward, set an explicit version (e.g. '1.10') so the
+# docs site can offer per-release docs pulled from tags.
+version: ~
+nav:
+- modules/ROOT/nav.adoc
