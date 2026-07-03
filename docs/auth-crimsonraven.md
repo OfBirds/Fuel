@@ -1,24 +1,22 @@
 # Auth — CrimsonRaven SSO (dual-auth, data-preserving)
 
-> **Update (2026-06-22): CrimsonRaven is Keycloak now.** It hosts the themed login + **native
-> email-verification, resend and forgot-password**, so the Zitadel-era app-side workarounds were
-> ripped out: the unverified-email **hold middleware**, the **resend** endpoint + `app-mailer` PAT,
-> and the IdP **logo-scrape** are gone, and `OidcUserProvisioner` now **links by email
-> unconditionally** (Keycloak's `verifyEmail` is the sole gate). See the CrimsonRaven repo's
-> `docs/keycloak-migration.md`. The dual-auth / break-glass design below still holds.
-
 > Status: **live** (dual-auth, CrimsonRaven-first). The app accepts **both** CrimsonRaven
 > (OIDC) tokens **and** its own legacy HMAC JWT. The login screen is **CrimsonRaven-first**:
 > when the IdP is reachable the user is sent straight to it; the email/password form is only
 > shown when CrimsonRaven is offline/unconfigured (break-glass), with a maintenance notice.
-> Decommissioning the local path is a deliberate later step. Running on staging over HTTPS
-> (`https://raven-staging.bearsoft.duckdns.org`).
+> Decommissioning the local path is a deliberate later step.
 >
 > (The app is branded **Indigo Swallow**; the repo/code namespace stays `fuel`.)
 
+**CrimsonRaven is a Keycloak IdP.** (It ran Zitadel earlier; the migration to Keycloak
+removed the Zitadel-era app-side workarounds — an unverified-email hold middleware, a
+resend-verification endpoint + mailer PAT, and an IdP logo-scrape. Keycloak now hosts the
+themed login plus native email-verification, resend and forgot-password, so
+`OidcUserProvisioner` links by email whenever Keycloak reports the email verified.)
+
 ## Why
 
-Move authentication to **CrimsonRaven** (self-hosted Zitadel IdP) for SSO across homelab
+Move authentication to **CrimsonRaven** (a self-hosted Keycloak IdP) for SSO across homelab
 apps, MFA/TOTP, Google login, and refresh/sessions — without dropping the working local
 login or, critically, **losing any existing user's data**.
 
@@ -40,7 +38,7 @@ than replacing it:
 - Idempotent: a GUID `sub` (Fuel-issued token, or already-mapped) is a no-op.
 
 **Users are not copied into CrimsonRaven and passwords are not migrated** (Fuel's PBKDF2
-hashes aren't a Zitadel-verifiable format). Existing users **self-register** in
+hashes aren't a Keycloak-verifiable format). Existing users **self-register** in
 CrimsonRaven with the same email (or use Google); first login links by verified email.
 A user who hasn't verified their email is treated as new (empty) until they do.
 
@@ -50,18 +48,26 @@ A user who hasn't verified their email is treated as new (empty) until they do.
   (`AddJwtBearer` against `OIDC_AUTHORITY`/JWKS, `aud = OIDC_AUDIENCE`). A `"smart"` policy
   scheme is the default and forwards by peeking the bearer's `iss`. The default-deny
   `FallbackPolicy` is unchanged; both schemes satisfy it.
-- `RequireHttpsMetadata` is derived from the authority scheme (http homelab vs https prod).
-- OIDC is **opt-in**: blank `OIDC_AUTHORITY` → only the Fuel scheme runs.
+- `RequireHttpsMetadata` is derived from the authority scheme (a plain-http LAN dev IdP vs
+  an https IdP).
+- OIDC is **opt-in**: blank `OIDC_AUTHORITY` → only the Fuel scheme runs. When it *is* set,
+  `OIDC_AUDIENCE` is **required** — the app refuses to start without it, so audience
+  validation can't be silently skipped (a token minted for a different client on the same
+  IdP would otherwise validate).
 - **`GET /api/auth/me`** (authenticated) returns `{ userId, email }` — the SPA calls it
   after the OIDC callback to learn its Fuel `User.Id`.
 - **`GET /api/config`** (anonymous) lets the single Docker image be configured per-stack at
-  runtime (no rebuild). It returns `{ oidcEnabled, oidcAuthority, oidcClientId, oidcOnline,
-  oidcLogoUrl, oidcLogoUrlDark }`:
+  runtime (no rebuild). It returns `{ oidcEnabled, oidcOnline, oidcAuthority, oidcClientId,
+  authMode }`:
   - `oidcOnline` — a short-cached liveness probe of the IdP's discovery endpoint; drives the
-    CrimsonRaven-first vs offline-fallback decision on the login screen.
-  - `oidcLogoUrl` / `oidcLogoUrlDark` — CrimsonRaven's own (themed) logo, scraped from its
-    login page and cached, so the app shows the IdP's mark on the redirect/callback screens
-    (single source of truth = CrimsonRaven).
+    CrimsonRaven-first vs offline-fallback decision on the login screen. A caller-aborted
+    probe is not cached (so a closed tab can't leave a false "offline"), and negative results
+    use a shorter TTL than positive ones.
+  - `authMode` — `crimsonraven` (default) or `legacy`. A manual env break-glass
+    (`AUTH_MODE=legacy`) forces the local email/password form during CR maintenance; never
+    both at once.
+  - Branding (logo, theme) is owned by Keycloak's own login pages — the app no longer scrapes
+    a logo from the IdP.
 
 ## Frontend
 
@@ -79,14 +85,6 @@ A user who hasn't verified their email is treated as new (empty) until they do.
   auto-redirects via `loginWithSSO()` (showing a spinner). The legacy email/password form is
   reached **only** when CrimsonRaven is down/unconfigured, and then shows a maintenance note
   ("CrimsonRaven is offline — sign in/register with the same email to reach your data").
-- `useOidcLogo()` pulls CrimsonRaven's themed logo from `/api/config` for the
-  redirect/callback screens, so the IdP's brand is shown while bouncing.
-
-> **TODO (icon on the inbound bounce):** the redirect screens show CrimsonRaven's logo in
-> both directions. That's right going **to** CR (`LoginPage` spinner), but the
-> **return** trip — `AuthCallbackPage` ("Signing you in…", after CR has authenticated us
-> and we're landing back in the app) — should show the **Fuel / Indigo Swallow** icon, not
-> the IdP's, since we're arriving at Fuel. Needs a Fuel-side brand icon for that screen.
 
 ## Config (flat env, per stack)
 
@@ -94,25 +92,26 @@ A user who hasn't verified their email is treated as new (empty) until they do.
 |---|---|
 | `OIDC_AUTHORITY` | IdP issuer; must equal the token `iss`. Blank → SSO off. |
 | `OIDC_CLIENT_ID` | Fuel public/PKCE client id in CrimsonRaven. |
-| `OIDC_AUDIENCE` | Expected `aud` in the access token. |
+| `OIDC_AUDIENCE` | Expected `aud` in the access token. Required when `OIDC_AUTHORITY` is set. |
+| `AUTH_MODE` | `legacy` forces the local email/password form (break-glass); anything else = CrimsonRaven-first. |
 
-- **Local + staging** → `https://raven-staging.bearsoft.duckdns.org` (homelab Zitadel, now
-  HTTPS — see `CrimsonRaven/docs/https-migration.md`; client `377946274235744259`). HTTPS is
-  required so the SPA's `crypto.subtle`/PKCE and Login V2's session cookie work (secure
-  context). Staging is served at `https://fuel-staging.bearsoft.duckdns.org` for the same
-  reason.
-- **Prod** → `https://raven.bearsoft.duckdns.org` (separate instance, its own user store).
-  Prod Fuel is served at `https://swallow.bearsoft.duckdns.org`. The Fuel app is registered
-  as a **public PKCE client** (`auth_method = NONE`, no secret), same shape as staging:
-  - project `378028902527795203` · app `378028918986244099` · **client `378028919003021315`**
-    (`OIDC_CLIENT_ID == OIDC_AUDIENCE`).
-  - redirect URI `https://swallow.bearsoft.duckdns.org/auth/callback`; post-logout
-    `https://swallow.bearsoft.duckdns.org`.
-  - Prod env (host `.env.prod`): `OIDC_AUTHORITY=https://raven.bearsoft.duckdns.org`,
-    `OIDC_CLIENT_ID`/`OIDC_AUDIENCE=378028919003021315`,
-    `PUBLIC_BASE_URL=https://swallow.bearsoft.duckdns.org` (see `deploy/.env.prod.example`).
+Hostnames/ids below are placeholders — the real values live only in the host `.env.*`
+(never committed). Staging and prod point at **separate** CrimsonRaven instances with their
+own user stores.
+
+- **Local + staging** → e.g. `https://idp-staging.example.com` (client `<staging-client-id>`).
+  HTTPS is required so the SPA's `crypto.subtle`/PKCE and Keycloak's session cookie work
+  (secure context). Staging Fuel is served over HTTPS for the same reason.
+- **Prod** → e.g. `https://idp.example.com` (separate instance). Prod Fuel is served at e.g.
+  `https://app.example.com`. The Fuel app is registered as a **public PKCE client**
+  (`auth_method = NONE`, no secret), same shape as staging:
+  - `OIDC_CLIENT_ID == OIDC_AUDIENCE` (a single public client id).
+  - redirect URI `https://app.example.com/auth/callback`; post-logout `https://app.example.com`.
+  - Prod env (host `.env.prod`): `OIDC_AUTHORITY=https://idp.example.com`,
+    `OIDC_CLIENT_ID`/`OIDC_AUDIENCE=<prod-client-id>`,
+    `PUBLIC_BASE_URL=https://app.example.com` (see `deploy/.env.prod.example`).
   - Pre-flight (verified without deploying): discovery issuer matches authority, JWKS 200,
-    `/authorize` accepts the swallow redirect (302) and rejects others (400).
+    `/authorize` accepts the app redirect (302) and rejects others (400).
 
 ## Verify
 
@@ -125,13 +124,12 @@ A user who hasn't verified their email is treated as new (empty) until they do.
 
 ## Resolved during build
 
-- **Access-token claims.** Zitadel's access token does **not** carry `email`/`email_verified`,
-  so `OidcUserProvisioner` falls back to a **userinfo lookup** (`{authority}/oidc/v1/userinfo`
-  with the request's bearer, via `IHttpContextAccessor`) to get the verified email for
-  link-by-email. No Zitadel Action needed.
+- **Access-token claims.** The access token doesn't carry `email`/`email_verified`, so
+  `OidcUserProvisioner` falls back to a **userinfo lookup** (Keycloak's
+  `{authority}/protocol/openid-connect/userinfo` with the request's bearer, via
+  `IHttpContextAccessor`) to get the verified email for link-by-email.
 
 ## Open / later
 
 - **Phase 4 cutover** (separate): remove `JwtTokenService`, password logic, `/api/auth/*`,
   the `"Fuel"` scheme, and drop `PasswordHash`.
-- **Prod SSO**: register a Fuel OIDC app on the prod CrimsonRaven and fill prod `OIDC_*`.

@@ -47,7 +47,7 @@ npm run dev -- --host
 
 **Always pass `--host`** — without it Vite binds only to `127.0.0.1` and mobile
 devices on the LAN can't reach the app. With `--host` it listens on `0.0.0.0`
-and prints both the localhost and network URLs (e.g. `http://192.168.4.55:3000`).
+and prints both the localhost and network URLs (e.g. `http://192.168.1.10:3000`).
 
 Vite is configured for **:3000** and proxies `/api` → `http://localhost:5200`
 (see `vite.config.ts`). HMR picks up source edits; no restart needed.

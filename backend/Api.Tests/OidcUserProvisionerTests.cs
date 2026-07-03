@@ -19,7 +19,7 @@ namespace Api.Tests;
 /// </summary>
 public class OidcUserProvisionerTests : IDisposable
 {
-    private const string Issuer = "https://raven-staging.bearsoft.duckdns.org/realms/crimsonraven";
+    private const string Issuer = "https://idp-staging.example.com/realms/crimsonraven";
     private readonly AppDbContext _db;
     private readonly Guid _aliceId;
 

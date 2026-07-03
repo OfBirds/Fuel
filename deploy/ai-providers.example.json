@@ -6,7 +6,7 @@
         "name": "ollama-local",
         "convention": "openai",
         "capabilities": ["text", "vision"],
-        "baseUrl": "http://gpubox.lan:11434/v1",
+        "baseUrl": "http://ollama-host.lan:11434/v1",
         "model": "qwen2.5-vl",
         "order": 1,
         "enabled": false

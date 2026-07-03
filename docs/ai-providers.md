@@ -40,7 +40,7 @@
 ```json
 { "ai": { "providers": [
   { "name": "qwen-local", "convention": "openai", "capabilities": ["text","vision"],
-    "baseUrl": "http://gpubox:11434/v1", "model": "qwen2.5-vl", "order": 1 },
+    "baseUrl": "http://ollama-host:11434/v1", "model": "qwen2.5-vl", "order": 1 },
   { "name": "deepseek", "convention": "anthropic", "capabilities": ["text"],
     "baseUrl": "https://api.deepseek.com/anthropic", "model": "deepseek-v4-flash",
     "order": 2, "keyRef": "deepseek" },
