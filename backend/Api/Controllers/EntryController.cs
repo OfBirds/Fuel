@@ -1,6 +1,7 @@
 using Api.Data;
 using Api.DTOs;
 using Api.Models;
+using Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -130,59 +131,110 @@ public class EntryController(AppDbContext db) : ControllerBase
         if (request.Items.Count == 0)
             return BadRequest(new { error = "At least one item is required." });
 
-        var created = new List<FoodEntry>(request.Items.Count);
-        foreach (var row in request.Items)
+        // --- Pre-validate every item ---
+        var mealTypes = new MealType[request.Items.Count];
+        var sources = new EntrySource[request.Items.Count];
+        for (var i = 0; i < request.Items.Count; i++)
         {
+            var row = request.Items[i];
             if (string.IsNullOrWhiteSpace(row.FoodName))
                 return BadRequest(new { error = "FoodName is required." });
-            if (!Enum.TryParse<MealType>(row.MealType, out var mealType))
+            if (!Enum.TryParse<MealType>(row.MealType, out var mt))
                 return BadRequest(new { error = $"Invalid MealType: {row.MealType}." });
             if (string.IsNullOrWhiteSpace(row.UoM))
                 return BadRequest(new { error = "UoM is required." });
             if (row.Quantity <= 0)
                 return BadRequest(new { error = "Quantity must be greater than zero." });
+            mealTypes[i] = mt;
+            sources[i] = Enum.TryParse<EntrySource>(row.Source, out var s) ? s : EntrySource.AiText;
+        }
 
-            var source = Enum.TryParse<EntrySource>(row.Source, out var s) ? s : EntrySource.AiText;
-
-            Guid? foodId = row.FoodId;
-            if (foodId.HasValue)
+        // --- Pre-pass: resolve or mint foods for items that need one ---
+        var resolvedFoodIds = new Guid[request.Items.Count];
+        for (var i = 0; i < request.Items.Count; i++)
+        {
+            var row = request.Items[i];
+            if (row.FoodId.HasValue)
             {
-                if (!await db.Foods.AnyAsync(f => f.Id == foodId.Value, ct))
-                    return BadRequest(new { error = $"Food {foodId} not found." });
-            }
-            else
-            {
-                // New food → define it into the shared catalogue first, then reference it.
-                // Per-unit nutrition is derived from this row's amount.
-                // TODO(dedup): get-or-create under a unique name index once dedup lands.
-                var perUnit = row.Quantity > 0 ? row.Quantity : 1;
-                var food = new Food
-                {
-                    Name = row.FoodName,
-                    DefaultUoM = row.UoM,
-                    CaloriesPerUnit = row.Calories / perUnit,
-                    ProteinPerUnit = row.Protein.HasValue ? row.Protein.Value / perUnit : null,
-                    CarbsPerUnit = row.Carbs.HasValue ? row.Carbs.Value / perUnit : null,
-                    FatPerUnit = row.Fat.HasValue ? row.Fat.Value / perUnit : null,
-                };
-                db.Foods.Add(food);
-                foodId = food.Id;
+                resolvedFoodIds[i] = row.FoodId.Value;
+                continue;
             }
 
+            var normalized = FoodNameNormalizer.Normalize(row.FoodName);
+            var existing = await db.Foods
+                .Where(f => f.NormalizedName == normalized)
+                .Select(f => new { f.Id })
+                .FirstOrDefaultAsync(ct);
+
+            if (existing is not null)
+            {
+                resolvedFoodIds[i] = existing.Id;
+                continue;
+            }
+
+            // Mint new food — save immediately so the unique-violation race
+            // catch works (future-proof for OFB-43c unique index; for now the
+            // index is non-unique so the catch is effectively dead code).
+            var perUnit = row.Quantity > 0 ? row.Quantity : 1;
+            var food = new Food
+            {
+                Name = row.FoodName,
+                NormalizedName = normalized,
+                DefaultUoM = row.UoM,
+                CaloriesPerUnit = row.Calories / perUnit,
+                ProteinPerUnit = row.Protein.HasValue ? row.Protein.Value / perUnit : null,
+                CarbsPerUnit = row.Carbs.HasValue ? row.Carbs.Value / perUnit : null,
+                FatPerUnit = row.Fat.HasValue ? row.Fat.Value / perUnit : null,
+            };
+            db.Foods.Add(food);
+
+            try
+            {
+                await db.SaveChangesAsync(ct);
+                resolvedFoodIds[i] = food.Id;
+            }
+            catch (DbUpdateException)
+            {
+                // Race: another request minted the same normalized name after our
+                // lookup. Re-query the winner and reference it.
+                var entry = db.ChangeTracker.Entries<Food>().FirstOrDefault(e => e.Entity == food);
+                if (entry is not null)
+                    entry.State = EntityState.Detached;
+
+                var winner = await db.Foods
+                    .Where(f => f.NormalizedName == normalized)
+                    .Select(f => new { f.Id })
+                    .FirstAsync(ct);
+                resolvedFoodIds[i] = winner.Id;
+            }
+        }
+
+        // --- Validate every resolved food exists (belt-and-suspenders) ---
+        for (var i = 0; i < request.Items.Count; i++)
+        {
+            if (!await db.Foods.AnyAsync(f => f.Id == resolvedFoodIds[i], ct))
+                return BadRequest(new { error = $"Food {resolvedFoodIds[i]} not found." });
+        }
+
+        // --- Create entries (all-or-nothing at the final save) ---
+        var created = new List<FoodEntry>(request.Items.Count);
+        for (var i = 0; i < request.Items.Count; i++)
+        {
+            var row = request.Items[i];
             var entry = new FoodEntry
             {
                 UserId = userId,
-                FoodId = foodId,
+                FoodId = resolvedFoodIds[i],
                 FoodName = row.FoodName,
                 IntakeAtUtc = row.IntakeAtUtc ?? DateTime.UtcNow,
-                MealType = mealType,
+                MealType = mealTypes[i],
                 Quantity = row.Quantity,
                 UoM = row.UoM,
                 Calories = row.Calories,
                 Protein = row.Protein,
                 Carbs = row.Carbs,
                 Fat = row.Fat,
-                Source = source,
+                Source = sources[i],
                 AiConfidence = row.Confidence,
             };
             db.FoodEntries.Add(entry);

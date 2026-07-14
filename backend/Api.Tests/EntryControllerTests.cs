@@ -399,4 +399,153 @@ public class EntryControllerTests : IDisposable
         Assert.Equal(3, list.Count);
         Assert.Equal(950, list.Sum(e => e.Calories));
     }
+
+    // ── Dedup: batch get-or-create by normalized name ──
+
+    [Fact]
+    public async Task CreateEntries_GetOrCreate_ReusesByNormalizedName()
+    {
+        // Seed a food with NormalizedName set so the get-or-create path can find it
+        var food = await _db.Foods.FindAsync(_foodId);
+        food!.NormalizedName = "chicken breast";
+        await _db.SaveChangesAsync();
+        var foodCountBefore = await _db.Foods.CountAsync();
+
+        // Request a batch entry with the same normalized name but no FoodId
+        var request = new CreateEntriesBatchRequest
+        {
+            Items =
+            {
+                new BatchEntryItem
+                {
+                    FoodId = null, FoodName = "Chicken Breast", MealType = "Lunch",
+                    Quantity = 200, UoM = "g", Calories = 330,
+                },
+            },
+        };
+
+        var result = await _controller.CreateEntries(_userId, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var entries = Assert.IsType<List<EntryResponse>>(ok.Value);
+        Assert.Single(entries);
+        Assert.Equal(_foodId, entries[0].FoodId); // referenced the existing food
+        Assert.Equal(foodCountBefore, await _db.Foods.CountAsync()); // no duplicate
+    }
+
+    [Fact]
+    public async Task CreateEntries_GetOrCreate_DoesNotOverwriteNutrition()
+    {
+        var food = await _db.Foods.FindAsync(_foodId);
+        food!.NormalizedName = "chicken breast";
+        food.CaloriesPerUnit = 1.65; // original value
+        await _db.SaveChangesAsync();
+
+        // Batch entry with different nutrition — the existing food should be reused as-is
+        var request = new CreateEntriesBatchRequest
+        {
+            Items =
+            {
+                new BatchEntryItem
+                {
+                    FoodId = null, FoodName = "Chicken Breast", MealType = "Lunch",
+                    Quantity = 100, UoM = "g", Calories = 500, Protein = 100,
+                },
+            },
+        };
+
+        await _controller.CreateEntries(_userId, request, CancellationToken.None);
+
+        // Reload the food — its nutrition should NOT have been overwritten
+        var reloaded = await _db.Foods.FindAsync(_foodId);
+        Assert.Equal(1.65, reloaded!.CaloriesPerUnit);
+        Assert.Null(reloaded.ProteinPerUnit); // original was null
+    }
+
+    [Fact]
+    public async Task CreateEntries_GetOrCreate_MintsNewWithNormalizedName()
+    {
+        var foodCountBefore = await _db.Foods.CountAsync();
+
+        var request = new CreateEntriesBatchRequest
+        {
+            Items =
+            {
+                new BatchEntryItem
+                {
+                    FoodId = null, FoodName = "Quinoa Bowl", MealType = "Lunch",
+                    Quantity = 200, UoM = "g", Calories = 240, Protein = 8,
+                },
+            },
+        };
+
+        var result = await _controller.CreateEntries(_userId, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var entries = Assert.IsType<List<EntryResponse>>(ok.Value);
+        Assert.Single(entries);
+        Assert.NotNull(entries[0].FoodId);
+
+        // Verify exactly one new food was minted with NormalizedName set
+        var newFood = await _db.Foods.FirstOrDefaultAsync(f => f.Name == "Quinoa Bowl");
+        Assert.NotNull(newFood);
+        Assert.Equal("quinoa bowl", newFood!.NormalizedName);
+        Assert.Equal(foodCountBefore + 1, await _db.Foods.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreateEntries_GetOrCreate_CaseVariantReuses()
+    {
+        var food = await _db.Foods.FindAsync(_foodId);
+        food!.NormalizedName = "chicken breast";
+        await _db.SaveChangesAsync();
+        var foodCountBefore = await _db.Foods.CountAsync();
+
+        var request = new CreateEntriesBatchRequest
+        {
+            Items =
+            {
+                new BatchEntryItem
+                {
+                    FoodId = null, FoodName = "CHICKEN BREAST", MealType = "Lunch",
+                    Quantity = 100, UoM = "g", Calories = 165,
+                },
+            },
+        };
+
+        var result = await _controller.CreateEntries(_userId, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var entries = Assert.IsType<List<EntryResponse>>(ok.Value);
+        Assert.Equal(_foodId, entries[0].FoodId);
+        Assert.Equal(foodCountBefore, await _db.Foods.CountAsync());
+    }
+
+    [Fact]
+    public async Task CreateEntries_GetOrCreate_ParensVariantReuses()
+    {
+        var food = await _db.Foods.FindAsync(_foodId);
+        food!.NormalizedName = "chicken breast";
+        await _db.SaveChangesAsync();
+        var foodCountBefore = await _db.Foods.CountAsync();
+
+        var request = new CreateEntriesBatchRequest
+        {
+            Items =
+            {
+                new BatchEntryItem
+                {
+                    FoodId = null, FoodName = "Chicken Breast (grilled)", MealType = "Lunch",
+                    Quantity = 100, UoM = "g", Calories = 165,
+                },
+            },
+        };
+
+        var result = await _controller.CreateEntries(_userId, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var entries = Assert.IsType<List<EntryResponse>>(ok.Value);
+        Assert.Equal(_foodId, entries[0].FoodId);
+        Assert.Equal(foodCountBefore, await _db.Foods.CountAsync());
+    }
 }

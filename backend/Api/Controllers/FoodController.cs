@@ -136,9 +136,20 @@ public class FoodController(AppDbContext db, IFoodService foodService) : Control
         if (string.IsNullOrWhiteSpace(request.DefaultUoM))
             return BadRequest(new { error = "DefaultUoM is required." });
 
+        var normalized = FoodNameNormalizer.Normalize(request.Name);
+
+        // Reject explicit "add food" on a name that already exists in the catalogue.
+        var existing = await db.Foods
+            .Where(f => f.NormalizedName == normalized)
+            .Select(f => new { f.Id })
+            .FirstOrDefaultAsync(ct);
+        if (existing is not null)
+            return Conflict(new { error = "A food with this name already exists.", existingFoodId = existing.Id });
+
         var food = new Food
         {
             Name = request.Name,
+            NormalizedName = normalized,
             DefaultUoM = request.DefaultUoM,
             CaloriesPerUnit = request.CaloriesPerUnit,
             ProteinPerUnit = request.ProteinPerUnit,
@@ -167,18 +178,8 @@ public class FoodController(AppDbContext db, IFoodService foodService) : Control
             }
             else if (ing.InlineChild is not null)
             {
-                var child = new Food
-                {
-                    Name = ing.InlineChild.Name,
-                    DefaultUoM = ing.InlineChild.DefaultUoM,
-                    CaloriesPerUnit = ing.InlineChild.CaloriesPerUnit,
-                    ProteinPerUnit = ing.InlineChild.ProteinPerUnit,
-                    CarbsPerUnit = ing.InlineChild.CarbsPerUnit,
-                    FatPerUnit = ing.InlineChild.FatPerUnit,
-                };
-                db.Foods.Add(child);
-                await db.SaveChangesAsync(ct);
-                childId = child.Id;
+                // Silent get-or-create: inline children are not user-named-checked.
+                childId = await GetOrCreateChildFoodAsync(ing.InlineChild, ct);
             }
             else
             {
@@ -222,6 +223,18 @@ public class FoodController(AppDbContext db, IFoodService foodService) : Control
         if (string.IsNullOrWhiteSpace(request.DefaultUoM))
             return BadRequest(new { error = "DefaultUoM is required." });
 
+        // If the name changed, check for collision with an EXISTING food (not self).
+        var newNormalized = FoodNameNormalizer.Normalize(request.Name);
+        if (!string.Equals(food.NormalizedName, newNormalized, StringComparison.Ordinal))
+        {
+            var collision = await db.Foods
+                .Where(f => f.NormalizedName == newNormalized && f.Id != id)
+                .Select(f => new { f.Id })
+                .FirstOrDefaultAsync(ct);
+            if (collision is not null)
+                return Conflict(new { error = "A food with this name already exists.", existingFoodId = collision.Id });
+        }
+
         // Validate ingredient links before modifying
         if (request.Ingredients.Count > 0)
         {
@@ -231,6 +244,7 @@ public class FoodController(AppDbContext db, IFoodService foodService) : Control
         }
 
         food.Name = request.Name;
+        food.NormalizedName = newNormalized;
         food.DefaultUoM = request.DefaultUoM;
         food.CaloriesPerUnit = request.CaloriesPerUnit;
         food.ProteinPerUnit = request.ProteinPerUnit;
@@ -250,18 +264,8 @@ public class FoodController(AppDbContext db, IFoodService foodService) : Control
             }
             else if (ing.InlineChild is not null)
             {
-                var child = new Food
-                {
-                    Name = ing.InlineChild.Name,
-                    DefaultUoM = ing.InlineChild.DefaultUoM,
-                    CaloriesPerUnit = ing.InlineChild.CaloriesPerUnit,
-                    ProteinPerUnit = ing.InlineChild.ProteinPerUnit,
-                    CarbsPerUnit = ing.InlineChild.CarbsPerUnit,
-                    FatPerUnit = ing.InlineChild.FatPerUnit,
-                };
-                db.Foods.Add(child);
-                await db.SaveChangesAsync(ct);
-                childId = child.Id;
+                // Silent get-or-create: inline children are not user-named-checked.
+                childId = await GetOrCreateChildFoodAsync(ing.InlineChild, ct);
             }
             else
             {
@@ -354,6 +358,34 @@ public class FoodController(AppDbContext db, IFoodService foodService) : Control
 
         await db.SaveChangesAsync(ct);
         return NoContent();
+    }
+
+    /// <summary>Silent get-or-create for an inline child ingredient. The user didn't
+    /// explicitly name-check this — look up by normalized name, reference on hit,
+    /// mint on miss. Never overwrites an existing food's nutrition.</summary>
+    private async Task<Guid> GetOrCreateChildFoodAsync(InlineFoodRequest child, CancellationToken ct)
+    {
+        var normalized = FoodNameNormalizer.Normalize(child.Name);
+        var existing = await db.Foods
+            .Where(f => f.NormalizedName == normalized)
+            .Select(f => new { f.Id })
+            .FirstOrDefaultAsync(ct);
+        if (existing is not null)
+            return existing.Id;
+
+        var food = new Food
+        {
+            Name = child.Name,
+            NormalizedName = normalized,
+            DefaultUoM = child.DefaultUoM,
+            CaloriesPerUnit = child.CaloriesPerUnit,
+            ProteinPerUnit = child.ProteinPerUnit,
+            CarbsPerUnit = child.CarbsPerUnit,
+            FatPerUnit = child.FatPerUnit,
+        };
+        db.Foods.Add(food);
+        await db.SaveChangesAsync(ct);
+        return food.Id;
     }
 
     internal static FoodResponse ToResponse(Food f) => new()
