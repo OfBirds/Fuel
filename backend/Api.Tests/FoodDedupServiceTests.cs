@@ -362,6 +362,11 @@ public class FoodDedupServiceTests : IDisposable
             Name = "Oil", NormalizedName = "oil",
             DefaultUoM = "ml", CaloriesPerUnit = 8.84,
         };
+        var otherChild = new Food
+        {
+            Name = "Vinegar", NormalizedName = "vinegar",
+            DefaultUoM = "ml", CaloriesPerUnit = 3,
+        };
         var older = new Food
         {
             Name = "Dressing", NormalizedName = "dressing",
@@ -374,15 +379,17 @@ public class FoodDedupServiceTests : IDisposable
             DefaultUoM = "ml", CaloriesPerUnit = 6,
             CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
         };
-        _db.Foods.AddRange(child, older, newer);
+        _db.Foods.AddRange(child, otherChild, older, newer);
         await _db.SaveChangesAsync();
 
-        // Ingredient link has the newer (non-survivor) as parent
-        _db.FoodIngredients.Add(new FoodIngredient
-        {
-            ParentFoodId = newer.Id, ChildFoodId = child.Id,
-            Quantity = 10, UoM = "ml",
-        });
+        // Both foods are composite (have their own ingredient) so the
+        // composite-preferred survivor rule doesn't disambiguate them —
+        // CreatedAtUtc tie-break picks the older as survivor. The newer
+        // (non-survivor) is the parent of its own link.
+        _db.FoodIngredients.AddRange(
+            new FoodIngredient { ParentFoodId = older.Id, ChildFoodId = otherChild.Id, Quantity = 5, UoM = "ml" },
+            new FoodIngredient { ParentFoodId = newer.Id, ChildFoodId = child.Id, Quantity = 10, UoM = "ml" }
+        );
         await _db.SaveChangesAsync();
 
         var result = await RunDedupAsync();
@@ -390,8 +397,8 @@ public class FoodDedupServiceTests : IDisposable
         Assert.Equal(1, result.FoodIngredientsRepointed);
 
         var ingredients = await _db.FoodIngredients.ToListAsync();
-        Assert.Single(ingredients);
-        Assert.Equal(older.Id, ingredients[0].ParentFoodId);
+        Assert.Equal(2, ingredients.Count);
+        Assert.All(ingredients, fi => Assert.Equal(older.Id, fi.ParentFoodId));
     }
 
     // ── Edge case: self-referential after repointing ──────────────────
