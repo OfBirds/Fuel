@@ -1,0 +1,31 @@
+name: ci
+
+# Pre-merge checks. Runs the same test suite deploy.yml runs post-merge, but
+# on the PR itself so breakage shows up as a red check before merging instead
+# of after it's already on main.
+on:
+  pull_request:
+    branches: [main, release]
+
+# A newer push to the same PR supersedes the in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with: { dotnet-version: '10.0.x' }
+      - run: dotnet test backend/Fuel.slnx -c Release
+      - uses: actions/setup-node@v6
+        with: { node-version: '24', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test -- --run
+        working-directory: frontend
