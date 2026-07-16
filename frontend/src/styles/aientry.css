@@ -465,18 +465,10 @@
 }
 .bc-btn-outline:hover { background: rgba(132, 204, 22, 0.14); }
 
-.ai-barcode-typed {
-  margin-top: 0.6rem;
-  font-size: 0.85rem;
-}
-.ai-barcode-typed summary {
-  cursor: pointer;
-  color: var(--text-light);
-  margin-bottom: 0.5rem;
-}
 .ai-barcode-manual {
   display: flex;
   gap: 0.5rem;
+  margin-top: 0.6rem;
 }
 .ai-barcode-manual input {
   flex: 1;
@@ -496,4 +488,57 @@
   margin-top: 0.5rem;
   font-size: 0.85rem;
   color: var(--error);
+}
+
+/* ── PhotoPickButton (components/PhotoPickButton.tsx) ── */
+/* Sits as the single child of an .ai-photo-actions row, which sizes/centers *
+   directly — fill that box so the visible button reads exactly like the
+   plain upload label it replaced. */
+.ai-photo-actions .photo-pick {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+.ai-photo-actions .photo-pick > .ai-upload-btn {
+  width: 100%;
+  height: 100%;
+}
+.photo-pick {
+  position: relative;
+  width: 100%;
+}
+.photo-pick-sheet {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.photo-pick-action {
+  padding: 0.6rem 0.8rem;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 0.95rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.photo-pick-action:hover {
+  background: var(--neutral);
+}
+
+/* ── Save-time disclosure for AI-minted foods (§3a-R5) ── */
+.ai-new-foods-disclosure {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-light);
 }

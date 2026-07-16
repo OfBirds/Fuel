@@ -123,4 +123,43 @@ describe('CataloguePage', () => {
     await userEvent.selectOptions(select, 'alphabetical');
     expect(select.value).toBe('alphabetical');
   });
+
+  it('shows a duplicate hint with an edit-existing action on 409 from save', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] }); // initial list
+    renderCatalogue();
+    await waitFor(() => expect(screen.getByLabelText('Add food')).toBeDefined());
+
+    await userEvent.click(screen.getByLabelText('Add food'));
+    await userEvent.type(screen.getByPlaceholderText('e.g. Chicken Breast'), 'Chicken Breast');
+
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({ error: 'A food named "Chicken Breast" already exists.', existingFoodId: 'existing-id' }),
+    });
+
+    await userEvent.click(screen.getByText('Save Food'));
+
+    await waitFor(() => {
+      expect(screen.getByText('A food named "Chicken Breast" already exists.')).toBeInTheDocument();
+    });
+    const editLink = screen.getByText('Edit the existing food instead');
+    expect(editLink).toBeInTheDocument();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: 'existing-id', name: 'Chicken Breast', defaultUoM: 'g', caloriesPerUnit: 1.65,
+        ingredientCount: 0, isComposite: false, ponder: 100, usageCount: null, lastUsedAtUtc: null,
+        proteinPerUnit: null, carbsPerUnit: null, fatPerUnit: null, ingredients: [],
+      }),
+    });
+
+    await userEvent.click(editLink);
+
+    await waitFor(() => {
+      expect(screen.getByText('Edit Food')).toBeInTheDocument();
+    });
+    expect(mockFetch).toHaveBeenLastCalledWith('/api/foods/existing-id', expect.anything());
+  });
 });

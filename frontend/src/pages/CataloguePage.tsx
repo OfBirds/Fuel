@@ -83,6 +83,7 @@ function CataloguePage() {
   const [ingredients, setIngredients] = useState<IngredientFormItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [duplicateFoodId, setDuplicateFoodId] = useState<string | null>(null);
 
   // Ingredient search state
   const [ingSearchTerm, setIngSearchTerm] = useState('');
@@ -146,6 +147,7 @@ function CataloguePage() {
     setForm(emptyForm);
     setIngredients([]);
     setFormError(null);
+    setDuplicateFoodId(null);
     setShowForm(true);
   };
 
@@ -170,6 +172,7 @@ function CataloguePage() {
         inlineName: '', inlineUoM: 'g', inlineCal: 0,
       })));
       setFormError(null);
+      setDuplicateFoodId(null);
       setShowForm(true);
     } catch { /* ignore */ }
   };
@@ -177,6 +180,7 @@ function CataloguePage() {
   const cancelForm = () => {
     setShowForm(false);
     setEditingId(null);
+    setDuplicateFoodId(null);
   };
 
   const addIngredient = (existing: FoodItem) => {
@@ -230,6 +234,7 @@ function CataloguePage() {
 
     setSaving(true);
     setFormError(null);
+    setDuplicateFoodId(null);
 
     const ingredientRequests = ingredients.map((ing) => {
       if (ing.isInline) {
@@ -268,6 +273,11 @@ function CataloguePage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Save failed' }));
+        if (res.status === 409 && err.existingFoodId) {
+          setDuplicateFoodId(err.existingFoodId);
+          setFormError(err.error || 'A food with this name already exists.');
+          return;
+        }
         throw new Error(err.error || 'Save failed');
       }
       setShowForm(false);
@@ -342,6 +352,13 @@ function CataloguePage() {
         <div className="food-form">
           <h2>{editingId ? 'Edit Food' : 'Add Food'}</h2>
           {formError && <p className="form-error" role="alert">{formError}</p>}
+          {duplicateFoodId && (
+            <p className="form-duplicate-hint">
+              <button type="button" className="link-button" onClick={() => startEdit(duplicateFoodId)}>
+                Edit the existing food instead
+              </button>
+            </p>
+          )}
 
           <div className="food-form-section">
             <label>Name</label>
