@@ -66,7 +66,10 @@ public class FoodDedupService(
         result.SnapshotPath = await SnapshotAsync(db, ct);
 
         // ── 2. Process each group in a transaction ─────────────────────
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // InMemory has no relational transaction support (SaveChangesAsync is
+        // atomic there); Postgres keeps the full transactional guarantee.
+        var useTx = db.Database.IsRelational();
+        await using var tx = useTx ? await db.Database.BeginTransactionAsync(ct) : null;
 
         foreach (var group in groups)
         {
@@ -89,7 +92,8 @@ public class FoodDedupService(
         result.FoodsDeleted = orphanFoods.Count;
         await db.SaveChangesAsync(ct);
 
-        await tx.CommitAsync(ct);
+        if (tx is not null)
+            await tx.CommitAsync(ct);
 
         logger.LogInformation(
             "Dedup complete: {FoodsDeleted} foods deleted, {Entries} entries repointed, " +
