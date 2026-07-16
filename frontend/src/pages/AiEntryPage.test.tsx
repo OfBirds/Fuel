@@ -206,8 +206,9 @@ describe('AiEntryPage', () => {
     await screen.findByRole('tab', { name: 'Photo' });
     await userEvent.click(screen.getByRole('tab', { name: 'Photo' }));
 
+    await userEvent.click(screen.getByRole('button', { name: 'Take or upload a photo' }));
     const file = new File(['fake-bytes'], 'meal.jpg', { type: 'image/jpeg' });
-    await userEvent.upload(screen.getByLabelText('Upload a meal photo'), file);
+    await userEvent.upload(screen.getByLabelText(/— files/), file);
 
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
@@ -256,5 +257,84 @@ describe('AiEntryPage', () => {
     renderPage();
     await waitFor(() => expect(screen.getByText(/isn't configured/i)).toBeInTheDocument());
     expect(screen.queryByRole('textbox', { name: /what did you eat/i })).toBeNull();
+  });
+
+  it('shows the refine box after a FAILED estimate (not just a successful one)', async () => {
+    mockFetch
+      .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(bcOff())
+      .mockResolvedValueOnce(foodsEmpty())
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ok: false, error: "Couldn't estimate — enter it manually.", overallConfidence: 0, source: 'AiText', items: [] }) });
+
+    renderPage();
+    await screen.findByRole('textbox', { name: /what did you eat/i });
+    await userEvent.type(screen.getByRole('textbox', { name: /what did you eat/i }), 'something odd');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/enter it manually/i));
+    expect(screen.getByLabelText(/Add a clarification/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refine' })).toBeInTheDocument();
+  });
+
+  it('shows a save-time disclosure listing new foods', async () => {
+    mockFetch
+      .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(bcOff())
+      .mockResolvedValueOnce(foodsEmpty())
+      .mockResolvedValueOnce(estimateOk([
+        row({ name: 'Chicken Breast' }), // matched — not new
+        row({ name: 'Kiwi Salad', matchedFoodId: null, isNew: true }),
+      ]));
+
+    renderPage();
+    await screen.findByRole('textbox', { name: /what did you eat/i });
+    await userEvent.type(screen.getByRole('textbox', { name: /what did you eat/i }), 'chicken and kiwi salad');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    await screen.findByDisplayValue('Kiwi Salad');
+    expect(screen.getByText(/Saving will add 1 new food to the catalogue: Kiwi Salad/)).toBeInTheDocument();
+  });
+
+  it('blocks save when a new row name is edited to collide with the catalogue', async () => {
+    mockFetch
+      .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(bcOff())
+      .mockResolvedValueOnce({ ok: true, json: async () => ([{ id: 'f9', name: 'Kiwi Salad', defaultUoM: 'g', caloriesPerUnit: 1, usageCount: null }]) })
+      .mockResolvedValueOnce(estimateOk([row({ name: 'Fruit Bowl', matchedFoodId: null, isNew: true })]));
+
+    renderPage();
+    await screen.findByRole('textbox', { name: /what did you eat/i });
+    await userEvent.type(screen.getByRole('textbox', { name: /what did you eat/i }), 'fruit bowl');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    const nameInput = await screen.findByDisplayValue('Fruit Bowl');
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, 'Kiwi Salad');
+
+    await userEvent.click(screen.getByRole('button', { name: /Save 1 item/ }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/already exists in your catalogue/i));
+    expect(mockFetch).toHaveBeenCalledTimes(4); // no batch-save request was sent
+  });
+
+  it('normalizes an oz row to g for a metric-history user (§3b-R6)', async () => {
+    mockFetch
+      .mockResolvedValueOnce(aiOn())
+      .mockResolvedValueOnce(bcOff())
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([{ id: 'f1', name: 'Chicken Breast', defaultUoM: 'g', caloriesPerUnit: 1.65, usageCount: 5 }]),
+      })
+      .mockResolvedValueOnce(estimateOk([row({ name: 'Cheddar', quantity: 1, uom: 'oz', calories: 110 })]));
+
+    renderPage();
+    await screen.findByRole('textbox', { name: /what did you eat/i });
+    await userEvent.type(screen.getByRole('textbox', { name: /what did you eat/i }), 'an ounce of cheddar');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    await screen.findByDisplayValue('Cheddar');
+    // 1 oz * 28.35 = 28.35 -> rounds to 28.4 g
+    expect(screen.getByDisplayValue('28.4')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('g')).toBeInTheDocument();
   });
 });
