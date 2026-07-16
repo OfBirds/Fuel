@@ -13,17 +13,29 @@ namespace Api.IntegrationTests;
 [Collection("Postgres")]
 public class FoodIntegrationTests(PostgresFixture db)
 {
+    // Foods.NormalizedName is unique in production (backed by a real index) and is
+    // always set by the controllers that create foods there. Tests bypass the
+    // controllers, so every seeded Food here must set it explicitly or multi-food
+    // tests collide on the empty-string default.
+    private static Food MakeFood(string name, string defaultUoM, double caloriesPerUnit) => new()
+    {
+        Name = name,
+        NormalizedName = FoodNameNormalizer.Normalize(name),
+        DefaultUoM = defaultUoM,
+        CaloriesPerUnit = caloriesPerUnit,
+    };
+
     [Fact]
     public async Task GetFoods_CompositeFood_HasIngredientCount()
     {
         // ── Arrange ────────────────────────────────────────────────
         await db.ResetAsync();
         var ctx = db.CreateContext();
-        var oil = new Food { Name = "olive oil", DefaultUoM = "ml", CaloriesPerUnit = 8 };
+        var oil = MakeFood("olive oil", "ml", 8);
         ctx.Foods.Add(oil);
         await ctx.SaveChangesAsync();
 
-        var salad = new Food { Name = "salad", DefaultUoM = "g", CaloriesPerUnit = 1.5 };
+        var salad = MakeFood("salad", "g", 1.5);
         salad.Ingredients.Add(new FoodIngredient
         {
             ParentFoodId = salad.Id, ChildFoodId = oil.Id, Quantity = 15, UoM = "ml"
@@ -49,7 +61,7 @@ public class FoodIntegrationTests(PostgresFixture db)
     {
         await db.ResetAsync();
         var ctx = db.CreateContext();
-        ctx.Foods.Add(new Food { Name = "apple", DefaultUoM = "pc", CaloriesPerUnit = 95 });
+        ctx.Foods.Add(MakeFood("apple", "pc", 95));
         await ctx.SaveChangesAsync();
 
         var controller = new FoodController(ctx, new NoOpFoodService());
@@ -77,9 +89,9 @@ public class FoodIntegrationTests(PostgresFixture db)
         var userId = Guid.NewGuid();
         ctx.Users.Add(new User { Id = userId, Email = "prio@example.com", PasswordHash = "hash" });
 
-        var aardvark = new Food { Name = "aardvark-snack", DefaultUoM = "g", CaloriesPerUnit = 1 }; // no priority → 100
-        var beans    = new Food { Name = "beans",          DefaultUoM = "g", CaloriesPerUnit = 1 }; // ponder 1
-        var carrot   = new Food { Name = "carrot",         DefaultUoM = "g", CaloriesPerUnit = 1 }; // ponder 50
+        var aardvark = MakeFood("aardvark-snack", "g", 1); // no priority → 100
+        var beans    = MakeFood("beans",          "g", 1); // ponder 1
+        var carrot   = MakeFood("carrot",         "g", 1); // ponder 50
         ctx.Foods.AddRange(aardvark, beans, carrot);
         ctx.UserFoodPriorities.AddRange(
             new UserFoodPriority { UserId = userId, FoodId = beans.Id, Ponder = 1 },
@@ -106,9 +118,9 @@ public class FoodIntegrationTests(PostgresFixture db)
         var userId = Guid.NewGuid();
         ctx.Users.Add(new User { Id = userId, Email = "used@example.com", PasswordHash = "hash" });
 
-        var popular = new Food { Name = "popular", DefaultUoM = "g", CaloriesPerUnit = 1 };
-        var rare    = new Food { Name = "rare",    DefaultUoM = "g", CaloriesPerUnit = 1 };
-        var never   = new Food { Name = "never",   DefaultUoM = "g", CaloriesPerUnit = 1 };
+        var popular = MakeFood("popular", "g", 1);
+        var rare    = MakeFood("rare",    "g", 1);
+        var never   = MakeFood("never",   "g", 1);
         ctx.Foods.AddRange(popular, rare, never);
         await ctx.SaveChangesAsync();
 
@@ -140,9 +152,9 @@ public class FoodIntegrationTests(PostgresFixture db)
         var userId = Guid.NewGuid();
         ctx.Users.Add(new User { Id = userId, Email = "recent@example.com", PasswordHash = "hash" });
 
-        var newest = new Food { Name = "newest", DefaultUoM = "g", CaloriesPerUnit = 1 };
-        var older  = new Food { Name = "older",  DefaultUoM = "g", CaloriesPerUnit = 1 };
-        var unused = new Food { Name = "unused", DefaultUoM = "g", CaloriesPerUnit = 1 };
+        var newest = MakeFood("newest", "g", 1);
+        var older  = MakeFood("older",  "g", 1);
+        var unused = MakeFood("unused", "g", 1);
         ctx.Foods.AddRange(newest, older, unused);
         await ctx.SaveChangesAsync();
 
@@ -174,9 +186,9 @@ public class FoodIntegrationTests(PostgresFixture db)
         var ctx = db.CreateContext();
 
         // a → b → c (each food lists the next as an ingredient).
-        var a = new Food { Name = "a", DefaultUoM = "g", CaloriesPerUnit = 1 };
-        var b = new Food { Name = "b", DefaultUoM = "g", CaloriesPerUnit = 1 };
-        var c = new Food { Name = "c", DefaultUoM = "g", CaloriesPerUnit = 1 };
+        var a = MakeFood("a", "g", 1);
+        var b = MakeFood("b", "g", 1);
+        var c = MakeFood("c", "g", 1);
         ctx.Foods.AddRange(a, b, c);
         await ctx.SaveChangesAsync();
         ctx.FoodIngredients.AddRange(
@@ -196,9 +208,9 @@ public class FoodIntegrationTests(PostgresFixture db)
         await db.ResetAsync();
         var ctx = db.CreateContext();
 
-        var a = new Food { Name = "a", DefaultUoM = "g", CaloriesPerUnit = 1 };
-        var b = new Food { Name = "b", DefaultUoM = "g", CaloriesPerUnit = 1 };
-        var loose = new Food { Name = "loose", DefaultUoM = "g", CaloriesPerUnit = 1 };
+        var a = MakeFood("a", "g", 1);
+        var b = MakeFood("b", "g", 1);
+        var loose = MakeFood("loose", "g", 1);
         ctx.Foods.AddRange(a, b, loose);
         await ctx.SaveChangesAsync();
         ctx.FoodIngredients.Add(new FoodIngredient { ParentFoodId = a.Id, ChildFoodId = b.Id, Quantity = 1, UoM = "g" });

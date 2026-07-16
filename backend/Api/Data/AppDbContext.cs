@@ -62,9 +62,11 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired();
+            entity.Property(e => e.NormalizedName).IsRequired();
             entity.Property(e => e.DefaultUoM).IsRequired();
             entity.Property(e => e.CaloriesPerUnit).IsRequired();
             entity.HasIndex(e => e.Name);
+            entity.HasIndex(e => e.NormalizedName).IsUnique();
             entity.HasIndex(e => e.Barcode).IsUnique();
         });
 

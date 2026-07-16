@@ -5,8 +5,10 @@ import { useAuth } from '../context/AuthContext';
 import { getLastMealType, saveLastMealType, getFoodSortMode } from '../lib/storage';
 import { type CatalogueFood } from '../lib/foods';
 import { useShowMacros } from '../hooks/useShowMacros';
+import { useAiStatus } from '../hooks/useAiStatus';
 import { UnitSelect } from '../components/UnitSelect';
 import { NumberInput } from '../components/NumberInput';
+import { refLabel, refQty } from '../lib/units';
 import '../styles/entryform.css';
 
 interface FoodItem {
@@ -108,7 +110,7 @@ function EntryFormPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(isEdit);
-  const [aiEnabled, setAiEnabled] = useState(false);
+  const { aiEnabled } = useAiStatus();
 
   // Meal-pause warning
   const [mealPauseWarning, setMealPauseWarning] = useState<{ hoursSinceLast: number; mealPauseHours: number; lastFoodName: string | null; lastMealType: string | null } | null>(null);
@@ -148,18 +150,6 @@ function EntryFormPage() {
     })();
     return () => { alive = false; };
   }, [entryId, user]);
-
-  // Offer the AI "describe it" path only when the operator has AI enabled.
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await apiFetch('/api/ai/status');
-        if (alive && res.ok) setAiEnabled((await res.json()).enabled === true);
-      } catch { /* leave AI off */ }
-    })();
-    return () => { alive = false; };
-  }, []);
 
   // Live duplicate-name check for the inline-define form. Queried per keystroke
   // (debounced) rather than from a one-time snapshot, so a food you created moments
@@ -407,7 +397,7 @@ function EntryFormPage() {
                         <span className="search-result-ponder" title="Priority"> {f.ponder ?? 100}</span>
                       </div>
                       <div className="search-result-detail">
-                        {f.caloriesPerUnit} cal/{f.defaultUoM}
+                        {Math.round(f.caloriesPerUnit * refQty(f.defaultUoM) * 10) / 10} cal/{refQty(f.defaultUoM)} {f.defaultUoM}
                         {f.isComposite ? ' · composite' : ''}
                         {f.usageCount != null ? ` · ${f.usageCount}×` : ''}
                       </div>
@@ -479,7 +469,9 @@ function EntryFormPage() {
             <div className="selected-food">
               <div>
                 <div className="selected-food-name">{selectedFood.name}</div>
-                <div className="selected-food-detail">{selectedFood.caloriesPerUnit} cal/{selectedFood.defaultUoM}</div>
+                <div className="selected-food-detail">
+                  {Math.round(selectedFood.caloriesPerUnit * refQty(selectedFood.defaultUoM) * 10) / 10} cal/{refQty(selectedFood.defaultUoM)} {selectedFood.defaultUoM}
+                </div>
               </div>
               <button className="entry-row-btn" onClick={() => setSelectedFood(null)}>Change</button>
             </div>
