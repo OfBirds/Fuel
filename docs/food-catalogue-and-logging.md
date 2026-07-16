@@ -104,6 +104,44 @@ goals (Phase 1), per-food icons (Phase 3), catalogue-lookup optimization (later)
 > goal in effect on each logged day) so the ring and figures are true when scrolling back.
 > For another time.
 
+## AI-assist panel, unit-system conversion & reference quantities (Phase 2b/3/5)
+
+### Catalogue AI-assist panel (`FoodAiAssist`)
+
+**`FoodAiAssist`** (`frontend/src/components/FoodAiAssist.tsx`) is a reusable panel that brings the home-page "Describe with AI" flow into the catalogue's add/edit food dialog. It uses the same backend endpoints (`/api/user/{userId}/estimate/text` and `.../estimate/image`) — no new API.
+
+The panel never persists on its own. **Apply** fills the visible form fields (name, default unit, per-unit calories/macros) with the estimate; the user must still press the form's own **Save** button to commit the new or edited food to the catalogue.
+
+### Unit-system inference + conversion
+
+`frontend/src/lib/units.ts` exports two helpers for switching values between metric and imperial, applied to **system-produced** values only (AI estimates, barcode lookups — never values the user typed or saved):
+
+- **`inferPreferredSystem(foods)`** — takes an array of the user's catalogue foods (each annotated with `usageCount`) and does a usage-weighted vote. Metric units (g, kg, mg, ml, l) vote metric; imperial (oz, lb, fl oz, cup) vote imperial; neutral units (piece, slice, serving, tbsp, tsp) abstain. A tie — or no data at all — defaults to **metric**.
+- **`convertToSystem(row, system)`** — converts a single `ConvertibleRow`'s `quantity` + `uom` into the target system using standard factors (oz→g ×28.35, lb→kg ×0.4536, fl oz→ml ×29.57, cup→ml ×240 and their inverses). **Calories and macros are never touched** by this conversion — only the quantity+unit pair changes so the new per-unit label stays consistent.
+
+### Reference-quantity table
+
+The `refQty`/`refLabel` table in the same file defines the **reference basis** wherever per-unit nutrition is displayed:
+
+| Unit(s) | Reference quantity | Grounding |
+|---|---|---|
+| g, ml | 100 | EU 1169/2011 / Codex Alimentarius per-100 |
+| kg, l, oz, lb, cup | 1 | Per-whole-unit |
+| mg | 1000 | Per-gram equivalent |
+| fl oz | 8 | US FDA RACC (21 CFR 101.9) |
+| piece, slice, serving, tbsp, tsp | 1 | Per-countable-unit |
+
+Unknown/legacy units default to a plain "per 1 ⟨unit⟩". The list is small and extensible — add a new entry to the mapping, not a rewrite of the display layer.
+
+### Boundary-conversion rule
+
+Canonical storage is unchanged — `Food.CaloriesPerUnit` and the macro fields stay **per-1-unit** in whatever unit the food was defined in. The catalogue form converts to reference-basis **only at the UI boundary**:
+
+- `startEdit(food)` multiplies the stored per-unit values by `refQty` so the user sees "Calories per 100 g" for a g-based food.
+- `saveFood(form)` divides back by `refQty` before writing, restoring canonical storage.
+
+This conversion happens **once on open and once on save** — never on keystroke, to avoid float drift. Backend, entry math, and composites are untouched.
+
 ## Tests
 - **Backend (xUnit + EF InMemory):** Food CRUD; cycle detection rejects
   self/transitive links; composite rollup; entry create + snapshot; day-total

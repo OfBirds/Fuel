@@ -508,6 +508,66 @@
   color: var(--primary);
 }
 
+/* ── FoodAiAssist panel (inside the food-form dialog) ── */
+.food-ai-assist {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  background: var(--neutral);
+}
+
+.food-ai-assist .form-error {
+  margin-bottom: 0.5rem;
+}
+
+.food-ai-assist .ai-mode-toggle {
+  margin-bottom: 0.75rem;
+}
+
+.food-ai-assist .food-form-section {
+  margin-bottom: 0.5rem;
+}
+
+.food-ai-assist .ai-estimate-row {
+  margin-top: 0;
+}
+
+.fa-results {
+  margin-top: 0.75rem;
+}
+
+.fa-results .ai-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.fa-results .ai-row-top {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.fa-row-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.fa-row-detail {
+  font-size: 0.8rem;
+  color: var(--text-light);
+  flex-basis: 100%;
+  margin-top: 0.15rem;
+}
+
+.fa-row-apply {
+  flex-shrink: 0;
+}
+
 /* Full-screen dialog on small viewports */
 @media (max-width: 520px) {
   .food-form-dialog {

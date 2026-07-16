@@ -8,6 +8,17 @@ vi.mock('../context/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+// FoodAiAssist is rendered inside the food-form dialog — prevent its
+// async initialisation fetches from leaking into unrelated tests.
+vi.mock('../hooks/useAiStatus', () => ({
+  useAiStatus: () => ({ aiEnabled: true, supportsText: true, supportsImages: true }),
+}));
+
+vi.mock('../lib/foods', async () => {
+  const actual = await vi.importActual<typeof import('../lib/foods')>('../lib/foods');
+  return { ...actual, loadCatalogueByName: vi.fn().mockResolvedValue(new Map()) };
+});
+
 import CataloguePage from './CataloguePage';
 import { saveShowMacros } from '../lib/storage';
 
@@ -316,5 +327,78 @@ describe('CataloguePage', () => {
 
     // Cancel should not trigger any additional fetch
     expect(mockFetch.mock.calls.length).toBe(callCount);
+  });
+
+  it('applying from the AI panel prefills the visible form fields', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] }); // initial list
+    renderCatalogue();
+    await waitFor(() => expect(screen.getByLabelText('Add food')).toBeDefined());
+
+    await userEvent.click(screen.getByLabelText('Add food'));
+    await waitFor(() => expect(screen.getByText('Save Food')).toBeInTheDocument());
+
+    // Ensure the AI panel is rendered inside the dialog
+    expect(screen.getByLabelText('Describe the food')).toBeInTheDocument();
+
+    // Mock the estimate response: 200g chicken @ 330cal
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ok: true, error: null, overallConfidence: 0.9, source: 'AiText',
+        items: [{
+          name: 'Chicken Breast', quantity: 200, uom: 'g', calories: 330,
+          protein: 62, carbs: 0, fat: 7, confidence: 0.9,
+          matchedFoodId: 'food-1', matchedDefaultUoM: 'g', isNew: false,
+        }],
+      }),
+    });
+
+    await userEvent.type(screen.getByLabelText('Describe the food'), 'chicken breast');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    // Wait for the result row and click Apply
+    await screen.findByText('Chicken Breast');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply Chicken Breast' }));
+
+    // Form fields should be pre-filled with reference-basis values
+    // 330/200*100 = 165 cal per 100g
+    await waitFor(() => {
+      const nameInput = screen.getByPlaceholderText('e.g. Chicken Breast') as HTMLInputElement;
+      expect(nameInput.value).toBe('Chicken Breast');
+    });
+    expect(screen.getByRole('spinbutton')).toHaveValue(165);
+  });
+
+  it('applying with a matchedFoodId in add mode shows the duplicate hint', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] }); // initial list
+    renderCatalogue();
+    await waitFor(() => expect(screen.getByLabelText('Add food')).toBeDefined());
+
+    await userEvent.click(screen.getByLabelText('Add food'));
+    await waitFor(() => expect(screen.getByText('Save Food')).toBeInTheDocument());
+
+    // Mock estimate with a matchedFoodId
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ok: true, error: null, overallConfidence: 0.9, source: 'AiText',
+        items: [{
+          name: 'Chicken Breast', quantity: 200, uom: 'g', calories: 330,
+          protein: 62, carbs: 0, fat: 7, confidence: 0.9,
+          matchedFoodId: 'existing-food-id', matchedDefaultUoM: 'g', isNew: false,
+        }],
+      }),
+    });
+
+    await userEvent.type(screen.getByLabelText('Describe the food'), 'chicken');
+    await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
+
+    await screen.findByText('Chicken Breast');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply Chicken Breast' }));
+
+    // Duplicate hint should appear with the edit link
+    await waitFor(() => {
+      expect(screen.getByText('Edit the existing food instead')).toBeInTheDocument();
+    });
   });
 });

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useShowMacros } from '../hooks/useShowMacros';
 import { UnitSelect } from '../components/UnitSelect';
 import { NumberInput } from '../components/NumberInput';
+import { FoodAiAssist } from '../components/FoodAiAssist';
 import { refLabel, refQty } from '../lib/units';
 import '../styles/catalogue.css';
 
@@ -42,7 +43,7 @@ interface FoodDetail extends FoodItem {
   ingredients: IngredientResponse[];
 }
 
-interface FoodFormData {
+export interface FoodFormData {
   name: string;
   defaultUoM: string;
   caloriesPerUnit: number;
@@ -245,6 +246,13 @@ function CataloguePage() {
     return () => clearTimeout(timer);
   }, [ingSearchTerm, sortMode, user?.id]);
 
+  const handleApply = (prefill: Partial<FoodFormData> & { matchedFoodId: string | null }) => {
+    setForm((f) => ({ ...f, ...prefill }));
+    if (prefill.matchedFoodId && editingId === null) {
+      setDuplicateFoodId(prefill.matchedFoodId);
+    }
+  };
+
   const saveFood = async () => {
     if (!form.name.trim()) { setFormError('Name is required.'); return; }
 
@@ -377,6 +385,8 @@ function CataloguePage() {
               </button>
             </p>
           )}
+
+          <FoodAiAssist userId={user.id} onApply={handleApply} />
 
           <div className="food-form-section">
             <label>Name</label>
