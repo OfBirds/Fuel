@@ -363,7 +363,7 @@ public class FoodController(AppDbContext db, IFoodService foodService) : Control
     /// <summary>Silent get-or-create for an inline child ingredient. The user didn't
     /// explicitly name-check this — look up by normalized name, reference on hit,
     /// mint on miss. Never overwrites an existing food's nutrition.</summary>
-    private async Task<Guid> GetOrCreateChildFoodAsync(InlineFoodRequest child, CancellationToken ct)
+    private async Task<Guid> GetOrCreateChildFoodAsync(InlineChildRequest child, CancellationToken ct)
     {
         var normalized = FoodNameNormalizer.Normalize(child.Name);
         var existing = await db.Foods
