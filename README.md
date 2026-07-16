@@ -44,11 +44,13 @@ These rails come from the project's self-hosted full-stack base and are in place
 - **Single-image deploy** — a multi-stage `Dockerfile` builds the Vite SPA, drops
   it into the backend's `wwwroot/`, and ASP.NET serves both the API and the SPA on
   one origin. No nginx, no CORS, no proxy.
-- **CI/CD** (`.github/workflows/deploy.yml`) — on push: run tests → build the image
-  → push to GHCR → deploy on a self-hosted runner. EF Core migrations are generated
-  and applied as an explicit, gated step before the app is swapped.
-- **Two environments** — `main` → staging, `release` → prod, each a fully isolated
-  Docker stack (own DB, volumes, network, ports) selected by an env file.
+- **CI/CD** (`.github/workflows/validate.yml` + `release.yml`) — run tests → build
+  the image → push to GHCR → deploy on a self-hosted runner. EF Core migrations are
+  generated and applied as an explicit, gated step before the app is swapped.
+- **Two environments** — PRs targeting `main` → staging, pushes to `main` → internal
+  release (prod), each a fully isolated Docker stack (own DB, volumes, network,
+  ports) selected by an env file. No `release` branch; merging is gated on the
+  staging deploy succeeding.
 - **Versioning** — `VERSION` (`MAJOR.MINOR`) + `github.run_number` → `MAJOR.MINOR.N`,
   baked into the image and exposed at `GET /api/version`.
 - **Observability** — Serilog structured logs (rolling JSON file + console),
