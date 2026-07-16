@@ -27,7 +27,8 @@ flock's rules:
   lunch, dinner, snacks) with per-item and per-meal times and a running calorie
   total against your daily goal.
 * *A catalogue that learns* — the foods you log build up a personal catalogue
-  you can search, reuse, and sort by your own preference.
+  you can search, reuse, sort by your own preference, and get AI help filling in
+  nutrition for new items.
 * *Profile & weight* — set your details and a daily calorie goal, log your
   weight, and watch the trend.
 * *Meal-pause reminders (optional)* — a gentle nudge if you like to space meals

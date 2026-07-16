@@ -225,6 +225,7 @@ builder.Services.Configure<Api.Config.SmtpOptions>(o =>
 builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 builder.Services.AddHostedService<ReleaseNotifier>();
 builder.Services.AddHostedService<BackupService>();
+builder.Services.AddSingleton<FoodDedupService>();
 
 // AI nutrition estimator — a hot-reloadable registry of providers (docs/ai-providers.md).
 // The provider LIST lives in a JSON file (path in AI_CONFIG_FILE), added as a

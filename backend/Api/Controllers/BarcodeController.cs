@@ -64,6 +64,7 @@ public partial class BarcodeController(
             var food = new Food
             {
                 Name = match.Name,
+                NormalizedName = FoodNameNormalizer.Normalize(match.Name),
                 DefaultUoM = "g",
                 CaloriesPerUnit = match.CaloriesPerGram,
                 ProteinPerUnit = match.ProteinPerGram,

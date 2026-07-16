@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { apiFetch } from '../lib/api';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -6,9 +6,12 @@ import { getLastMealType, saveLastMealType } from '../lib/storage';
 import { normalizeImage } from '../lib/image';
 import { loadCatalogueByName, type CatalogueFood } from '../lib/foods';
 import { useShowMacros } from '../hooks/useShowMacros';
+import { useAiStatus } from '../hooks/useAiStatus';
+import { convertToSystem, inferPreferredSystem } from '../lib/units';
 import { UnitSelect } from '../components/UnitSelect';
 import { NumberInput } from '../components/NumberInput';
 import { CheckButton } from '../components/CheckButton';
+import { PhotoPickButton } from '../components/PhotoPickButton';
 import '../styles/entryform.css';
 import '../styles/aientry.css';
 
@@ -75,6 +78,15 @@ interface BarcodeFood {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
+// Mirrors EstimateController.NormalizeName (backend) so the frontend's duplicate check
+// matches how the backend actually resolves a name to an existing food: lowercase, then
+// strip anything from the first "(" onward (parenthetical qualifiers), then trim.
+const normalizeFoodName = (raw: string): string => {
+  const lower = raw.toLowerCase();
+  const paren = lower.indexOf('(');
+  return (paren >= 0 ? lower.slice(0, paren) : lower).trim();
+};
+
 let keySeq = 0;
 const nextKey = () => `row-${keySeq++}`;
 
@@ -98,9 +110,7 @@ function AiEntryPage() {
   const queryMeal = searchParams.get('meal') || getLastMealType();
   const queryDate = searchParams.get('date') || localDate();
 
-  const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
-  const [supportsText, setSupportsText] = useState(false);
-  const [supportsImages, setSupportsImages] = useState(false);
+  const { aiEnabled, supportsText, supportsImages } = useAiStatus();
   const [mode, setMode] = useState<AiMode>('text');
   const [description, setDescription] = useState('');
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -125,6 +135,8 @@ function AiEntryPage() {
   // Barcode (EAN/UPC) scan — its own tab. A precise digit decode (ZXing) run locally on the
   // captured/chosen photo + Open Food Facts lookup, not an AI guess; a hit becomes a matched row.
   const [barcodeEnabled, setBarcodeEnabled] = useState(false);
+  const [barcodeStatusKnown, setBarcodeStatusKnown] = useState(false);
+  const modeInitialized = useRef(false);
   const [barcodeCode, setBarcodeCode] = useState('');
   const [barcodeBusy, setBarcodeBusy] = useState(false);
   const [barcodeMsg, setBarcodeMsg] = useState<string | null>(null);
@@ -132,6 +144,12 @@ function AiEntryPage() {
   // Catalogue keyed by lowercased name — to flag a "new" row that actually duplicates
   // an existing food (we don't auto-merge yet; just warn so we stop minting dupes).
   const [catalogue, setCatalogue] = useState<Map<string, CatalogueFood>>(new Map());
+  // Inferred from the user's own catalogue usage (§3b-R6) — recomputed per catalogue load,
+  // never persisted. Drives unit-system normalization of AI/estimate rows below.
+  const preferredSystem = useMemo(
+    () => inferPreferredSystem(Array.from(catalogue.values())),
+    [catalogue],
+  );
 
   const [mealType, setMealType] = useState(queryMeal);
   const [intakeAt, setIntakeAt] = useState(() => `${queryDate}T${nowTime()}`);
@@ -141,43 +159,38 @@ function AiEntryPage() {
   const [saving, setSaving] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  // AI affordances render per modality: the Describe input needs a text provider, the
-  // Photo tab needs a vision provider. Each is configured independently in the chain.
+  // Barcode capability stays local (useAiStatus only covers /api/ai/status).
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [aiRes, bcRes] = await Promise.allSettled([
-        apiFetch('/api/ai/status'),
-        apiFetch('/api/barcode/status'),
-      ]);
+      let bcOn = false;
+      try {
+        const res = await apiFetch('/api/barcode/status');
+        if (res.ok) bcOn = (await res.json()).enabled === true;
+      } catch { /* leave barcode off */ }
       if (!alive) return;
-      let aiOn = false, sText = false, sImg = false, bcOn = false;
-      if (aiRes.status === 'fulfilled' && aiRes.value?.ok) {
-        const s = await aiRes.value.json();
-        aiOn = s.enabled === true;
-        sText = s.supportsText === true;
-        sImg = s.supportsImages === true;
-      }
-      if (bcRes.status === 'fulfilled' && bcRes.value?.ok) {
-        bcOn = (await bcRes.value.json()).enabled === true;
-      }
-      if (!alive) return;
-      setAiEnabled(aiOn);
-      setSupportsText(sText);
-      setSupportsImages(sImg);
       setBarcodeEnabled(bcOn);
-      // Start on the first enabled modality (text → photo → barcode).
-      setMode(sText ? 'text' : sImg ? 'photo' : bcOn ? 'barcode' : 'text');
+      setBarcodeStatusKnown(true);
     })();
     return () => { alive = false; };
   }, []);
 
-  // Load the catalogue once for duplicate-name detection on "new" review rows.
+  // Start on the first enabled modality (text → photo → barcode) once both capability
+  // fetches (AI + barcode) have resolved — picked once, not re-run on later state changes.
   useEffect(() => {
+    if (aiEnabled === null || !barcodeStatusKnown || modeInitialized.current) return;
+    modeInitialized.current = true;
+    setMode(supportsText ? 'text' : supportsImages ? 'photo' : barcodeEnabled ? 'barcode' : 'text');
+  }, [aiEnabled, barcodeStatusKnown, supportsText, supportsImages, barcodeEnabled]);
+
+  // Load the catalogue once for duplicate-name detection on "new" review rows, and to
+  // infer the user's preferred unit system (usageCount per food) for §3b-R6 normalization.
+  useEffect(() => {
+    if (!user) return;
     let alive = true;
-    loadCatalogueByName().then((m) => { if (alive) setCatalogue(m); });
+    loadCatalogueByName(user.id).then((m) => { if (alive) setCatalogue(m); });
     return () => { alive = false; };
-  }, []);
+  }, [user?.id]);
 
   // Abort any in-flight request if we leave the screen.
   useEffect(() => () => { abortRef.current?.abort(); }, []);
@@ -193,12 +206,6 @@ function AiEntryPage() {
     try { normalized = await normalizeImage(blob); } catch { /* fall back to original */ }
     setImageBlob(normalized);
     setImageUrl(URL.createObjectURL(normalized)); // prior URL revoked by the effect above
-  };
-
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) useImage(file);
-    e.target.value = ''; // allow re-selecting the same file
   };
 
   const clearImage = () => { setImageBlob(null); setImageUrl(null); };
@@ -254,12 +261,9 @@ function AiEntryPage() {
     }
   }, []);
 
-  // Decode a barcode straight from a chosen/snapped photo (the native camera provides the
-  // shutter + retake), then look it up.
-  const onBarcodeFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // allow re-selecting the same file
-    if (!file) return;
+  // Decode a barcode straight from a chosen/snapped photo (PhotoPickButton's camera/library
+  // action), then look it up.
+  const onBarcodeFile = async (file: File) => {
     setBarcodeMsg(null);
     setBarcodeBusy(true);
     const url = URL.createObjectURL(file);
@@ -319,7 +323,12 @@ function AiEntryPage() {
         setError(data.error || "Couldn't estimate — enter it manually.");
         return; // keep any prior rows (a refine that failed leaves the last result up)
       }
-      const fresh = data.items.map((r) => ({ ...withRatios(r), key: nextKey() }));
+      // System-produced rows (AI estimate/refine) get normalized to the user's inferred
+      // unit system before ratios are derived (§3b-R6) — manual input is never touched.
+      const fresh = data.items.map((r) => ({
+        ...withRatios(convertToSystem(r, preferredSystem)),
+        key: nextKey(),
+      }));
       setRows(fresh);
       setAiSnapshot(fresh); // baseline to undo manual edits back to
       setOverallConfidence(data.overallConfidence);
@@ -331,7 +340,7 @@ function AiEntryPage() {
       setPending(false);
       abortRef.current = null;
     }
-  }, [user, pending, mode, description, imageBlob, photoNote]);
+  }, [user, pending, mode, description, imageBlob, photoNote, preferredSystem]);
 
   const onEstimate = () => { setNotes([]); runEstimate([]); };
 
@@ -385,6 +394,16 @@ function AiEntryPage() {
 
   const save = async () => {
     if (!user || !rows || rows.length === 0) return;
+
+    // Re-check for name collisions at save time, not just when the row was first shown —
+    // the user may have edited a "new" row's name into an existing catalogue food's name
+    // since (§3a-R5 item 2). Normalized the same way the backend resolves matches.
+    const dup = rows.find((r) => r.isNew && catalogue.has(normalizeFoodName(r.name)));
+    if (dup) {
+      setError(`"${dup.name.trim()}" already exists in your catalogue — rename it or remove the row before saving.`);
+      return;
+    }
+
     setSaving(true);
     setError(null);
     saveLastMealType(mealType);
@@ -496,14 +515,8 @@ function AiEntryPage() {
                   <button type="button" className="cancel-btn" onClick={clearImage} disabled={pending}>Retake / remove</button>
                 </div>
               ) : (
-                /* One native file control. With no `capture` attribute, phones show the OS
-                   "Camera or Photo Library" chooser (and the native camera brings its own
-                   shutter + use/retake); desktop gets a file picker. */
                 <div className="ai-photo-actions single">
-                  <label className="save-btn ai-upload-btn">
-                    Take or upload a photo
-                    <input type="file" accept="image/*" onChange={onFile} hidden aria-label="Upload a meal photo" />
-                  </label>
+                  <PhotoPickButton label="Take or upload a photo" onFile={useImage} />
                 </div>
               )}
 
@@ -526,31 +539,26 @@ function AiEntryPage() {
             <div className="form-section ai-barcode">
               <label className="ai-barcode-label">Snap or upload a photo of a barcode (EAN/UPC)</label>
 
-              {/* One native file control, decoded locally by ZXing. With no `capture` attribute,
-                  phones offer the OS "Camera or Photo Library" chooser and the native camera's
-                  own shutter/retake — which is how you snap a barcode. */}
               <div className="ai-photo-actions single">
-                <label className="bc-btn ai-upload-btn">
-                  Take or upload a barcode photo
-                  <input type="file" accept="image/*" onChange={onBarcodeFile} hidden aria-label="Upload a barcode photo" disabled={barcodeBusy} />
-                </label>
+                <PhotoPickButton
+                  label="Take or upload a barcode photo"
+                  onFile={onBarcodeFile}
+                  disabled={barcodeBusy}
+                />
               </div>
 
-              <details className="ai-barcode-typed">
-                <summary>Or type the digits</summary>
-                <div className="ai-barcode-manual">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="Barcode digits (8–14)"
-                    value={barcodeCode}
-                    onChange={(e) => setBarcodeCode(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') lookupBarcode(barcodeCode); }}
-                    disabled={barcodeBusy}
-                  />
-                  <CheckButton label="Look up barcode" busy={barcodeBusy} onClick={() => lookupBarcode(barcodeCode)} disabled={barcodeBusy || !barcodeCode.trim()} />
-                </div>
-              </details>
+              <div className="ai-barcode-manual">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Barcode digits (8–14)"
+                  value={barcodeCode}
+                  onChange={(e) => setBarcodeCode(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') lookupBarcode(barcodeCode); }}
+                  disabled={barcodeBusy}
+                />
+                <CheckButton label="Look up barcode" busy={barcodeBusy} onClick={() => lookupBarcode(barcodeCode)} disabled={barcodeBusy || !barcodeCode.trim()} />
+              </div>
 
               {barcodeBusy && <p className="ai-barcode-hint">Reading barcode…</p>}
               {barcodeMsg && <p className="ai-barcode-msg" role="alert">{barcodeMsg}</p>}
@@ -576,6 +584,29 @@ function AiEntryPage() {
           <p className="ai-manual-fallback">
             Prefer to type it yourself? <Link to={manualHref}>Enter manually</Link>
           </p>
+
+          {/* Refining re-runs the estimate, so only for AI results (text or photo) — a
+              scanned barcode product has nothing to re-estimate. Shown whenever an estimate
+              attempt has been made — including a FAILED one (rows null, error set) — so a bad
+              attempt can be clarified without scrolling back up to the photo-note field
+              (§3a-R3). Anchored here (above the row list, not below it) so it stays reachable
+              on a phone regardless of how many rows a successful estimate returns. */}
+          {(mode === 'text' || imageBlob) && (rows || error) && (
+            <div className="ai-refine">
+              <label htmlFor="ai-note">Not quite right? Add a clarification</label>
+              <div className="ai-refine-row">
+                <input
+                  id="ai-note"
+                  value={noteDraft}
+                  placeholder="e.g. the rice was 1.5 cups, the bread is wholemeal"
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') onRefine(); }}
+                  disabled={pending}
+                />
+                <button className="cancel-btn" onClick={onRefine} disabled={pending || !noteDraft.trim()}>Refine</button>
+              </div>
+            </div>
+          )}
 
           {rows && (
             <div className="ai-review">
@@ -608,7 +639,7 @@ function AiEntryPage() {
                     </div>
                   </div>
                   {r.isNew && (
-                    catalogue.has(r.name.trim().toLowerCase()) ? (
+                    catalogue.has(normalizeFoodName(r.name)) ? (
                       <div className="ai-unmatched-hint dup">
                         ⚠ "{r.name.trim()}" already exists in your catalogue — saving will create a duplicate. Rename it, or remove this row and search for the existing food.
                       </div>
@@ -648,25 +679,6 @@ function AiEntryPage() {
                 </div>
               ))}
 
-              {/* Refining re-runs the estimate, so only for AI results (text or photo) —
-                  a scanned barcode product has nothing to re-estimate. */}
-              {(mode === 'text' || imageBlob) && (
-                <div className="ai-refine">
-                  <label htmlFor="ai-note">Not quite right? Add a clarification</label>
-                  <div className="ai-refine-row">
-                    <input
-                      id="ai-note"
-                      value={noteDraft}
-                      placeholder="e.g. the rice was 1.5 cups, the bread is wholemeal"
-                      onChange={(e) => setNoteDraft(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') onRefine(); }}
-                      disabled={pending}
-                    />
-                    <button className="cancel-btn" onClick={onRefine} disabled={pending || !noteDraft.trim()}>Refine</button>
-                  </div>
-                </div>
-              )}
-
               <div className="entry-form-row" style={{ marginTop: '1rem' }}>
                 <div className="form-section" style={{ marginBottom: 0 }}>
                   <label>Meal</label>
@@ -679,6 +691,14 @@ function AiEntryPage() {
                   <input type="datetime-local" value={intakeAt} onChange={(e) => setIntakeAt(e.target.value)} />
                 </div>
               </div>
+
+              {rows.some((r) => r.isNew) && (
+                <p className="ai-new-foods-disclosure">
+                  Saving will add {rows.filter((r) => r.isNew).length} new food
+                  {rows.filter((r) => r.isNew).length === 1 ? '' : 's'} to the catalogue:{' '}
+                  {rows.filter((r) => r.isNew).map((r) => r.name.trim()).join(', ')}
+                </p>
+              )}
 
               <div className="form-actions">
                 <button className="cancel-btn" onClick={() => navigate(-1)}>Cancel</button>

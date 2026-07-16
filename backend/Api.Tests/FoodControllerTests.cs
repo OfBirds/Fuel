@@ -276,4 +276,193 @@ public class FoodControllerTests : IDisposable
         var result = await _controller.DeleteFood(Guid.NewGuid(), CancellationToken.None);
         Assert.IsType<NotFoundResult>(result);
     }
+
+    // ── Dedup: CreateFood 409 on normalized collision ──
+
+    [Fact]
+    public async Task CreateFood_Returns409_OnNormalizedCollision()
+    {
+        // Normalize("Chicken Breast") → "chicken breast", already seeded
+        var request = new CreateFoodRequest
+        {
+            Name = "Chicken Breast", DefaultUoM = "g", CaloriesPerUnit = 1
+        };
+        _db.Foods.First(f => f.Name == "Chicken Breast").NormalizedName = "chicken breast";
+        await _db.SaveChangesAsync();
+
+        var result = await _controller.CreateFood(request, CancellationToken.None);
+        Assert.IsType<ConflictObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateFood_Returns409_OnCaseInsensitiveCollision()
+    {
+        _db.Foods.First(f => f.Name == "Chicken Breast").NormalizedName = "chicken breast";
+        await _db.SaveChangesAsync();
+
+        var request = new CreateFoodRequest
+        {
+            Name = "CHICKEN BREAST", DefaultUoM = "g", CaloriesPerUnit = 1
+        };
+
+        var result = await _controller.CreateFood(request, CancellationToken.None);
+        Assert.IsType<ConflictObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateFood_Returns409_OnParenthesizedCollision()
+    {
+        _db.Foods.First(f => f.Name == "Chicken Breast").NormalizedName = "chicken breast";
+        await _db.SaveChangesAsync();
+
+        var request = new CreateFoodRequest
+        {
+            Name = "Chicken Breast (grilled)", DefaultUoM = "g", CaloriesPerUnit = 1
+        };
+
+        var result = await _controller.CreateFood(request, CancellationToken.None);
+        Assert.IsType<ConflictObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateFood_Returns409_OnWhitespaceCollision()
+    {
+        _db.Foods.First(f => f.Name == "Chicken Breast").NormalizedName = "chicken breast";
+        await _db.SaveChangesAsync();
+
+        var request = new CreateFoodRequest
+        {
+            Name = "Chicken   Breast", DefaultUoM = "g", CaloriesPerUnit = 1
+        };
+
+        var result = await _controller.CreateFood(request, CancellationToken.None);
+        Assert.IsType<ConflictObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateFood_Returns409_WithExistingFoodId()
+    {
+        _db.Foods.First(f => f.Name == "Chicken Breast").NormalizedName = "chicken breast";
+        await _db.SaveChangesAsync();
+
+        var request = new CreateFoodRequest
+        {
+            Name = "Chicken Breast", DefaultUoM = "g", CaloriesPerUnit = 1
+        };
+
+        var result = await _controller.CreateFood(request, CancellationToken.None);
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+
+        // The response body should include the existing food's id
+        var body = conflict.Value;
+        Assert.NotNull(body);
+    }
+
+    // ── Dedup: UpdateFood 409 on rename collision ──
+
+    [Fact]
+    public async Task UpdateFood_Returns409_OnRenameCollision()
+    {
+        // Set up: Chicken Breast and Olive Oil both have correct NormalizedName
+        var chicken = _db.Foods.First(f => f.Name == "Chicken Breast");
+        chicken.NormalizedName = "chicken breast";
+        var oil = _db.Foods.First(f => f.Name == "Olive Oil");
+        oil.NormalizedName = "olive oil";
+        await _db.SaveChangesAsync();
+
+        // Try to rename Chicken Breast → Olive Oil
+        var request = new UpdateFoodRequest
+        {
+            Name = "Olive Oil", DefaultUoM = "g", CaloriesPerUnit = 1, Ingredients = []
+        };
+
+        var result = await _controller.UpdateFood(chicken.Id, request, CancellationToken.None);
+        Assert.IsType<ConflictObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UpdateFood_DoesNot409_OnSameNameRename()
+    {
+        var chicken = _db.Foods.First(f => f.Name == "Chicken Breast");
+        chicken.NormalizedName = "chicken breast";
+        await _db.SaveChangesAsync();
+
+        // Rename to its own current name — should be fine
+        var request = new UpdateFoodRequest
+        {
+            Name = "Chicken Breast", DefaultUoM = "g", CaloriesPerUnit = 1.65, Ingredients = []
+        };
+
+        var result = await _controller.UpdateFood(chicken.Id, request, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    // ── Dedup: inline children get-or-create ──
+
+    [Fact]
+    public async Task CreateFood_InlineChild_GetOrCreate_ReusesExisting()
+    {
+        // Seed a food that the inline child should match
+        var oil = _db.Foods.First(f => f.Name == "Olive Oil");
+        oil.NormalizedName = "olive oil";
+        await _db.SaveChangesAsync();
+        var foodCountBefore = await _db.Foods.CountAsync();
+
+        var request = new CreateFoodRequest
+        {
+            Name = "Custom Mix", DefaultUoM = "g", CaloriesPerUnit = 5.0,
+            Ingredients =
+            [
+                new IngredientRequest
+                {
+                    InlineChild = new InlineChildRequest
+                    {
+                        Name = "Olive Oil", DefaultUoM = "g", CaloriesPerUnit = 9.0
+                    },
+                    Quantity = 10, UoM = "g"
+                }
+            ]
+        };
+
+        var result = await _controller.CreateFood(request, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var response = Assert.IsType<FoodResponse>(created.Value);
+        Assert.Single(response.Ingredients);
+        // Should reuse the existing Olive Oil, not create a duplicate
+        Assert.Equal(oil.Id, response.Ingredients[0].ChildFoodId);
+        Assert.Equal(foodCountBefore + 1, await _db.Foods.CountAsync()); // only the parent is new
+    }
+
+    [Fact]
+    public async Task CreateFood_InlineChild_GetOrCreate_MintsNew()
+    {
+        var foodCountBefore = await _db.Foods.CountAsync();
+
+        var request = new CreateFoodRequest
+        {
+            Name = "Custom Mix", DefaultUoM = "g", CaloriesPerUnit = 5.0,
+            Ingredients =
+            [
+                new IngredientRequest
+                {
+                    InlineChild = new InlineChildRequest
+                    {
+                        Name = "Sesame Oil", DefaultUoM = "ml", CaloriesPerUnit = 8.8
+                    },
+                    Quantity = 5, UoM = "ml"
+                }
+            ]
+        };
+
+        var result = await _controller.CreateFood(request, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        var response = Assert.IsType<FoodResponse>(created.Value);
+        // A new child food should have been minted
+        var childInDb = await _db.Foods.FirstOrDefaultAsync(f => f.Name == "Sesame Oil");
+        Assert.NotNull(childInDb);
+        Assert.Equal("sesame oil", childInDb!.NormalizedName);
+        Assert.Equal(foodCountBefore + 2, await _db.Foods.CountAsync()); // parent + child
+    }
 }

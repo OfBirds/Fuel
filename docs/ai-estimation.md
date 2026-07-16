@@ -80,6 +80,8 @@ shows a **"add a note / clarify"** box. The user can correct what the model miss
 - The user can refine repeatedly, then confirm/edit as usual. Good guesses from the
   first pass (e.g. the beans) carry through; the clarifications sharpen the rest.
 
+> **Catalogue reuse.** These same estimate endpoints (text and image) also power the **AI-assist panel** in the catalogue's add/edit food dialog — see the *AI-assist panel* section in [`food-catalogue-and-logging.md`](food-catalogue-and-logging.md) for details.
+
 ## Phase 3 — photo
 1. The user provides an image via a native file input (see §capture): the OS **camera or photo library** on mobile, a file picker on desktop.
 2. Backend hands the bytes to `EstimateFromImageAsync(bytes, contentType, notes)`
