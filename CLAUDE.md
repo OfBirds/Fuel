@@ -61,7 +61,7 @@ Frontend: all API calls go through `apiFetch` (`src/lib/api.ts`), which attaches
 
 ## Deploy
 
-Push-to-deploy via `.github/workflows/deploy.yml`: `main` → staging stack, `release` → prod stack. Each branch runs tests → builds/pushes the image to GHCR → applies the gated migration script → deploys on a self-hosted runner. See `docs/deploy-runbook.md` (one-time host setup) and `docs/infrastructure.md` (design). Release builds also publish the public-facing image tags `:latest` and `:<MAJOR.MINOR>` (what the user docs point self-hosters at); staging tags stay internal.
+Two event-split workflows; **there is no `release` branch**. `.github/workflows/validate.yml`: PRs targeting `main` → staging stack (branch protection requires its `deploy-staging` job before merge; fork PRs are skipped entirely). `.github/workflows/release.yml`: push to `main` (i.e. the merge) → internal release stack. Both run tests → build/push the image to GHCR → apply the gated migration script → deploy on a self-hosted runner. See `docs/deploy-runbook.md` (one-time host setup) and `docs/infrastructure.md` (design). Release builds (every main push) also publish the public-facing image tags `:latest` and `:<MAJOR.MINOR>` (what the user docs point self-hosters at); staging tags stay internal.
 
 ## User docs (ofbirds.org)
 
@@ -72,7 +72,7 @@ The flock's docs site (the **OfbirdsWeb** repo → ofbirds.org/docs) builds thes
 | OfbirdsWeb lane | Fuel branch pulled |
 |---|---|
 | staging (homelab) | `main` |
-| internal release (homelab) | `release` |
-| public (ofbirds.org) | `release` |
+| internal release (homelab) | `main` |
+| public (ofbirds.org) | `main` |
 
-Staging always tracks `main`. **Fuel is self-hostable-only** — there is no public hosted instance, people run it on their own box — so it has no `publish` branch, and the public lane pins to `release` (the version people actually self-host, same as internal release) rather than a non-existent public deployment. A publicly-hosted flock app instead exposes a `publish` branch that the public lane tracks. Fuel is private, so OfbirdsWeb clones it with a read-only token (`DOCS_FETCH_TOKEN`); once Fuel is public that can drop to an anonymous fetch.
+All lanes pull `main` — Fuel has no `release` branch (merging to `main` *is* the release, see Deploy above). **Fuel is self-hostable-only** — there is no public hosted instance, people run it on their own box — so it has no `publish` branch either; the public lane documents the `:latest`/`:<MAJOR.MINOR>` images that `main` publishes. A publicly-hosted flock app instead exposes a `publish` branch that the public lane tracks. Fuel is private, so OfbirdsWeb clones it with a read-only token (`DOCS_FETCH_TOKEN`); once Fuel is public that can drop to an anonymous fetch.

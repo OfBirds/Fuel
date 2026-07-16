@@ -1,17 +1,17 @@
-name: deploy
+name: release
 
-# main    -> staging stack (port 9223)
-# release -> prod stack    (port 9224)
+# Internal release: every push to main (i.e. every merged PR — merges are
+# gated on validate.yml's staging deploy) deploys the internal-release stack
+# (port 9224). There is no release branch.
 on:
   push:
-    branches: [main, release]
-  # Manual redeploy/rollback from the Actions tab. Pick the branch to run from
-  # (main -> staging, release -> prod), same routing as a push.
+    branches: [main]
+  # Manual redeploy/rollback from the Actions tab (runs from main).
   workflow_dispatch:
 
-# Don't let two deploys of the same branch overlap; don't cancel one in flight.
+# Don't let two releases overlap; don't cancel one in flight.
 concurrency:
-  group: deploy-${{ github.ref_name }}
+  group: release-internal
   cancel-in-progress: false
 
 # Least privilege by default; the build job widens to packages: write for GHCR.
@@ -44,15 +44,6 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v6
-
-      - name: Resolve environment
-        id: env
-        run: |
-          if [ "${{ github.ref_name }}" = "release" ]; then
-            echo "tag=prod" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=staging" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Compute version
         id: version
@@ -90,19 +81,17 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Release builds also get the public-facing tags :latest and :<MAJOR.MINOR>
-      # (what the self-hosting docs point strangers at). Staging stays internal.
+      # (what the self-hosting docs point strangers at).
       - name: Compute image tags
         id: tags
         run: |
           {
             echo 'list<<EOF'
-            echo "${{ env.IMAGE }}:${{ steps.env.outputs.tag }}"
+            echo "${{ env.IMAGE }}:prod"
             echo "${{ env.IMAGE }}:${{ steps.version.outputs.version }}"
             echo "${{ env.IMAGE }}:${{ github.sha }}"
-            if [ "${{ github.ref_name }}" = "release" ]; then
-              echo "${{ env.IMAGE }}:latest"
-              echo "${{ env.IMAGE }}:$(cat VERSION)"
-            fi
+            echo "${{ env.IMAGE }}:latest"
+            echo "${{ env.IMAGE }}:$(cat VERSION)"
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
@@ -118,7 +107,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
+  deploy-internal:
     needs: build
     runs-on: [self-hosted]
     permissions:
@@ -126,15 +115,6 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@v6
-
-      - name: Resolve environment
-        id: env
-        run: |
-          if [ "${{ github.ref_name }}" = "release" ]; then
-            echo "file=/opt/fuel/.env.prod" >> "$GITHUB_OUTPUT"
-          else
-            echo "file=/opt/fuel/.env.staging" >> "$GITHUB_OUTPUT"
-          fi
 
       - uses: actions/download-artifact@v8
         with:
@@ -145,11 +125,11 @@ jobs:
 
       - name: Pull image
         working-directory: deploy
-        run: docker compose --env-file ${{ steps.env.outputs.file }} pull
+        run: docker compose --env-file /opt/fuel/.env.prod pull
 
       - name: Start database
         working-directory: deploy
-        run: docker compose --env-file ${{ steps.env.outputs.file }} up -d --wait postgres
+        run: docker compose --env-file /opt/fuel/.env.prod up -d --wait postgres
 
       # Apply migrations against the running DB BEFORE swapping the app.
       # ON_ERROR_STOP=1 -> a bad migration fails the job here; the old app keeps
@@ -157,13 +137,13 @@ jobs:
       - name: Apply migrations
         working-directory: deploy
         run: |
-          docker compose --env-file ${{ steps.env.outputs.file }} exec -T postgres \
+          docker compose --env-file /opt/fuel/.env.prod exec -T postgres \
             sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
             < "$GITHUB_WORKSPACE/migrate.sql"
 
       - name: Deploy app
         working-directory: deploy
-        run: docker compose --env-file ${{ steps.env.outputs.file }} up -d --wait
+        run: docker compose --env-file /opt/fuel/.env.prod up -d --wait
 
       - name: Prune dangling images
         run: docker image prune -f
