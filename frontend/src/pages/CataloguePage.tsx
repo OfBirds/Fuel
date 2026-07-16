@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useShowMacros } from '../hooks/useShowMacros';
@@ -91,6 +91,18 @@ function CataloguePage() {
   const [ingSearchResults, setIngSearchResults] = useState<FoodItem[]>([]);
   const [addingIngToIndex, setAddingIngToIndex] = useState<number | null>(null);
 
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (showForm && !dialog.open) {
+      dialog.showModal();
+    } else if (!showForm && dialog.open) {
+      dialog.close();
+    }
+  }, [showForm]);
+
   // Composite-food ingredients (lazy-loaded once, then cached). Shown two ways:
   // a hover popover (desktop) and a click-to-expand caret that lists them inline
   // underneath the row (works on touch). Both are composite-only.
@@ -181,6 +193,7 @@ function CataloguePage() {
   };
 
   const cancelForm = () => {
+    if (!showForm) return; // guard against double-invoke from dialog onClose
     setShowForm(false);
     setEditingId(null);
     setDuplicateFoodId(null);
@@ -352,8 +365,8 @@ function CataloguePage() {
         </button>
       </div>
 
-      {/* Food form */}
-      {showForm && (
+      {/* Food form dialog */}
+      <dialog ref={dialogRef} className="food-form-dialog" onClose={cancelForm}>
         <div className="food-form">
           <h2>{editingId ? 'Edit Food' : 'Add Food'}</h2>
           {formError && <p className="form-error" role="alert">{formError}</p>}
@@ -500,7 +513,7 @@ function CataloguePage() {
             </button>
           </div>
         </div>
-      )}
+      </dialog>
 
       {/* Food list */}
       {loading ? (
@@ -550,6 +563,12 @@ function CataloguePage() {
                     onClick={() => setPonder(f.id, (f.ponder ?? 100) + 10)}
                   >+</button>
                 </div>
+                <button
+                  className="food-card-edit"
+                  onClick={(e) => { e.stopPropagation(); startEdit(f.id); }}
+                  aria-label={`Edit ${f.name}`}
+                  title="Edit"
+                >✎</button>
                 <button
                   className="food-card-delete"
                   onClick={(e) => { e.stopPropagation(); deleteFood(f.id); }}

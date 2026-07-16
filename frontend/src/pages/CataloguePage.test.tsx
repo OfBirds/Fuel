@@ -26,6 +26,14 @@ describe('CataloguePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+
+    // JSDOM HTMLDialogElement — ensure showModal/close toggle the open attribute
+    HTMLDialogElement.prototype.showModal = function () {
+      this.setAttribute('open', '');
+    };
+    HTMLDialogElement.prototype.close = function () {
+      this.removeAttribute('open');
+    };
   });
 
   it('lists foods from API', async () => {
@@ -235,5 +243,78 @@ describe('CataloguePage', () => {
     await waitFor(() => {
       expect(screen.getAllByText(/cal\/100 g/).length).toBeGreaterThanOrEqual(1);
     });
+  });
+
+  it('opens the edit dialog when clicking a food card row', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { id: '1', name: 'Chicken Breast', defaultUoM: 'g', caloriesPerUnit: 1.65, ingredientCount: 0, isComposite: false },
+      ],
+    });
+    renderCatalogue();
+    await waitFor(() => expect(screen.getByText('Chicken Breast')).toBeInTheDocument());
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: '1', name: 'Chicken Breast', defaultUoM: 'g', caloriesPerUnit: 1.65,
+        proteinPerUnit: null, carbsPerUnit: null, fatPerUnit: null, ingredients: [],
+      }),
+    });
+
+    await userEvent.click(screen.getByText('Chicken Breast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Edit Food')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('spinbutton')).toHaveValue(165);
+  });
+
+  it('opens the edit dialog when clicking the ✎ edit button', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { id: '1', name: 'Chicken Breast', defaultUoM: 'g', caloriesPerUnit: 1.65, ingredientCount: 0, isComposite: false },
+      ],
+    });
+    renderCatalogue();
+    await waitFor(() => expect(screen.getByText('Chicken Breast')).toBeInTheDocument());
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: '1', name: 'Chicken Breast', defaultUoM: 'g', caloriesPerUnit: 1.65,
+        proteinPerUnit: null, carbsPerUnit: null, fatPerUnit: null, ingredients: [],
+      }),
+    });
+
+    await userEvent.click(screen.getByLabelText('Edit Chicken Breast'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Edit Food')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('spinbutton')).toHaveValue(165);
+  });
+
+  it('closes the dialog on Cancel without extra fetch', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    const { container } = renderCatalogue();
+    await waitFor(() => expect(screen.getByLabelText('Add food')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByLabelText('Add food'));
+    await waitFor(() => expect(screen.getByText('Save Food')).toBeInTheDocument());
+
+    const callCount = mockFetch.mock.calls.length;
+    await userEvent.click(screen.getByText('Cancel'));
+
+    // After Cancel, the dialog's open attribute should be gone
+    const dialog = container.querySelector<HTMLDialogElement>('.food-form-dialog')!;
+    await waitFor(() => {
+      expect(dialog.hasAttribute('open')).toBe(false);
+    });
+
+    // Cancel should not trigger any additional fetch
+    expect(mockFetch.mock.calls.length).toBe(callCount);
   });
 });
