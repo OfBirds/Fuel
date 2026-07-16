@@ -78,9 +78,10 @@ describe('CataloguePage', () => {
     await waitFor(() => expect(screen.getByLabelText('Add food')).toBeDefined());
     await userEvent.click(screen.getByLabelText('Add food'));
 
-    expect(screen.getByText(/Protein \//)).toBeInTheDocument();
-    expect(screen.getByText(/Carbs \//)).toBeInTheDocument();
-    expect(screen.getByText(/Fat \//)).toBeInTheDocument();
+    // With show-macros on, all three macro labels should appear
+    expect(screen.getByText('Protein per 100 g (g)')).toBeInTheDocument();
+    expect(screen.getByText('Carbs per 100 g (g)')).toBeInTheDocument();
+    expect(screen.getByText('Fat per 100 g (g)')).toBeInTheDocument();
   });
 
   it('shows empty state when no foods', async () => {
@@ -161,5 +162,78 @@ describe('CataloguePage', () => {
       expect(screen.getByText('Edit Food')).toBeInTheDocument();
     });
     expect(mockFetch).toHaveBeenLastCalledWith('/api/foods/existing-id', expect.anything());
+  });
+
+  it('round-trips reference-basis calories through edit and save', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] }); // initial list
+    renderCatalogue();
+    await waitFor(() => expect(screen.getByLabelText('Add food')).toBeDefined());
+
+    await userEvent.click(screen.getByLabelText('Add food'));
+    await userEvent.type(screen.getByPlaceholderText('e.g. Chicken Breast'), 'Chicken Breast');
+
+    // Save → 409 duplicate
+    mockFetch.mockResolvedValueOnce({
+      ok: false, status: 409,
+      json: async () => ({ error: 'Already exists.', existingFoodId: 'existing-id' }),
+    });
+    await userEvent.click(screen.getByText('Save Food'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Edit the existing food instead')).toBeInTheDocument();
+    });
+
+    // Load food detail for editing (startEdit)
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: 'existing-id', name: 'Chicken Breast', defaultUoM: 'g', caloriesPerUnit: 1.65,
+        ingredientCount: 0, isComposite: false, ponder: 100, usageCount: null, lastUsedAtUtc: null,
+        proteinPerUnit: null, carbsPerUnit: null, fatPerUnit: null, ingredients: [],
+      }),
+    });
+    await userEvent.click(screen.getByText('Edit the existing food instead'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Edit Food')).toBeInTheDocument();
+    });
+
+    // The Calories field should show the reference-basis value (1.65 × 100 = 165)
+    expect(screen.getByRole('spinbutton')).toHaveValue(165);
+
+    // Save the edit → success
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    // Refetch on form close after save
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] });
+
+    await userEvent.click(screen.getByText('Save Food'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Edit Food')).toBeNull();
+    });
+
+    // Verify the PUT body has per-1-unit value (165 ÷ 100 = 1.65)
+    const putCall = mockFetch.mock.calls.find(
+      ([url, opts]) => url === '/api/foods/existing-id' && opts?.method === 'PUT'
+    );
+    expect(putCall).toBeDefined();
+    const body = JSON.parse(putCall![1].body as string);
+    expect(body.caloriesPerUnit).toBe(1.65);
+  });
+
+  it('displays reference-basis string in food card', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { id: '1', name: 'Chicken Breast', defaultUoM: 'g', caloriesPerUnit: 1.65, ingredientCount: 0, isComposite: false },
+        { id: '2', name: 'Chicken Salad', defaultUoM: 'g', caloriesPerUnit: 1.5, ingredientCount: 3, isComposite: true },
+      ],
+    });
+
+    renderCatalogue();
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/cal\/100 g/).length).toBeGreaterThanOrEqual(1);
+    });
   });
 });

@@ -8,6 +8,7 @@ import { useShowMacros } from '../hooks/useShowMacros';
 import { useAiStatus } from '../hooks/useAiStatus';
 import { UnitSelect } from '../components/UnitSelect';
 import { NumberInput } from '../components/NumberInput';
+import { refLabel, refQty } from '../lib/units';
 import '../styles/entryform.css';
 
 interface FoodItem {
@@ -396,7 +397,7 @@ function EntryFormPage() {
                         <span className="search-result-ponder" title="Priority"> {f.ponder ?? 100}</span>
                       </div>
                       <div className="search-result-detail">
-                        {f.caloriesPerUnit} cal/{f.defaultUoM}
+                        {Math.round(f.caloriesPerUnit * refQty(f.defaultUoM) * 10) / 10} cal/{refQty(f.defaultUoM)} {f.defaultUoM}
                         {f.isComposite ? ' · composite' : ''}
                         {f.usageCount != null ? ` · ${f.usageCount}×` : ''}
                       </div>
@@ -468,7 +469,9 @@ function EntryFormPage() {
             <div className="selected-food">
               <div>
                 <div className="selected-food-name">{selectedFood.name}</div>
-                <div className="selected-food-detail">{selectedFood.caloriesPerUnit} cal/{selectedFood.defaultUoM}</div>
+                <div className="selected-food-detail">
+                  {Math.round(selectedFood.caloriesPerUnit * refQty(selectedFood.defaultUoM) * 10) / 10} cal/{refQty(selectedFood.defaultUoM)} {selectedFood.defaultUoM}
+                </div>
               </div>
               <button className="entry-row-btn" onClick={() => setSelectedFood(null)}>Change</button>
             </div>

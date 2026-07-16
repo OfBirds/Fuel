@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useShowMacros } from '../hooks/useShowMacros';
 import { UnitSelect } from '../components/UnitSelect';
 import { NumberInput } from '../components/NumberInput';
+import { refLabel, refQty } from '../lib/units';
 import '../styles/catalogue.css';
 
 interface FoodItem {
@@ -157,11 +158,13 @@ function CataloguePage() {
       if (!res.ok) return;
       const f = (await res.json()) as FoodDetail;
       setEditingId(id);
+      const rq = refQty(f.defaultUoM);
       setForm({
-        name: f.name, defaultUoM: f.defaultUoM, caloriesPerUnit: f.caloriesPerUnit,
-        proteinPerUnit: f.proteinPerUnit ?? undefined,
-        carbsPerUnit: f.carbsPerUnit ?? undefined,
-        fatPerUnit: f.fatPerUnit ?? undefined,
+        name: f.name, defaultUoM: f.defaultUoM,
+        caloriesPerUnit: Math.round(f.caloriesPerUnit * rq * 100) / 100,
+        proteinPerUnit: f.proteinPerUnit != null ? Math.round(f.proteinPerUnit * rq * 100) / 100 : undefined,
+        carbsPerUnit: f.carbsPerUnit != null ? Math.round(f.carbsPerUnit * rq * 100) / 100 : undefined,
+        fatPerUnit: f.fatPerUnit != null ? Math.round(f.fatPerUnit * rq * 100) / 100 : undefined,
       });
       setIngredients(f.ingredients.map((i) => ({
         childFoodId: i.childFoodId,
@@ -255,11 +258,13 @@ function CataloguePage() {
       };
     });
 
+    const rq = refQty(form.defaultUoM);
     const body = {
       ...form,
-      proteinPerUnit: form.proteinPerUnit ?? null,
-      carbsPerUnit: form.carbsPerUnit ?? null,
-      fatPerUnit: form.fatPerUnit ?? null,
+      caloriesPerUnit: form.caloriesPerUnit / rq,
+      proteinPerUnit: form.proteinPerUnit != null ? form.proteinPerUnit / rq : null,
+      carbsPerUnit: form.carbsPerUnit != null ? form.carbsPerUnit / rq : null,
+      fatPerUnit: form.fatPerUnit != null ? form.fatPerUnit / rq : null,
       ingredients: ingredientRequests,
     };
 
@@ -376,7 +381,7 @@ function CataloguePage() {
               <UnitSelect value={form.defaultUoM} onChange={(v) => setForm((f) => ({ ...f, defaultUoM: v }))} />
             </div>
             <div className="food-form-section">
-              <label>Calories per {form.defaultUoM}</label>
+              <label>Calories {refLabel(form.defaultUoM)}</label>
               <NumberInput
                 min="0" step="0.1"
                 value={form.caloriesPerUnit}
@@ -389,7 +394,7 @@ function CataloguePage() {
             <>
               <div className="food-form-row">
                 <div className="food-form-section">
-                  <label>Protein / {form.defaultUoM} (g)</label>
+                  <label>Protein {refLabel(form.defaultUoM)} (g)</label>
                   <input
                     type="number" min="0" step="0.1"
                     value={form.proteinPerUnit ?? ''}
@@ -397,7 +402,7 @@ function CataloguePage() {
                   />
                 </div>
                 <div className="food-form-section">
-                  <label>Carbs / {form.defaultUoM} (g)</label>
+                  <label>Carbs {refLabel(form.defaultUoM)} (g)</label>
                   <input
                     type="number" min="0" step="0.1"
                     value={form.carbsPerUnit ?? ''}
@@ -407,7 +412,7 @@ function CataloguePage() {
               </div>
 
               <div className="food-form-section">
-                <label>Fat / {form.defaultUoM} (g)</label>
+                <label>Fat {refLabel(form.defaultUoM)} (g)</label>
                 <input
                   type="number" min="0" step="0.1"
                   value={form.fatPerUnit ?? ''}
@@ -470,7 +475,9 @@ function CataloguePage() {
                     {ingSearchResults.map((f) => (
                       <div key={f.id} className="search-result-item" onClick={() => addIngredient(f)}>
                         <div className="search-result-name">{f.name}</div>
-                        <div className="search-result-detail">{f.caloriesPerUnit} cal/{f.defaultUoM}</div>
+                        <div className="search-result-detail">
+                          {Math.round(f.caloriesPerUnit * refQty(f.defaultUoM) * 10) / 10} cal/{refQty(f.defaultUoM)} {f.defaultUoM}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -510,7 +517,7 @@ function CataloguePage() {
                 <div className="food-card-main" onClick={() => startEdit(f.id)}>
                   <div className="food-card-name">{f.name}</div>
                   <div className="food-card-detail">
-                    {f.caloriesPerUnit} cal/{f.defaultUoM}
+                    {Math.round(f.caloriesPerUnit * refQty(f.defaultUoM) * 10) / 10} cal/{refQty(f.defaultUoM)} {f.defaultUoM}
                     {f.isComposite ? ` · ${f.ingredientCount} ingredient${f.ingredientCount !== 1 ? 's' : ''}` : ''}
                     {f.usageCount != null ? ` · ${f.usageCount}×` : ''}
                   </div>
