@@ -4,6 +4,11 @@ public class Food
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public required string Name { get; set; }
+
+    /// <summary>Canonical dedup key computed by <see cref="Services.FoodNameNormalizer"/>.
+    /// Unique after OFB-43c cleanup + migration; set on every create/update path.</summary>
+    public string NormalizedName { get; set; } = "";
+
     public required string DefaultUoM { get; set; }
     public double CaloriesPerUnit { get; set; }
     public double? ProteinPerUnit { get; set; }

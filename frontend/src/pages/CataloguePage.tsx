@@ -1,9 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useShowMacros } from '../hooks/useShowMacros';
 import { UnitSelect } from '../components/UnitSelect';
 import { NumberInput } from '../components/NumberInput';
+import { FoodAiAssist } from '../components/FoodAiAssist';
+import { refLabel, refQty } from '../lib/units';
 import '../styles/catalogue.css';
 
 interface FoodItem {
@@ -41,7 +43,7 @@ interface FoodDetail extends FoodItem {
   ingredients: IngredientResponse[];
 }
 
-interface FoodFormData {
+export interface FoodFormData {
   name: string;
   defaultUoM: string;
   caloriesPerUnit: number;
@@ -83,11 +85,24 @@ function CataloguePage() {
   const [ingredients, setIngredients] = useState<IngredientFormItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [duplicateFoodId, setDuplicateFoodId] = useState<string | null>(null);
 
   // Ingredient search state
   const [ingSearchTerm, setIngSearchTerm] = useState('');
   const [ingSearchResults, setIngSearchResults] = useState<FoodItem[]>([]);
   const [addingIngToIndex, setAddingIngToIndex] = useState<number | null>(null);
+
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (showForm && !dialog.open) {
+      dialog.showModal();
+    } else if (!showForm && dialog.open) {
+      dialog.close();
+    }
+  }, [showForm]);
 
   // Composite-food ingredients (lazy-loaded once, then cached). Shown two ways:
   // a hover popover (desktop) and a click-to-expand caret that lists them inline
@@ -146,6 +161,7 @@ function CataloguePage() {
     setForm(emptyForm);
     setIngredients([]);
     setFormError(null);
+    setDuplicateFoodId(null);
     setShowForm(true);
   };
 
@@ -155,11 +171,13 @@ function CataloguePage() {
       if (!res.ok) return;
       const f = (await res.json()) as FoodDetail;
       setEditingId(id);
+      const rq = refQty(f.defaultUoM);
       setForm({
-        name: f.name, defaultUoM: f.defaultUoM, caloriesPerUnit: f.caloriesPerUnit,
-        proteinPerUnit: f.proteinPerUnit ?? undefined,
-        carbsPerUnit: f.carbsPerUnit ?? undefined,
-        fatPerUnit: f.fatPerUnit ?? undefined,
+        name: f.name, defaultUoM: f.defaultUoM,
+        caloriesPerUnit: Math.round(f.caloriesPerUnit * rq * 100) / 100,
+        proteinPerUnit: f.proteinPerUnit != null ? Math.round(f.proteinPerUnit * rq * 100) / 100 : undefined,
+        carbsPerUnit: f.carbsPerUnit != null ? Math.round(f.carbsPerUnit * rq * 100) / 100 : undefined,
+        fatPerUnit: f.fatPerUnit != null ? Math.round(f.fatPerUnit * rq * 100) / 100 : undefined,
       });
       setIngredients(f.ingredients.map((i) => ({
         childFoodId: i.childFoodId,
@@ -170,13 +188,16 @@ function CataloguePage() {
         inlineName: '', inlineUoM: 'g', inlineCal: 0,
       })));
       setFormError(null);
+      setDuplicateFoodId(null);
       setShowForm(true);
     } catch { /* ignore */ }
   };
 
   const cancelForm = () => {
+    if (!showForm) return; // guard against double-invoke from dialog onClose
     setShowForm(false);
     setEditingId(null);
+    setDuplicateFoodId(null);
   };
 
   const addIngredient = (existing: FoodItem) => {
@@ -225,11 +246,19 @@ function CataloguePage() {
     return () => clearTimeout(timer);
   }, [ingSearchTerm, sortMode, user?.id]);
 
+  const handleApply = (prefill: Partial<FoodFormData> & { matchedFoodId: string | null }) => {
+    setForm((f) => ({ ...f, ...prefill }));
+    if (prefill.matchedFoodId && editingId === null) {
+      setDuplicateFoodId(prefill.matchedFoodId);
+    }
+  };
+
   const saveFood = async () => {
     if (!form.name.trim()) { setFormError('Name is required.'); return; }
 
     setSaving(true);
     setFormError(null);
+    setDuplicateFoodId(null);
 
     const ingredientRequests = ingredients.map((ing) => {
       if (ing.isInline) {
@@ -250,11 +279,13 @@ function CataloguePage() {
       };
     });
 
+    const rq = refQty(form.defaultUoM);
     const body = {
       ...form,
-      proteinPerUnit: form.proteinPerUnit ?? null,
-      carbsPerUnit: form.carbsPerUnit ?? null,
-      fatPerUnit: form.fatPerUnit ?? null,
+      caloriesPerUnit: form.caloriesPerUnit / rq,
+      proteinPerUnit: form.proteinPerUnit != null ? form.proteinPerUnit / rq : null,
+      carbsPerUnit: form.carbsPerUnit != null ? form.carbsPerUnit / rq : null,
+      fatPerUnit: form.fatPerUnit != null ? form.fatPerUnit / rq : null,
       ingredients: ingredientRequests,
     };
 
@@ -268,6 +299,11 @@ function CataloguePage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Save failed' }));
+        if (res.status === 409 && err.existingFoodId) {
+          setDuplicateFoodId(err.existingFoodId);
+          setFormError(err.error || 'A food with this name already exists.');
+          return;
+        }
         throw new Error(err.error || 'Save failed');
       }
       setShowForm(false);
@@ -337,11 +373,20 @@ function CataloguePage() {
         </button>
       </div>
 
-      {/* Food form */}
-      {showForm && (
+      {/* Food form dialog */}
+      <dialog ref={dialogRef} className="food-form-dialog" onClose={cancelForm}>
         <div className="food-form">
           <h2>{editingId ? 'Edit Food' : 'Add Food'}</h2>
           {formError && <p className="form-error" role="alert">{formError}</p>}
+          {duplicateFoodId && (
+            <p className="form-duplicate-hint">
+              <button type="button" className="link-button" onClick={() => startEdit(duplicateFoodId)}>
+                Edit the existing food instead
+              </button>
+            </p>
+          )}
+
+          <FoodAiAssist userId={user.id} onApply={handleApply} />
 
           <div className="food-form-section">
             <label>Name</label>
@@ -359,7 +404,7 @@ function CataloguePage() {
               <UnitSelect value={form.defaultUoM} onChange={(v) => setForm((f) => ({ ...f, defaultUoM: v }))} />
             </div>
             <div className="food-form-section">
-              <label>Calories per {form.defaultUoM}</label>
+              <label>Calories {refLabel(form.defaultUoM)}</label>
               <NumberInput
                 min="0" step="0.1"
                 value={form.caloriesPerUnit}
@@ -372,7 +417,7 @@ function CataloguePage() {
             <>
               <div className="food-form-row">
                 <div className="food-form-section">
-                  <label>Protein / {form.defaultUoM} (g)</label>
+                  <label>Protein {refLabel(form.defaultUoM)} (g)</label>
                   <input
                     type="number" min="0" step="0.1"
                     value={form.proteinPerUnit ?? ''}
@@ -380,7 +425,7 @@ function CataloguePage() {
                   />
                 </div>
                 <div className="food-form-section">
-                  <label>Carbs / {form.defaultUoM} (g)</label>
+                  <label>Carbs {refLabel(form.defaultUoM)} (g)</label>
                   <input
                     type="number" min="0" step="0.1"
                     value={form.carbsPerUnit ?? ''}
@@ -390,7 +435,7 @@ function CataloguePage() {
               </div>
 
               <div className="food-form-section">
-                <label>Fat / {form.defaultUoM} (g)</label>
+                <label>Fat {refLabel(form.defaultUoM)} (g)</label>
                 <input
                   type="number" min="0" step="0.1"
                   value={form.fatPerUnit ?? ''}
@@ -453,7 +498,9 @@ function CataloguePage() {
                     {ingSearchResults.map((f) => (
                       <div key={f.id} className="search-result-item" onClick={() => addIngredient(f)}>
                         <div className="search-result-name">{f.name}</div>
-                        <div className="search-result-detail">{f.caloriesPerUnit} cal/{f.defaultUoM}</div>
+                        <div className="search-result-detail">
+                          {Math.round(f.caloriesPerUnit * refQty(f.defaultUoM) * 10) / 10} cal/{refQty(f.defaultUoM)} {f.defaultUoM}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -476,7 +523,7 @@ function CataloguePage() {
             </button>
           </div>
         </div>
-      )}
+      </dialog>
 
       {/* Food list */}
       {loading ? (
@@ -493,7 +540,7 @@ function CataloguePage() {
                 <div className="food-card-main" onClick={() => startEdit(f.id)}>
                   <div className="food-card-name">{f.name}</div>
                   <div className="food-card-detail">
-                    {f.caloriesPerUnit} cal/{f.defaultUoM}
+                    {Math.round(f.caloriesPerUnit * refQty(f.defaultUoM) * 10) / 10} cal/{refQty(f.defaultUoM)} {f.defaultUoM}
                     {f.isComposite ? ` · ${f.ingredientCount} ingredient${f.ingredientCount !== 1 ? 's' : ''}` : ''}
                     {f.usageCount != null ? ` · ${f.usageCount}×` : ''}
                   </div>
@@ -526,6 +573,12 @@ function CataloguePage() {
                     onClick={() => setPonder(f.id, (f.ponder ?? 100) + 10)}
                   >+</button>
                 </div>
+                <button
+                  className="food-card-edit"
+                  onClick={(e) => { e.stopPropagation(); startEdit(f.id); }}
+                  aria-label={`Edit ${f.name}`}
+                  title="Edit"
+                >✎</button>
                 <button
                   className="food-card-delete"
                   onClick={(e) => { e.stopPropagation(); deleteFood(f.id); }}

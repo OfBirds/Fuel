@@ -31,7 +31,7 @@ public class EstimateControllerTests : IDisposable
         _db = new AppDbContext(options);
 
         var user = new User { Email = "test@example.com", PasswordHash = "hash" };
-        var chicken = new Food { Name = "Chicken Breast", DefaultUoM = "g", CaloriesPerUnit = 1.65 };
+        var chicken = new Food { Name = "Chicken Breast", NormalizedName = "chicken breast", DefaultUoM = "g", CaloriesPerUnit = 1.65 };
         _db.Users.Add(user);
         _db.Foods.Add(chicken);
         _db.SaveChanges();

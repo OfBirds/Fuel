@@ -124,9 +124,9 @@ public class EstimateController(
         var rows = new List<EstimateRow>(estimate.Items.Count);
         foreach (var item in estimate.Items)
         {
-            var normal = NormalizeName(item.Name);
+            var normal = FoodNameNormalizer.Normalize(item.Name);
             var match = await db.Foods
-                .Where(f => f.Name.ToLower() == normal)
+                .Where(f => f.NormalizedName == normal)
                 .Select(f => new { f.Id, f.DefaultUoM })
                 .FirstOrDefaultAsync(ct);
 
@@ -148,17 +148,6 @@ public class EstimateController(
         return rows;
     }
 
-    /// <summary>Normalize an AI-returned food name for matching: lowercase, strip
-    /// parenthetical qualifiers like "(groß)" or "(fried)", collapse whitespace.</summary>
-    private static string NormalizeName(string raw)
-    {
-        var s = raw.ToLowerInvariant();
-        // Strip parenthetical qualifiers — "Schnitzel (groß)" → "schnitzel"
-        var paren = s.IndexOf('(');
-        if (paren >= 0) s = s[..paren];
-        return s.Trim();
-    }
-
     // Minor words kept lowercase in the middle of a title (articles, short
     // conjunctions/prepositions). The first and last word are always capitalized.
     private static readonly HashSet<string> TitleMinorWords = new(StringComparer.OrdinalIgnoreCase)
@@ -168,8 +157,8 @@ public class EstimateController(
     };
 
     /// <summary>Title-case an AI food name for display ("scrambled eggs on toast" →
-    /// "Scrambled Eggs on Toast"). Models tend to return all-lowercase; this is
-    /// display-only — matching still goes through <see cref="NormalizeName"/>.</summary>
+    /// "Scrambled Eggs on Toast"). Models tend to return all-lowercase; matching
+    /// still goes through <see cref="FoodNameNormalizer.Normalize"/>.</summary>
     internal static string ToTitleCase(string raw)
     {
         var words = raw.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
