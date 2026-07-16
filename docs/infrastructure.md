@@ -1,9 +1,9 @@
 # Infrastructure & Deployment
 
-> Status: **as-built**. The Dockerfile, parameterized compose, CI workflow, and
+> Status: **as-built**. The Dockerfile, parameterized compose, CI workflows, and
 > runner are all in place. This documents how the app actually deploys. Both stacks
-> are live — staging on `main`, prod on `release` (served over HTTPS via the
-> reverse proxy).
+> are live — staging deploys from PRs targeting `main`, prod (the internal release)
+> from pushes to `main` (served over HTTPS via the reverse proxy).
 >
 > **This describes the maintainer's reference deployment** (a Linux VM + a self-hosted
 > CI runner). To run Indigo Swallow yourself you don't need any of this design — see the
@@ -13,10 +13,13 @@
 
 Two independent, automatically-deployed environments on the homelab:
 
-| Environment | Source branch | Trigger           | Purpose        |
-| ----------- | ------------- | ----------------- | -------------- |
-| **staging** | `main`        | push to `main`    | test / preview |
-| **prod**    | `release`     | push to `release` | the real thing |
+| Environment | Source                 | Trigger (workflow)                        | Purpose        |
+| ----------- | ---------------------- | ----------------------------------------- | -------------- |
+| **staging** | PR head                | PR targeting `main` (`validate.yml`)       | pre-merge gate |
+| **prod**    | `main`                 | push to `main`, i.e. merge (`release.yml`) | the real thing |
+
+There is no `release` branch: branch protection requires `validate.yml`'s staging
+deploy to succeed before a PR can merge, and the merge itself is the release.
 
 "Independent" means each is a fully separate Docker stack — own database, volumes,
 network, secrets, ports. Wiping staging can never touch prod.
@@ -50,7 +53,7 @@ The app may share a host with other apps, so its
 
 The homelab is **not** exposed to the internet. A **self-hosted GitHub Actions
 runner** on the VM connects *outbound* to GitHub and waits for jobs — **zero
-inbound ports**. On a push, GitHub Actions:
+inbound ports**. On a PR or push, GitHub Actions:
 
 1. Runs the test suites (gate).
 2. Builds the single image and pushes it to **GHCR** (`ghcr.io/ofbirds/fuel`),

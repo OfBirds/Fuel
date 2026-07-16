@@ -10,8 +10,9 @@
 | Backend (integration) | `backend/Api.IntegrationTests/` | xUnit + Testcontainers (Postgres) | Real-database integration |
 | Frontend | `frontend/src/**/*.test.{ts,tsx}` | Vitest + Testing Library | Unit + component render |
 
-Both stacks run in CI on every push to `main` and `release` before the image is built or
-deployed (`.github/workflows/deploy.yml`, `test` job).
+Both stacks run in CI on every PR targeting `main` and every push to `main` before the
+image is built or deployed (`test` job in `.github/workflows/validate.yml` and
+`release.yml`).
 
 ## Running tests
 
@@ -113,6 +114,7 @@ hidden from external consumers.
 
 ## CI gate
 
-The `test` job in `.github/workflows/deploy.yml` runs on every push to `main` and
-`release`. Both `build` and `deploy` are gated behind it (`build` → `needs: test`,
-`deploy` → `needs: build`), so a red suite blocks the image from being built or deployed.
+The `test` job runs on every PR targeting `main` (`.github/workflows/validate.yml`)
+and every push to `main` (`.github/workflows/release.yml`). In both, `build` and the
+deploy job are gated behind it (`build` → `needs: test`, deploy → `needs: build`), so
+a red suite blocks the image from being built or deployed.

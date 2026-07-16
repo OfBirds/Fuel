@@ -1,13 +1,18 @@
 # Deploy runbook — push-to-deploy CI/CD
 
 > **Not the self-hosting guide.** This documents a *continuous-deployment* rig — a
-> self-hosted GitHub Actions runner on a Linux VM that auto-deploys on every push to
-> `main`/`release`. **To run Indigo Swallow yourself you don't need any of this**; see
+> self-hosted GitHub Actions runner on a Linux VM that auto-deploys every PR to
+> staging and every push to `main` to the internal release stack. **To run Indigo
+> Swallow yourself you don't need any of this**; see
 > the [self-hosting guide](modules/ROOT/pages/self-hosting.adoc) (`docker compose up`).
 > This page is for contributors reproducing the CI/CD setup.
 
-Host setup on a Linux VM (`vm.example.lan` — substitute your VM's real LAN address) so
-pushes to `main`/`release` auto-deploy via `.github/workflows/deploy.yml`. Run on the VM
+There is no `release` branch. PRs targeting `main` deploy staging via
+`.github/workflows/validate.yml` (branch protection blocks merging until that
+succeeds); pushes to `main` (merged PRs) deploy the internal release stack via
+`.github/workflows/release.yml`.
+
+Host setup on a Linux VM (`vm.example.lan` — substitute your VM's real LAN address). Run on the VM
 as a sudo-capable user. The app gets its **own** runner instance and its **own** ports so
 it can coexist with other apps on the same host.
 
@@ -92,21 +97,20 @@ ports. If `config.sh` returns `404 Not Found`, the token expired — get a fresh
 
 ## 4. First deploy
 
-Push to `main` → the workflow tests, builds, pushes to GHCR, applies the migration
-script, and the runner brings up the staging stack. Verify on the LAN:
+Open a PR against `main` → `validate.yml` tests, builds, pushes to GHCR, applies the
+migration script, and the runner brings up the staging stack. Verify on the LAN:
 - staging app: `http://vm.example.lan:9223/`
 - staging DB (DBeaver): `vm.example.lan:5435`
 - staging Seq UI: `http://vm.example.lan:9233/`
 
-For prod, create and push `release`:
-```bash
-git checkout -b release && git push -u origin release
-```
+Merge the PR → `release.yml` does the same for the internal release stack:
 - prod app: `http://vm.example.lan:9224/` · DB `vm.example.lan:5436` · Seq `:9234`
 
 ## Day-to-day
 
-- Deploys are automatic on push to `main`/`release`.
+- Deploys are automatic: PRs targeting `main` → staging, pushes to `main` → internal
+  release. All PRs share the one staging stack, so validate runs are serialized; if
+  GitHub cancels a superseded queued run, re-run it from the Actions tab.
 - Manual stack control on the VM:
   ```bash
   cd <repo>/deploy   # or wherever the runner checked it out
