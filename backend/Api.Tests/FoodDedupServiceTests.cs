@@ -14,11 +14,13 @@ public class FoodDedupServiceTests : IDisposable
     private readonly AppDbContext _db;
     private readonly FoodDedupService _service;
     private readonly string _backupDir;
+    private readonly string _dbName;
 
     public FoodDedupServiceTests()
     {
+        _dbName = $"dedup_{Guid.NewGuid()}";
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase($"dedup_{Guid.NewGuid()}")
+            .UseInMemoryDatabase(_dbName)
             .Options;
         _db = new AppDbContext(options);
 
@@ -659,13 +661,10 @@ public class FoodDedupServiceTests : IDisposable
     /// </summary>
     private async Task<DedupResult> RunDedupAsync()
     {
-        // Build a service that reuses the same InMemory database name.
-        // The DbContext in the test and the one in the service must share the
-        // same database name. We capture the DB name from the existing context.
-        var dbName = _db.Database.GetDbConnection().Database;
-
+        // Build a service that reuses the same InMemory database name as _db,
+        // so changes made by the service are visible through _db afterward.
         var services = new ServiceCollection();
-        services.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase(dbName));
+        services.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase(_dbName));
         var sp = services.BuildServiceProvider();
 
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
