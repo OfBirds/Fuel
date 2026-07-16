@@ -677,6 +677,13 @@ public class FoodDedupServiceTests : IDisposable
             config,
             NullLogger<FoodDedupService>.Instance);
 
-        return await svc.DeduplicateAsync(CancellationToken.None);
+        var result = await svc.DeduplicateAsync(CancellationToken.None);
+
+        // The service mutated the shared InMemory store through its own DbContext
+        // instance; _db's change tracker still holds the pre-dedup entities under
+        // their original identities, so clear it to force fresh reads afterward.
+        _db.ChangeTracker.Clear();
+
+        return result;
     }
 }

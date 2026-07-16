@@ -264,8 +264,15 @@ public class FoodDedupService(
             }
             else
             {
-                // No conflict: just repoint to survivor.
-                prio.FoodId = survivorId;
+                // No conflict: FoodId is part of the composite primary key, so it
+                // can't be mutated in place — remove and re-add under the survivor.
+                db.UserFoodPriorities.Remove(prio);
+                db.UserFoodPriorities.Add(new UserFoodPriority
+                {
+                    UserId = prio.UserId,
+                    FoodId = survivorId,
+                    Ponder = prio.Ponder,
+                });
                 survivorUserIds.Add(prio.UserId); // track for subsequent non-survivors in same group
             }
 
