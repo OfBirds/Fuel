@@ -22,65 +22,43 @@
   align-items: center;
 }
 
-.home-link {
+/* The three header buttons — house, theme toggle, hamburger — share one bordered box. */
+.home-link,
+.menu-trigger,
+.theme-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 2.4rem;
   height: 2.4rem;
+  padding: 0;
+  background: none;
+  border: 2px solid var(--border);
   border-radius: 8px;
   color: var(--text-light);
-  transition: background 0.15s ease, color 0.15s ease;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.home-link:hover {
+.home-link:hover,
+.menu-trigger:hover,
+.theme-toggle:hover {
   color: var(--primary);
+  border-color: var(--primary);
   background: color-mix(in srgb, var(--primary) 8%, transparent);
   opacity: 1;
 }
 
-.home-link.active {
+.home-link.active,
+.menu-trigger[aria-expanded='true'] {
   color: var(--primary);
+  border-color: var(--primary);
   background: color-mix(in srgb, var(--primary) 14%, transparent);
 }
 
-/* The user's name is the navigation menu trigger. */
+/* The hamburger is the navigation menu trigger. */
 .user-menu {
   position: relative;
-}
-
-.user-menu-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  max-width: 16rem;
-  background: none;
-  border: 2px solid var(--border);
-  color: var(--text);
-  padding: 0.4rem 0.8rem;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.user-menu-trigger:hover,
-.user-menu-trigger[aria-expanded='true'] {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.user-menu-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.user-menu-caret {
-  font-size: 0.7rem;
-  line-height: 1;
 }
 
 .user-menu-dropdown {
@@ -123,6 +101,17 @@
 .user-menu-item.active {
   background: color-mix(in srgb, var(--primary) 14%, transparent);
   color: var(--primary);
+}
+
+/* Read-only account name between the divider and Logout — informational, not a menu item. */
+.user-menu-account {
+  padding: 0.5rem 0.7rem 0.15rem;
+  font-size: 0.8rem;
+  color: var(--text-light);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
 }
 
 .user-menu-divider {
@@ -204,25 +193,9 @@
   text-align: center;
 }
 
+/* Box shared with .home-link/.menu-trigger above; only the emoji size is its own. */
 .theme-toggle {
-  background: none;
-  border: 2px solid var(--border);
-  color: var(--text);
-  width: 2.25rem;
-  height: 2.25rem;
-  padding: 0;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   font-size: 1.1rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.theme-toggle:hover {
-  border-color: var(--primary);
-  color: var(--primary);
 }
 
 .app-main {

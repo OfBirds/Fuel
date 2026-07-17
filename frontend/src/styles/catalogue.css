@@ -336,6 +336,14 @@
   width: 70px;
 }
 
+/* Fixed (non-editable) unit on existing-food ingredient rows — same box as the row's
+   inputs, and beats .unit-fixed's generic width:100%. */
+.ingredient-row .unit-fixed {
+  width: 70px;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.85rem;
+}
+
 .ingredient-remove {
   background: none;
   border: 1px solid var(--border);
@@ -525,47 +533,12 @@
   margin-bottom: 0.75rem;
 }
 
-.food-ai-assist .food-form-section {
+.food-ai-assist .form-section {
   margin-bottom: 0.5rem;
 }
 
 .food-ai-assist .ai-estimate-row {
   margin-top: 0;
-}
-
-.fa-results {
-  margin-top: 0.75rem;
-}
-
-.fa-results .ai-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  padding: 0.6rem 0.75rem;
-  margin-bottom: 0.4rem;
-}
-
-.fa-results .ai-row-top {
-  flex: 1;
-  min-width: 0;
-  margin-bottom: 0;
-}
-
-.fa-row-name {
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.fa-row-detail {
-  font-size: 0.8rem;
-  color: var(--text-light);
-  flex-basis: 100%;
-  margin-top: 0.15rem;
-}
-
-.fa-row-apply {
-  flex-shrink: 0;
 }
 
 /* Full-screen dialog on small viewports */

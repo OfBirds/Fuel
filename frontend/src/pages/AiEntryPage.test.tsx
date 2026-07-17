@@ -206,7 +206,7 @@ describe('AiEntryPage', () => {
     await screen.findByRole('tab', { name: 'Photo' });
     await userEvent.click(screen.getByRole('tab', { name: 'Photo' }));
 
-    await userEvent.click(screen.getByRole('button', { name: 'Take or upload a photo' }));
+    await userEvent.click(screen.getByRole('button', { name: 'File upload' }));
     const file = new File(['fake-bytes'], 'meal.jpg', { type: 'image/jpeg' });
     await userEvent.upload(screen.getByLabelText(/— files/), file);
 
@@ -317,7 +317,7 @@ describe('AiEntryPage', () => {
     expect(mockFetch).toHaveBeenCalledTimes(4); // no batch-save request was sent
   });
 
-  it('normalizes an oz row to g for a metric-history user (§3b-R6)', async () => {
+  it('normalizes an oz row to g for a metric-history user', async () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
       .mockResolvedValueOnce(bcOff())

@@ -21,7 +21,7 @@ export const UNIT_GROUPS: UnitGroup[] = [
 
 export const ALL_UNITS = UNIT_GROUPS.flatMap((g) => g.units);
 
-// ── Reference quantities (OFB-40 §3b-R6) ──────────────────────────────────────────────
+// ── Reference quantities (docs/food-catalogue-and-logging.md §reference quantities) ──────────────────────────────────────────────
 // The catalogue stores nutrition per single unit, but nobody reasons in "per 1 g" — the
 // world-standard comparison basis is per 100 g / per 100 ml (EU 1169/2011, Codex CAC/GL
 // 2-1985), with US-customary practice quoting solids per 1 oz and beverages per 8 fl oz
@@ -59,7 +59,7 @@ export function refLabel(uom: string): string {
   return REF_LABEL[uom] ?? `per 1 ${uom}`;
 }
 
-// ── Unit-system inference + conversion (OFB-40 §3b-R6) ────────────────────────────────
+// ── Unit-system inference + conversion (docs/food-catalogue-and-logging.md) ────────────────────────────────
 // Whenever a value is produced by the system (AI estimate, barcode/OFF lookup) rather than
 // typed by the user, it's converted to the user's inferred preferred unit system before
 // display. Countable/ad-hoc units never vote and are never converted.

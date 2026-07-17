@@ -4,20 +4,16 @@ import userEvent from '@testing-library/user-event';
 import { PhotoPickButton } from './PhotoPickButton';
 
 describe('PhotoPickButton', () => {
-  it('opens the two-action sheet when the visible button is tapped', async () => {
-    render(<PhotoPickButton label="Add a photo" onFile={() => {}} />);
-    expect(screen.queryByRole('menuitem', { name: /take photo/i })).toBeNull();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Add a photo' }));
-
-    expect(screen.getByRole('menuitem', { name: /take photo/i })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: /choose from files/i })).toBeInTheDocument();
+  it('renders the two direct actions', () => {
+    render(<PhotoPickButton label="Photo" onFile={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Take photo' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'File upload' })).toBeInTheDocument();
   });
 
   it('the camera input has capture="environment" and fires onFile', async () => {
     const onFile = vi.fn();
-    render(<PhotoPickButton label="Add a photo" onFile={onFile} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Add a photo' }));
+    render(<PhotoPickButton label="Photo" onFile={onFile} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Take photo' }));
 
     const cameraInput = screen.getByLabelText(/— camera/) as HTMLInputElement;
     expect(cameraInput.getAttribute('capture')).toBe('environment');
@@ -30,8 +26,8 @@ describe('PhotoPickButton', () => {
 
   it('the library input has no capture attribute and fires onFile', async () => {
     const onFile = vi.fn();
-    render(<PhotoPickButton label="Add a photo" onFile={onFile} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Add a photo' }));
+    render(<PhotoPickButton label="Photo" onFile={onFile} />);
+    await userEvent.click(screen.getByRole('button', { name: 'File upload' }));
 
     const libraryInput = screen.getByLabelText(/— files/) as HTMLInputElement;
     expect(libraryInput.hasAttribute('capture')).toBe(false);
@@ -42,8 +38,9 @@ describe('PhotoPickButton', () => {
     expect(onFile).toHaveBeenCalledWith(file);
   });
 
-  it('is disabled when the disabled prop is set', () => {
-    render(<PhotoPickButton label="Add a photo" onFile={() => {}} disabled />);
-    expect(screen.getByRole('button', { name: 'Add a photo' })).toBeDisabled();
+  it('both actions are disabled when the disabled prop is set', () => {
+    render(<PhotoPickButton label="Photo" onFile={() => {}} disabled />);
+    expect(screen.getByRole('button', { name: 'Take photo' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'File upload' })).toBeDisabled();
   });
 });

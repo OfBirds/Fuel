@@ -33,6 +33,13 @@ Tidy the two logging input surfaces and unify their confirm affordance:
 > `getUserMedia` live-camera stream** and therefore no secure-context/HTTPS requirement. The
 > live-camera design described below (and the JSX snippets) is the original 1.10 shipment, since
 > simplified — see `ai-estimation.md` §Capture for current behavior.
+>
+> **Superseded again (1.12):** the single input became **two explicit buttons** — "Take photo"
+> (`capture="environment"`) and "File upload" (no `capture`) — and the whole AI input control
+> (tabs, capture, estimate/refine) was extracted into the shared **`AiInputPanel`**, also hosted
+> by the catalogue's **add-food** dialog, where results **auto-fill the food form** (the per-row
+> Apply step is gone). Current behavior: `ai-estimation.md` §Capture and
+> `food-catalogue-and-logging.md` §AI-assist panel.
 
 - **One camera button per tab.** Photo and Barcode each expose a **single "Upload" control** —
   the empty state has no second button. On a **secure origin (HTTPS / localhost)** "Upload" opens

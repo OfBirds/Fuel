@@ -9,6 +9,16 @@ afterEach(() => {
   cleanup();
 });
 
+// jsdom's <dialog> support varies by version — ensure showModal()/close() exist and
+// toggle the `open` attribute so components driving native dialogs stay testable.
+if (typeof HTMLDialogElement !== 'undefined' && typeof HTMLDialogElement.prototype.showModal !== 'function') {
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+  HTMLDialogElement.prototype.close = function () {
+    this.removeAttribute('open');
+    this.dispatchEvent(new Event('close'));
+  };
+}
+
 // Polyfill localStorage for Node v26+ where it's experimental and undefined in jsdom.
 if (typeof globalThis.localStorage === 'undefined') {
   const store = new Map<string, string>();
