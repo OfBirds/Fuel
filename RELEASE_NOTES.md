@@ -1,5 +1,8 @@
 ### What's new in 1.12
 
+> **Note:** we're testing our rebuilt release-notification emails — that's why this update may
+> land in your inbox again. It's a one-off; the next release will notify you normally.
+
 This release makes the AI assistant look and behave the same everywhere, and irons out a
 batch of rough edges you reported.
 

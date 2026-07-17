@@ -1,6 +1,7 @@
 using Api.Authorization;
 using Api.Data;
 using Api.Services;
+using Ofbirds.ReleaseNotifications;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Authentication;
@@ -223,7 +224,32 @@ builder.Services.Configure<Api.Config.SmtpOptions>(o =>
         StringComparison.OrdinalIgnoreCase);
 });
 builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
-builder.Services.AddHostedService<ReleaseNotifier>();
+
+// Release-notification emails on deploy (Ofbirds.ReleaseNotifications). The shared library owns
+// the on-startup notifier, MAJOR.MINOR idempotency, the persistent stale-notes guard, and the
+// Markdown → HTML rendering. Fuel supplies the audience (recipients + KV bookkeeping over
+// AppDbContext) and the SMTP transport; the CTA button wears Fuel's indigo brand on white.
+// (This replaces the old in-repo ReleaseNotifier, which couldn't render Markdown notes.)
+builder.Services.AddReleaseNotifications(o =>
+{
+    o.AppName = "Indigo Swallow";
+    o.ButtonColor = "#4F46E5";      // Fuel's --primary (indigo); the email renders on a white card
+    o.ButtonTextColor = "#ffffff";
+});
+builder.Services.AddScoped<IReleaseAudience, DbReleaseAudience>();
+// The library consumes its own SmtpOptions; bind it from the same flat SMTP_* env keys as the
+// auth mailer above (separate concern, same server).
+builder.Services.Configure<Ofbirds.ReleaseNotifications.Email.SmtpOptions>(o =>
+{
+    o.Host = builder.Configuration["SMTP_HOST"] ?? "";
+    o.Port = int.TryParse(builder.Configuration["SMTP_PORT"], out var sp) ? sp : 465;
+    o.User = builder.Configuration["SMTP_USER"] ?? "";
+    o.Password = builder.Configuration["SMTP_PASS"] ?? "";
+    o.From = builder.Configuration["SMTP_FROM"] ?? builder.Configuration["SMTP_USER"] ?? "";
+    o.AcceptAllCerts = string.Equals(builder.Configuration["SMTP_ACCEPT_ALL_CERTS"], "true",
+        StringComparison.OrdinalIgnoreCase);
+});
+
 builder.Services.AddHostedService<BackupService>();
 builder.Services.AddSingleton<FoodDedupService>();
 
