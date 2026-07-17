@@ -296,20 +296,39 @@ if (app.Environment.IsDevelopment())
 // Serve the bundled SPA (built frontend copied into wwwroot) and fall back to
 // index.html for client-side routes. API controllers are matched first; the
 // fallback only handles non-/api, non-file requests.
-app.UseStaticFiles(new StaticFileOptions
+//
+// Cache policy (applied to BOTH the static-file middleware and the index.html fallback):
+//   * index.html / *.html and sw.js  -> never HTTP-cache. The HTML shell hard-references
+//     content-hashed asset bundles (/assets/index-<hash>.js). If a browser serves a stale
+//     cached index.html after a deploy, it points at old hashes that 404 -> blank page /
+//     "can't open the app". The service worker is a stable URL with mutable content, so
+//     installed PWAs would likewise freeze on an old build. Always revalidate.
+//   * /assets/* (content-hashed, immutable per build) -> cache hard and long.
+static void SetSpaCacheHeaders(Microsoft.AspNetCore.StaticFiles.StaticFileResponseContext ctx)
 {
-    // The service worker is a stable URL with mutable content — never let it be stale-cached (by
-    // browsers or any proxy), or installed PWAs freeze on an old build. Always revalidate.
-    OnPrepareResponse = ctx =>
+    var headers = ctx.Context.Response.Headers;
+    var name = ctx.File.Name;
+    var path = ctx.Context.Request.Path.Value ?? string.Empty;
+
+    if (name.Equals("sw.js", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
     {
-        if (ctx.File.Name.Equals("sw.js", StringComparison.OrdinalIgnoreCase))
-            ctx.Context.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+        headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
     }
-});
+    else if (path.StartsWith("/assets/", StringComparison.OrdinalIgnoreCase))
+    {
+        headers["Cache-Control"] = "public, max-age=31536000, immutable";
+    }
+}
+
+app.UseStaticFiles(new StaticFileOptions { OnPrepareResponse = SetSpaCacheHeaders });
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapFallbackToFile("index.html").AllowAnonymous();
+// The bare MapFallbackToFile overload does NOT run the UseStaticFiles OnPrepareResponse above,
+// so pass the same options here — otherwise index.html would be served with no Cache-Control.
+app.MapFallbackToFile("index.html", new StaticFileOptions { OnPrepareResponse = SetSpaCacheHeaders })
+    .AllowAnonymous();
 
 try
 {
