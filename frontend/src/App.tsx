@@ -31,7 +31,7 @@ function ThemeToggle() {
   );
 }
 
-// Primary navigation now lives inside the user-name dropdown. "Home" is surfaced both as
+// Primary navigation lives inside the hamburger dropdown. "Home" is surfaced both as
 // the far-left house icon and, labelled "Diary", as the first item in the menu.
 const NAV_ITEMS = [
   { to: '/', label: 'Diary', end: true },
@@ -51,8 +51,19 @@ function HomeIcon() {
   );
 }
 
-// The user's name doubles as the navigation menu: clicking it opens a dropdown with the
-// nav destinations plus Logout. Closes on outside click, Escape, or selecting an item.
+function MenuIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 6h16" />
+      <path d="M4 12h16" />
+      <path d="M4 18h16" />
+    </svg>
+  );
+}
+
+// The hamburger button opens the navigation menu: nav destinations, then a divider with
+// the (read-only) account name and Logout. Closes on outside click, Escape, or selection.
 function UserMenu() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
@@ -78,13 +89,14 @@ function UserMenu() {
     <div className="user-menu" ref={ref}>
       <button
         type="button"
-        className="user-menu-trigger"
+        className="menu-trigger"
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label="Menu"
+        title="Menu"
       >
-        <span className="user-menu-name">{user.name || user.email}</span>
-        <span className="user-menu-caret" aria-hidden="true">▾</span>
+        <MenuIcon />
       </button>
       {open && (
         <div className="user-menu-dropdown" role="menu">
@@ -101,6 +113,9 @@ function UserMenu() {
             </NavLink>
           ))}
           <div className="user-menu-divider" role="separator" />
+          <div className="user-menu-account" title={user.email}>
+            {user.name || user.email}
+          </div>
           <button
             type="button"
             className="user-menu-item user-menu-logout"

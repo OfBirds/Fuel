@@ -2,10 +2,11 @@
 
 > Status: Phase 2 (**typed description**) and Phase 3 **photo** are **built** — text
 > via DeepSeek, photo via Claude (vision), behind the composite estimator. The
-> **barcode** fast-path (see `barcode-lookup.md`) is also built. Photo/barcode capture uses a
-> native file input (the OS "Camera or Photo Library" chooser on mobile) — no in-browser
-> live-camera stream, so no HTTPS/secure-context requirement (see §Capture). All paths reuse the unified entry screen from
-> Phase 0 and the provider abstraction in `ai-providers.md`.
+> **barcode** fast-path (see `barcode-lookup.md`) is also built. Photo/barcode capture is two
+> explicit buttons (**Take photo** / **File upload**) backed by native file inputs — no
+> in-browser live-camera stream, so no HTTPS/secure-context requirement (see §Capture). All
+> paths reuse the unified entry screen from Phase 0 and the provider abstraction in
+> `ai-providers.md`.
 
 ## Goal
 Let the user log food without doing the lookup: **type** a description, **snap a
@@ -80,10 +81,15 @@ shows a **"add a note / clarify"** box. The user can correct what the model miss
 - The user can refine repeatedly, then confirm/edit as usual. Good guesses from the
   first pass (e.g. the beans) carry through; the clarifications sharpen the rest.
 
-> **Catalogue reuse.** These same estimate endpoints (text and image) also power the **AI-assist panel** in the catalogue's add/edit food dialog — see the *AI-assist panel* section in [`food-catalogue-and-logging.md`](food-catalogue-and-logging.md) for details.
+> **Catalogue reuse.** The whole input control — tabs, capture, estimate/refine loop — is one
+> shared component, **`AiInputPanel`** (`frontend/src/components/AiInputPanel.tsx`), hosted by
+> both this diary screen and the catalogue's **add-food** dialog. Only what happens with the
+> result differs: the diary builds editable review rows; the catalogue **auto-fills the food
+> form** — see the *AI-assist panel* section in
+> [`food-catalogue-and-logging.md`](food-catalogue-and-logging.md).
 
 ## Phase 3 — photo
-1. The user provides an image via a native file input (see §capture): the OS **camera or photo library** on mobile, a file picker on desktop.
+1. The user provides an image via **Take photo** (direct to the phone's camera) or **File upload** (gallery / file picker) — see §Capture.
 2. Backend hands the bytes to `EstimateFromImageAsync(bytes, contentType, notes)`
    (routed to Claude — the vision provider; DeepSeek is text-only, see `ai-providers.md`).
 3. Same multi-row review + **refine loop** as text; `Source = AiPhoto`.
@@ -96,26 +102,27 @@ the duration of the active review/refine session only** (it must be re-sent with
 refine turn, since refining needs the pixels), and dropped when the user saves or
 leaves the screen. "Estimate-then-discard" = discard when the review ends.
 
-### Capture — native camera or photo library
-Photos (and barcode photos) come in through a **single native file input**
-(`<input type="file" accept="image/*">`) with **no `capture` attribute**, so the browser/OS
-picks the source:
-- **On mobile:** the OS offers a **Camera or Photo Library** chooser. Picking Camera uses the
-  phone's own camera app — its shutter and use/retake — and hands the result back as the file
-  (this is what lets you *snap* a barcode).
-- **On desktop:** a normal file picker (choose a saved image).
+### Capture — two direct actions (Take photo / File upload)
+Photos (and barcode photos) come in through **two side-by-side buttons** (`PhotoPickButton`,
+shared by the Photo and Barcode tabs), each wired to its own hidden native
+`<input type="file" accept="image/*">`:
+- **Take photo** — input with `capture="environment"`: on a phone it opens the camera app
+  directly (its own shutter and use/retake — this is what lets you *snap* a barcode); on a
+  desktop it degrades to a file picker.
+- **File upload** — the same input without `capture`: always the photo library / file picker.
 
-This deliberately avoids an in-browser `getUserMedia` live-camera stream. That stream requires
-a **secure context (HTTPS/localhost)** — which plain-HTTP LAN staging isn't — and offered no
-way to pick an existing photo, so a single button couldn't both live-stream *and* let you
-choose a file. The native input works everywhere with **no TLS dependency** and gives the OS
-camera UI for free.
+Two explicit buttons rather than one capture-less input that defers to the OS chooser, because
+that chooser isn't guaranteed everywhere (browser, Android skin, and installed-PWA differences)
+— and a labelled action is one tap fewer. Still deliberately **no in-browser `getUserMedia`
+live-camera stream**: that requires a **secure context (HTTPS/localhost)** — which plain-HTTP
+LAN staging isn't — while native inputs work everywhere with **no TLS dependency** and give
+the OS camera UI for free.
 
 ## Barcode fast-path (Phase 3)
 Scanning an EAN/UPC off grocery packaging resolves to an **official** product
 definition when one exists, else tells the user to describe or photograph it. It is a
 **database lookup, not an AI estimate**, and lives in its own seam — full design in
-**`barcode-lookup.md`**. (Uses the same native camera-or-upload capture as photo — see §Capture.)
+**`barcode-lookup.md`**. (Uses the same two-button capture as photo — see §Capture.)
 
 ## New food → catalogue, with a visible "what I added"
 When the AI (or barcode) names a food not in the catalogue, it is **created there

@@ -5,6 +5,12 @@ import userEvent from '@testing-library/user-event';
 // Image normalization decodes via <img>/canvas, which jsdom can't do — pass through.
 vi.mock('../lib/image', () => ({ normalizeImage: async (b: Blob) => b }));
 
+// Barcode capability is fetched by its own hook — pin it off/known so the order-based
+// fetch mocks below stay aligned (ai-status → foods → estimate…).
+vi.mock('../hooks/useBarcodeStatus', () => ({
+  useBarcodeStatus: () => ({ barcodeEnabled: false, barcodeStatusKnown: true }),
+}));
+
 import { FoodAiAssist } from './FoodAiAssist';
 
 const _realFetch = globalThis.fetch;
@@ -52,7 +58,7 @@ describe('FoodAiAssist', () => {
     expect(container.querySelector('.food-ai-assist')).toBeNull();
   });
 
-  it('text estimate returning one item: Apply calls onApply with reference-basis values', async () => {
+  it('text estimate auto-applies the result with reference-basis values', async () => {
     // 200 g, 330 cal → per 100 g: 330/200*100 = 165
     mockFetch
       .mockResolvedValueOnce(aiOn())       // /api/ai/status
@@ -66,10 +72,7 @@ describe('FoodAiAssist', () => {
     await userEvent.type(screen.getByRole('textbox', { name: /describe the food/i }), 'chicken breast');
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
-    await screen.findByText('Chicken Breast');
-    await userEvent.click(screen.getByRole('button', { name: 'Apply Chicken Breast' }));
-
-    expect(onApply).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1));
     expect(onApply).toHaveBeenCalledWith({
       name: 'Chicken Breast',
       defaultUoM: 'g',
@@ -81,7 +84,7 @@ describe('FoodAiAssist', () => {
     });
   });
 
-  it('multi-item response: each row has its own Apply that only applies that row', async () => {
+  it('multi-item response auto-applies only the first item', async () => {
     mockFetch
       .mockResolvedValueOnce(aiOn())
       .mockResolvedValueOnce(foodsEmpty())
@@ -97,14 +100,7 @@ describe('FoodAiAssist', () => {
     await userEvent.type(screen.getByRole('textbox', { name: /describe the food/i }), 'chicken and broccoli');
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
-    await screen.findByText('Broccoli');
-    expect(screen.getByText('Chicken Breast')).toBeInTheDocument();
-
-    // Click only Chicken Breast's Apply
-    await userEvent.click(screen.getByRole('button', { name: 'Apply Chicken Breast' }));
-
-    expect(onApply).toHaveBeenCalledTimes(1);
-    // Should have Chicken Breast data, not Broccoli
+    await waitFor(() => expect(onApply).toHaveBeenCalledTimes(1));
     expect(onApply).toHaveBeenCalledWith(expect.objectContaining({
       name: 'Chicken Breast',
       matchedFoodId: 'food-1',
@@ -128,8 +124,6 @@ describe('FoodAiAssist', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('Unrecognisable — try a clearer description.');
     });
     expect(onApply).not.toHaveBeenCalled();
-    // No Apply buttons should exist since rows is null
-    expect(screen.queryByRole('button', { name: /Apply/ })).toBeNull();
   });
 
   it('refine after a failed estimate: refine input is visible and re-issues estimate with notes', async () => {
@@ -154,11 +148,12 @@ describe('FoodAiAssist', () => {
     await userEvent.type(screen.getByLabelText(/Add a clarification/), "it's a thigh, with skin");
     await userEvent.click(screen.getByRole('button', { name: 'Refine' }));
 
-    // Should have made a 4th fetch (the re-estimate)
+    // Should have made a 4th fetch (the re-estimate), whose result auto-applies
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(4));
     const [, opts] = mockFetch.mock.calls[3];
     const body = JSON.parse((opts as RequestInit).body as string);
     expect(body.notes).toEqual(["it's a thigh, with skin"]);
+    await waitFor(() => expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ name: 'Chicken Thigh' })));
   });
 
   it('shows refine box after a successful estimate too', async () => {
@@ -173,9 +168,8 @@ describe('FoodAiAssist', () => {
     await userEvent.type(screen.getByRole('textbox', { name: /describe the food/i }), 'chicken breast');
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
-    await screen.findByText('Chicken Breast');
     // Refine input should be visible after successful estimate too
-    expect(screen.getByLabelText(/Add a clarification/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/Add a clarification/)).toBeInTheDocument());
   });
 
   it('hides photo tab when supportsImages is false', async () => {
@@ -219,14 +213,11 @@ describe('FoodAiAssist', () => {
     await userEvent.type(screen.getByRole('textbox', { name: /describe the food/i }), 'nothing');
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
-    await screen.findByRole('button', { name: 'Apply Chicken Breast' });
-    await userEvent.click(screen.getByRole('button', { name: 'Apply Chicken Breast' }));
-
-    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() => expect(onApply).toHaveBeenCalledWith(expect.objectContaining({
       caloriesPerUnit: 0,
       proteinPerUnit: 0,
       carbsPerUnit: 0,
       fatPerUnit: 0,
-    }));
+    })));
   });
 });

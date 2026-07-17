@@ -81,7 +81,10 @@ definition (not a long list). In the manual entry picker, **`g` (solids) and `ml
   meal type; **intake time** (editable, default now); shows computed
   calories/macros, all editable; save → snapshot `FoodEntry`.
 - **Catalogue page** — list foods; define/edit (name, default UoM, per-unit
-  values, ingredients via add-child with inline-define); delete.
+  values, ingredients via add-child with inline-define); delete. On ingredient
+  rows of existing foods the unit is **read-only** (fixed to the child's
+  `DefaultUoM`, same rule as diary logging — change it on the food itself);
+  only inline-defined new ingredients choose a unit.
 - New client prefs go through `src/lib/storage.ts` (e.g. last-used meal), not raw
   `localStorage`.
 
@@ -108,9 +111,9 @@ goals (Phase 1), per-food icons (Phase 3), catalogue-lookup optimization (later)
 
 ### Catalogue AI-assist panel (`FoodAiAssist`)
 
-**`FoodAiAssist`** (`frontend/src/components/FoodAiAssist.tsx`) is a reusable panel that brings the home-page "Describe with AI" flow into the catalogue's add/edit food dialog. It uses the same backend endpoints (`/api/user/{userId}/estimate/text` and `.../estimate/image`) — no new API.
+**`FoodAiAssist`** (`frontend/src/components/FoodAiAssist.tsx`) hosts the shared **`AiInputPanel`** — the same Text/Photo/Barcode control as the diary's "Describe with AI" screen — inside the catalogue's **add-food** dialog. Same backend endpoints (`/api/user/{userId}/estimate/text` and `.../estimate/image`) — no new API. It is **hidden when editing** an existing food: editing is a manual correction, not an estimation task.
 
-The panel never persists on its own. **Apply** fills the visible form fields (name, default unit, per-unit calories/macros) with the estimate; the user must still press the form's own **Save** button to commit the new or edited food to the catalogue.
+The panel never persists on its own. An estimate (its first item — a food description names one food) or a barcode hit **auto-fills** the visible form fields (name, default unit, per-unit calories/macros, converted to the reference basis); the dialog's own **Save Food** button is the only confirmation.
 
 ### Unit-system inference + conversion
 

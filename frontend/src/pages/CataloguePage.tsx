@@ -386,7 +386,9 @@ function CataloguePage() {
             </p>
           )}
 
-          <FoodAiAssist userId={user.id} onApply={handleApply} />
+          {/* AI assist only when DEFINING a new food — editing an existing one is a
+              manual correction, not an estimation task. */}
+          {editingId === null && <FoodAiAssist userId={user.id} onApply={handleApply} />}
 
           <div className="food-form-section">
             <label>Name</label>
@@ -417,7 +419,7 @@ function CataloguePage() {
             <>
               <div className="food-form-row">
                 <div className="food-form-section">
-                  <label>Protein {refLabel(form.defaultUoM)} (g)</label>
+                  <label>Protein {refLabel(form.defaultUoM)}</label>
                   <input
                     type="number" min="0" step="0.1"
                     value={form.proteinPerUnit ?? ''}
@@ -425,7 +427,7 @@ function CataloguePage() {
                   />
                 </div>
                 <div className="food-form-section">
-                  <label>Carbs {refLabel(form.defaultUoM)} (g)</label>
+                  <label>Carbs {refLabel(form.defaultUoM)}</label>
                   <input
                     type="number" min="0" step="0.1"
                     value={form.carbsPerUnit ?? ''}
@@ -435,7 +437,7 @@ function CataloguePage() {
               </div>
 
               <div className="food-form-section">
-                <label>Fat {refLabel(form.defaultUoM)} (g)</label>
+                <label>Fat {refLabel(form.defaultUoM)}</label>
                 <input
                   type="number" min="0" step="0.1"
                   value={form.fatPerUnit ?? ''}
@@ -478,7 +480,15 @@ function CataloguePage() {
                     value={ing.quantity}
                     onValueChange={(v) => updateIngredient(i, { quantity: v ?? 0 })}
                   />
-                  <UnitSelect className="ingredient-uom" value={ing.uoM} onChange={(v) => updateIngredient(i, { uoM: v })} />
+                  {ing.isInline ? (
+                    <UnitSelect className="ingredient-uom" value={ing.uoM} onChange={(v) => updateIngredient(i, { uoM: v })} />
+                  ) : (
+                    /* Same rule as logging in the diary: the unit lives in the food's
+                       definition — change it there, not per ingredient. */
+                    <div className="unit-fixed ingredient-uom" title="Set by the food's definition — change it in the catalogue.">
+                      {ing.uoM}
+                    </div>
+                  )}
                   <button className="ingredient-remove" onClick={() => removeIngredient(i)}>×</button>
                 </div>
               </div>

@@ -311,64 +311,19 @@
 }
 .check-btn:hover:not(:disabled) { opacity: 0.9; }
 .check-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-/* In a .ai-photo-actions row (camera capture), beat the generic `> *` padding/flex so the
-   checkmark stays a fixed square with a full-size glyph rather than a stretched, padded box. */
-.ai-photo-actions > .check-btn {
-  flex: 0 0 auto;
-  width: 2.625rem;
-  padding: 0;
-}
 
-/* ── Photo capture ── */
-.ai-photo-actions {
+/* ── Photo capture: PhotoPickButton (components/PhotoPickButton.tsx) ── */
+/* Two direct actions (Take photo / File upload) splitting the row 50/50, each at the
+   standard control height. */
+.photo-pick {
   display: flex;
   gap: 0.6rem;
-  align-items: stretch;
 }
-/* Every action in the row gets an identical box — same flex, padding and line-height —
-   so a <button> and an upload <label> render at exactly the same height (the button
-   was rendering ~6px taller). Neither reads as the lesser option. */
-.ai-photo-actions > * {
-  flex: 1;
-  /* A native <button> renders a few px taller than the upload <label> even with equal
-     padding/line-height. An explicit height (with padding folded in via border-box)
-     makes every action exactly the same box — the camera button shrinks to match. */
-  box-sizing: border-box;
-  height: 2.625rem;
-  padding: 0 0.7rem;
-  appearance: none;
-  -webkit-appearance: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  line-height: 1.2;
-  font-size: 1rem;
-}
-.ai-upload-btn {
-  cursor: pointer;
-}
-
-/* A lone "Upload" control keeps the right-hand button's *previous* size — half the row, the
-   width it had as one of the two original flex:1 buttons — rather than stretching full-width. */
-.ai-photo-actions.single {
-  justify-content: flex-end;
-}
-.ai-photo-actions.single > * {
-  flex: 0 0 auto;
-  width: calc(50% - 0.3rem);
-}
-
-/* Upload labels need their text vertically centred like the sibling buttons.
-   The base classes (cancel-btn / bc-btn-outline) have equal specificity to
-   .ai-photo-actions > * so the padding winner is a coin flip.  This compound
-   selector is two classes — it always wins. */
-.ai-photo-actions .ai-upload-btn {
-  padding-top: 0;
-  padding-bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.photo-pick > button {
+  flex: 1 1 0;
+  height: 2.625rem; /* standard control height — same as .check-btn */
+  padding: 0 1rem;
+  white-space: nowrap;
 }
 
 /* The Estimate action sits to the right and a touch larger — it's the primary commit
@@ -490,53 +445,7 @@
   color: var(--error);
 }
 
-/* ── PhotoPickButton (components/PhotoPickButton.tsx) ── */
-/* Sits as the single child of an .ai-photo-actions row, which sizes/centers *
-   directly — fill that box so the visible button reads exactly like the
-   plain upload label it replaced. */
-.ai-photo-actions .photo-pick {
-  display: flex;
-  width: 100%;
-  height: 100%;
-}
-.ai-photo-actions .photo-pick > .ai-upload-btn {
-  width: 100%;
-  height: 100%;
-}
-.photo-pick {
-  position: relative;
-  width: 100%;
-}
-.photo-pick-sheet {
-  position: absolute;
-  z-index: 10;
-  top: calc(100% + 0.4rem);
-  left: 0;
-  right: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.4rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-}
-.photo-pick-action {
-  padding: 0.6rem 0.8rem;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  text-align: left;
-  font-size: 0.95rem;
-  color: var(--text);
-  cursor: pointer;
-}
-.photo-pick-action:hover {
-  background: var(--neutral);
-}
-
-/* ── Save-time disclosure for AI-minted foods (§3a-R5) ── */
+/* ── Save-time disclosure for AI-minted foods ── */
 .ai-new-foods-disclosure {
   margin-top: 0.75rem;
   font-size: 0.85rem;

@@ -13,9 +13,9 @@ user to **describe it** (Phase 2) or **photograph it** (Phase 3).
 
 ## Two halves
 ### 1. Decode the barcode (client)
-- Decode in-browser from a photo the user **captures or picks via a native file input** —
-  the OS camera-or-library chooser on mobile, a file picker on desktop (see
-  `ai-estimation.md` §Capture). No live `getUserMedia` stream, so no secure-context/HTTPS
+- Decode in-browser from a photo the user supplies via the shared two-button capture —
+  **Take photo** (direct to camera) / **File upload** (gallery or files); see
+  `ai-estimation.md` §Capture. No live `getUserMedia` stream, so no secure-context/HTTPS
   requirement.
 - The native `BarcodeDetector` API is Chrome/Android-only, so a cross-browser library
   (`@zxing/browser`) decodes the chosen still image.

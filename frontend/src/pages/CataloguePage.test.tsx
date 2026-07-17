@@ -14,6 +14,10 @@ vi.mock('../hooks/useAiStatus', () => ({
   useAiStatus: () => ({ aiEnabled: true, supportsText: true, supportsImages: true }),
 }));
 
+vi.mock('../hooks/useBarcodeStatus', () => ({
+  useBarcodeStatus: () => ({ barcodeEnabled: false, barcodeStatusKnown: true }),
+}));
+
 vi.mock('../lib/foods', async () => {
   const actual = await vi.importActual<typeof import('../lib/foods')>('../lib/foods');
   return { ...actual, loadCatalogueByName: vi.fn().mockResolvedValue(new Map()) };
@@ -98,9 +102,9 @@ describe('CataloguePage', () => {
     await userEvent.click(screen.getByLabelText('Add food'));
 
     // With show-macros on, all three macro labels should appear
-    expect(screen.getByText('Protein per 100 g (g)')).toBeInTheDocument();
-    expect(screen.getByText('Carbs per 100 g (g)')).toBeInTheDocument();
-    expect(screen.getByText('Fat per 100 g (g)')).toBeInTheDocument();
+    expect(screen.getByText('Protein per 100 g')).toBeInTheDocument();
+    expect(screen.getByText('Carbs per 100 g')).toBeInTheDocument();
+    expect(screen.getByText('Fat per 100 g')).toBeInTheDocument();
   });
 
   it('shows empty state when no foods', async () => {
@@ -280,6 +284,8 @@ describe('CataloguePage', () => {
       expect(screen.getByText('Edit Food')).toBeInTheDocument();
     });
     expect(screen.getByRole('spinbutton')).toHaveValue(165);
+    // Editing an existing food shows NO AI assist — it's only for defining new foods.
+    expect(screen.queryByLabelText('Describe the food')).toBeNull();
   });
 
   it('opens the edit dialog when clicking the ✎ edit button', async () => {
@@ -356,11 +362,7 @@ describe('CataloguePage', () => {
     await userEvent.type(screen.getByLabelText('Describe the food'), 'chicken breast');
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
-    // Wait for the result row and click Apply
-    await screen.findByText('Chicken Breast');
-    await userEvent.click(screen.getByRole('button', { name: 'Apply Chicken Breast' }));
-
-    // Form fields should be pre-filled with reference-basis values
+    // The result auto-applies — form fields should be pre-filled with reference-basis values
     // 330/200*100 = 165 cal per 100g
     await waitFor(() => {
       const nameInput = screen.getByPlaceholderText('e.g. Chicken Breast') as HTMLInputElement;
@@ -393,10 +395,7 @@ describe('CataloguePage', () => {
     await userEvent.type(screen.getByLabelText('Describe the food'), 'chicken');
     await userEvent.click(screen.getByRole('button', { name: 'Estimate' }));
 
-    await screen.findByText('Chicken Breast');
-    await userEvent.click(screen.getByRole('button', { name: 'Apply Chicken Breast' }));
-
-    // Duplicate hint should appear with the edit link
+    // The result auto-applies; the duplicate hint should appear with the edit link
     await waitFor(() => {
       expect(screen.getByText('Edit the existing food instead')).toBeInTheDocument();
     });

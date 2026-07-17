@@ -29,6 +29,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      # The release email's subject comes from VERSION while its body is RELEASE_NOTES.md
+      # verbatim — 1.11 shipped announcing itself with the 1.10 notes because only VERSION
+      # was bumped. Fail the PR when the two drift.
+      - name: Release notes must match VERSION
+        run: |
+          version=$(tr -d '[:space:]' < VERSION)
+          head -1 RELEASE_NOTES.md | grep -qF "$version" || {
+            echo "::error::RELEASE_NOTES.md first line ($(head -1 RELEASE_NOTES.md)) does not mention VERSION ($version) — update the notes when bumping VERSION."
+            exit 1
+          }
+
       - uses: actions/setup-dotnet@v5
         with: { dotnet-version: '10.0.x' }
       - run: dotnet test backend/Fuel.slnx -c Release

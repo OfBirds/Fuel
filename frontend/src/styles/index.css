@@ -36,6 +36,25 @@ html {
   box-sizing: border-box;
 }
 
+/* Native <dialog>: the universal reset above strips the UA's `margin: auto` (dialogs
+   would render top-left), and the UA paints dialogs black-on-Canvas regardless of the
+   app theme. Restore centering and hand them the app's colors and font. */
+dialog {
+  margin: auto;
+  border: none;
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+}
+
+/* Let native widgets (select option lists, date/time pickers, scrollbars) follow the
+   active theme instead of always rendering light. */
+:root {
+  color-scheme: light;
+}
+[data-theme='dark'] {
+  color-scheme: dark;
+}
+
 html, body, #root {
   width: 100%;
   height: 100%;
