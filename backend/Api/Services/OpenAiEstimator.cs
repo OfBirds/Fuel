@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -61,8 +62,17 @@ public class OpenAiEstimator(HttpClient http, ProviderConnection connection, ILo
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", connection.ApiKey);
 
         using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-        resp.EnsureSuccessStatusCode();
         var body = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            logger.LogWarning("OpenAI-compatible {Model} returned {Status}: {Body}",
+                connection.Model, (int)resp.StatusCode,
+                body.Length > 600 ? body[..600] : body);
+            if (resp.StatusCode == HttpStatusCode.TooManyRequests)
+                throw new AiRateLimitedException(
+                    $"{connection.Model} rate-limited (429).", RetryAfterParsing.Parse(resp.Headers));
+            resp.EnsureSuccessStatusCode();
+        }
         var estimate = Parse(body);
         logger.LogInformation(
             "OpenAI estimate ok: {Items} items, overall conf {Conf}, {Ms}ms, model {Model}",

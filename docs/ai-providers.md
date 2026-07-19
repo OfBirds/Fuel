@@ -128,7 +128,28 @@ NutritionEstimate {
 The estimator is a slow, fallible **external** call — treat every call as
 best-effort:
 - **Time-box** every call (`AI_TIMEOUT_SECONDS`); **one retry** on transient
-  network / 5xx errors.
+  network / 5xx / 408 errors — **429 is excluded from this retry** (see below).
+- **Rate limits (429) are a distinct failure mode**, not a generic transient error:
+  - Both estimators recognize a 429 response and throw `AiRateLimitedException`
+    instead of the generic `AiUnavailableException`, carrying the response's
+    `Retry-After` when the provider sends one.
+  - The HTTP-level retry (`Program.cs`, the `"ai"` client's resilience pipeline)
+    deliberately does **not** retry a 429 — retrying an already rate-limited call
+    just burns the timeout budget on a request that will fail again.
+  - `EstimatorChain` catches `AiRateLimitedException` and puts **that provider**
+    into a cooldown (until `Retry-After` elapses, or 60s if the provider didn't
+    send one) before falling through to the next provider in the chain. Later
+    calls **skip a cooling-down provider outright** — no wasted HTTP round-trip —
+    until the cooldown expires. The cooldown lives on the `EstimatorChain`
+    singleton, so it's shared across all requests, not just the one that hit
+    the limit.
+  - Practical effect: if the default vision provider (Claude) gets rate-limited,
+    every subsequent photo estimate falls straight through to the next enabled
+    vision provider (if any) instead of re-hitting Claude and eating the timeout
+    each time. **Vision has only one cloud provider by default** — see
+    `deploy/ai-providers.example.json`'s disabled `openai-gpt4o-mini` entry for
+    a ready-to-enable fallback (set `AI_KEY_OPENAI`, flip `enabled: true`, no
+    redeploy needed for the rest).
 - **On failure/timeout** return a clear "couldn't estimate — enter it manually"
   and let the manual path proceed; **never block logging**.
 - **Validate the shape** — malformed/non-conforming JSON counts as a failure.

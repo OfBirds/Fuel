@@ -66,3 +66,32 @@ public class EstimatedItem
 /// (docs/ai-providers.md §Resilience).
 /// </summary>
 public class AiUnavailableException(string message, Exception? inner = null) : Exception(message, inner);
+
+/// <summary>
+/// Raised when a provider answers 429 (rate/quota limited). Distinct from
+/// <see cref="AiUnavailableException"/> so <see cref="EstimatorChain"/> can cool that specific
+/// provider down (honouring the response's <c>Retry-After</c> header when present) instead of
+/// hitting it again on every subsequent request until the limit clears
+/// (docs/ai-providers.md §Resilience).
+/// </summary>
+public class AiRateLimitedException(string message, TimeSpan? retryAfter = null) : AiUnavailableException(message)
+{
+    public TimeSpan? RetryAfter { get; } = retryAfter;
+}
+
+/// <summary>Shared <c>Retry-After</c> parsing (seconds or HTTP-date form) for the estimators.</summary>
+internal static class RetryAfterParsing
+{
+    public static TimeSpan? Parse(System.Net.Http.Headers.HttpResponseHeaders headers)
+    {
+        var value = headers.RetryAfter;
+        if (value is null) return null;
+        if (value.Delta is { } delta) return delta;
+        if (value.Date is { } date)
+        {
+            var span = date - DateTimeOffset.UtcNow;
+            return span > TimeSpan.Zero ? span : TimeSpan.Zero;
+        }
+        return null;
+    }
+}

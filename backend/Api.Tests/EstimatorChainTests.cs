@@ -73,6 +73,26 @@ public class EstimatorChainTests
     }
 
     [Fact]
+    public async Task RateLimitedProvider_CoolsDown_SkippedOnSubsequentCall()
+    {
+        // order 1 = limited (429), order 2 = cloud (succeeds).
+        var chain = Chain(
+            Provider("limited", "anthropic", ["text"], "https://limited.test", order: 1, keyRef: "cloud"),
+            Provider("cloud", "anthropic", ["text"], "https://cloud.test", order: 2, keyRef: "cloud"));
+
+        var first = await chain.EstimateFromTextAsync("pizza", [], default);
+        Assert.Single(first.Items);
+        Assert.Equal(1, _hits.Count(h => h.Contains("limited.test")));
+        Assert.Equal(1, _hits.Count(h => h.Contains("cloud.test")));
+
+        // Still cooling down — skipped without another HTTP call; cloud is hit directly.
+        var second = await chain.EstimateFromTextAsync("pizza", [], default);
+        Assert.Single(second.Items);
+        Assert.Equal(1, _hits.Count(h => h.Contains("limited.test"))); // not retried
+        Assert.Equal(2, _hits.Count(h => h.Contains("cloud.test")));
+    }
+
+    [Fact]
     public async Task AllProvidersFail_ThrowsAfterTryingAll()
     {
         var chain = Chain(
@@ -113,7 +133,8 @@ public class EstimatorChainTests
         public IDisposable? OnChange(Action<AiProvidersOptions, string?> listener) => null;
     }
 
-    // Routes by host: local.test → 500 (fail), cloud.test → a valid Anthropic-shaped reply.
+    // Routes by host: local.test → 500 (fail), limited.test → 429, cloud.test → a valid
+    // Anthropic-shaped reply.
     private sealed class RoutingFactory(List<string> hits) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new(new RoutingHandler(hits));
@@ -136,6 +157,15 @@ public class EstimatorChainTests
                 {
                     Content = new StringContent(anthropic, Encoding.UTF8, "application/json"),
                 });
+            }
+            if (url.Contains("limited.test"))
+            {
+                var resp = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+                {
+                    Content = new StringContent("{\"type\":\"error\"}", Encoding.UTF8, "application/json"),
+                };
+                resp.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(60));
+                return Task.FromResult(resp);
             }
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)
             {
