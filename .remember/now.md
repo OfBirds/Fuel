@@ -1,3 +1,3 @@
 
-## 13:39 | at/rate-limit-key-updates-2aacfd
-Located claude/ai-rate-limit-fallback-ejo7aa branch from today; planning Xiaomi secondary key update & staging MR for public Fuel repo.
+## 13:57 | at/rate-limit-key-updates-2aacfd
+Investigated Fuel repo's AI provider configs (ai-providers.json, docker-compose, workflows, env files) and researched Xiaomi token API details (baseUrl, model-id) from vault/homelab docs.
