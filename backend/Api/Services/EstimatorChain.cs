@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Api.Config;
 using Microsoft.Extensions.Options;
 
@@ -23,6 +24,13 @@ public interface IEstimatorChain
 /// <see cref="AiUnavailableException"/> (→ manual fallback). Provider list comes from a
 /// hot-reloaded <see cref="IOptionsMonitor{T}"/>, so reorder/enable/model edits take effect
 /// live; secret key VALUES are resolved per-request from AI_KEY_&lt;NAME&gt; env vars.
+///
+/// A 429 (<see cref="AiRateLimitedException"/>) is treated specially: rather than retry
+/// the same provider, it puts that provider in a per-instance cooldown (honouring the
+/// response's Retry-After when present, else <see cref="DefaultRateLimitCooldown"/>) and
+/// falls through immediately. Later calls skip a cooling-down provider outright instead of
+/// hitting an already-limited API again — this instance is registered as a singleton, so
+/// the cooldown is shared across requests.
 /// </summary>
 public class EstimatorChain(
     IOptionsMonitor<AiProvidersOptions> options,
@@ -31,6 +39,9 @@ public class EstimatorChain(
     ILoggerFactory loggerFactory,
     ILogger<EstimatorChain> logger) : IEstimatorChain
 {
+    private static readonly TimeSpan DefaultRateLimitCooldown = TimeSpan.FromSeconds(60);
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _cooldownUntil = new();
+
     public bool SupportsText => Chain("text").Count != 0;
     public bool SupportsImages => Chain("vision").Count != 0;
 
@@ -60,6 +71,16 @@ public class EstimatorChain(
         foreach (var p in providers)
         {
             ct.ThrowIfCancellationRequested();
+
+            if (_cooldownUntil.TryGetValue(p.Name, out var until) && until > DateTimeOffset.UtcNow)
+            {
+                last = new AiRateLimitedException($"{p.Name} is cooling down after a rate limit.");
+                logger.LogInformation(
+                    "AI provider {Provider} ({Capability}) skipped — rate-limit cooldown for {Seconds}s more",
+                    p.Name, capability, Math.Ceiling((until - DateTimeOffset.UtcNow).TotalSeconds));
+                continue;
+            }
+
             try
             {
                 return await call(BuildConnector(p, supportsImages: capability == "vision"));
@@ -67,6 +88,17 @@ public class EstimatorChain(
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 throw; // user cancelled — stop the whole chain, don't fall through
+            }
+            catch (AiRateLimitedException ex)
+            {
+                var cooldown = ex.RetryAfter is { } retryAfter && retryAfter > TimeSpan.Zero
+                    ? retryAfter
+                    : DefaultRateLimitCooldown;
+                _cooldownUntil[p.Name] = DateTimeOffset.UtcNow + cooldown;
+                last = ex;
+                logger.LogWarning(ex,
+                    "AI provider {Provider} ({Capability}) rate-limited; cooling down {Seconds}s, trying next",
+                    p.Name, capability, cooldown.TotalSeconds);
             }
             catch (Exception ex)
             {

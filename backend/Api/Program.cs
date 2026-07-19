@@ -2,6 +2,7 @@ using Api.Authorization;
 using Api.Data;
 using Api.Services;
 using Ofbirds.ReleaseNotifications;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Authentication;
@@ -277,6 +278,13 @@ builder.Services.AddHttpClient("ai", c => c.Timeout = Timeout.InfiniteTimeSpan) 
             BackoffType = DelayBackoffType.Constant,
             Delay = TimeSpan.FromMilliseconds(250),
             UseJitter = true,
+            // 429 is deliberately NOT retried here: hitting an already rate-limited provider
+            // again wastes the timeout budget. EstimatorChain handles it instead — it cools
+            // that provider down (honouring Retry-After) and falls through to the next one.
+            ShouldHandle = args => ValueTask.FromResult(
+                args.Outcome.Exception is not null
+                || (args.Outcome.Result is { } r
+                    && (r.StatusCode == HttpStatusCode.RequestTimeout || (int)r.StatusCode >= 500))),
         });
     });
 

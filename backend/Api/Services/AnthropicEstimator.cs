@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -74,6 +75,9 @@ public class AnthropicEstimator(HttpClient http, ProviderConnection connection, 
             logger.LogWarning("Anthropic {Model} returned {Status}: {Body}",
                 connection.Model, (int)resp.StatusCode,
                 body.Length > 600 ? body[..600] : body);
+            if (resp.StatusCode == HttpStatusCode.TooManyRequests)
+                throw new AiRateLimitedException(
+                    $"{connection.Model} rate-limited (429).", RetryAfterParsing.Parse(resp.Headers));
             resp.EnsureSuccessStatusCode();
         }
         var estimate = Parse(body);

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -98,6 +99,34 @@ public class AnthropicEstimatorTests
         Assert.Contains("leftover pad thai", Assert.Single(captured));
     }
 
+    [Fact]
+    public async Task RateLimited_ThrowsAiRateLimitedException_WithRetryAfter()
+    {
+        var http = new HttpClient(new StatusHandler(HttpStatusCode.TooManyRequests, retryAfterSeconds: 30));
+        var estimator = new AnthropicEstimator(http,
+            new ProviderConnection("https://example.test", "test-key", "test-model", SupportsImages: true),
+            NullLogger<AnthropicEstimator>.Instance);
+
+        var ex = await Assert.ThrowsAsync<AiRateLimitedException>(() =>
+            estimator.EstimateFromTextAsync("pizza", [], default));
+
+        Assert.Equal(TimeSpan.FromSeconds(30), ex.RetryAfter);
+    }
+
+    [Fact]
+    public async Task RateLimited_NoRetryAfterHeader_LeavesRetryAfterNull()
+    {
+        var http = new HttpClient(new StatusHandler(HttpStatusCode.TooManyRequests));
+        var estimator = new AnthropicEstimator(http,
+            new ProviderConnection("https://example.test", "test-key", "test-model", SupportsImages: true),
+            NullLogger<AnthropicEstimator>.Instance);
+
+        var ex = await Assert.ThrowsAsync<AiRateLimitedException>(() =>
+            estimator.EstimateFromTextAsync("pizza", [], default));
+
+        Assert.Null(ex.RetryAfter);
+    }
+
     private sealed class StubHandler(string responseBody, List<string>? capturedBodies) : HttpMessageHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(
@@ -109,6 +138,22 @@ public class AnthropicEstimatorTests
             {
                 Content = new StringContent(responseBody, Encoding.UTF8, "application/json"),
             };
+        }
+    }
+
+    private sealed class StatusHandler(HttpStatusCode status, int? retryAfterSeconds = null) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var resp = new HttpResponseMessage(status)
+            {
+                Content = new StringContent("{\"type\":\"error\",\"error\":{\"message\":\"rate limited\"}}",
+                    Encoding.UTF8, "application/json"),
+            };
+            if (retryAfterSeconds is { } s)
+                resp.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(s));
+            return Task.FromResult(resp);
         }
     }
 }

@@ -1,5 +1,5 @@
 {
-  "_comment": "AI provider registry — copy to the host path in AI_CONFIG_HOST_PATH (e.g. /opt/fuel/ai-providers.staging.json), mounted read-only into the app and hot-reloaded on edit (docs/ai-providers.md). No secrets here: 'keyRef' names an env key (keyRef 'claude' → AI_KEY_CLAUDE); omit it for key-less local servers (Ollama). Lower 'order' runs first within each capability chain; on failure the chain falls through to the next. 'enabled': false skips an entry without deleting it.",
+  "_comment": "AI provider registry — copy to the host path in AI_CONFIG_HOST_PATH (e.g. /opt/fuel/ai-providers.staging.json), mounted read-only into the app and hot-reloaded on edit (docs/ai-providers.md). No secrets here: 'keyRef' names an env key (keyRef 'claude' → AI_KEY_CLAUDE); omit it for key-less local servers (Ollama). Lower 'order' runs first within each capability chain; on failure (incl. a 429 — see AiRateLimitedException) the chain falls through to the next, and a rate-limited provider is cooled down instead of being retried on the next request. 'enabled': false skips an entry without deleting it.",
   "ai": {
     "providers": [
       {
@@ -22,6 +22,17 @@
         "keyRef": "deepseek"
       },
       {
+        "_comment": "Text fallback for when deepseek-v4-flash is rate-limited — same DeepSeek account/key, pricier model. No new secret needed.",
+        "name": "deepseek-pro",
+        "convention": "anthropic",
+        "capabilities": ["text"],
+        "baseUrl": "https://api.deepseek.com/anthropic",
+        "model": "deepseek-v4-pro",
+        "order": 3,
+        "enabled": true,
+        "keyRef": "deepseek"
+      },
+      {
         "name": "claude-haiku",
         "convention": "anthropic",
         "capabilities": ["vision", "text"],
@@ -30,6 +41,17 @@
         "order": 2,
         "enabled": true,
         "keyRef": "claude"
+      },
+      {
+        "_comment": "Vision fallback for when claude-haiku is rate-limited/down — currently the only vision provider above. Set AI_KEY_OPENAI on the host and flip enabled to true to activate; no redeploy needed for the rest.",
+        "name": "openai-gpt4o-mini",
+        "convention": "openai",
+        "capabilities": ["vision", "text"],
+        "baseUrl": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini",
+        "order": 3,
+        "enabled": false,
+        "keyRef": "openai"
       }
     ]
   }
