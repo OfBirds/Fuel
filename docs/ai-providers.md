@@ -150,6 +150,10 @@ best-effort:
     `deploy/ai-providers.example.json`'s disabled `openai-gpt4o-mini` entry for
     a ready-to-enable fallback (set `AI_KEY_OPENAI`, flip `enabled: true`, no
     redeploy needed for the rest).
+  - **Text now has a same-account fallback too:** `deepseek-pro` (model
+    `deepseek-v4-pro`, order 3) reuses `AI_KEY_DEEPSEEK` — no new secret — so a
+    rate-limited `deepseek-v4-flash` (order 2) falls through to the pricier
+    model on the same account instead of failing the whole text chain.
 - **On failure/timeout** return a clear "couldn't estimate — enter it manually"
   and let the manual path proceed; **never block logging**.
 - **Validate the shape** — malformed/non-conforming JSON counts as a failure.

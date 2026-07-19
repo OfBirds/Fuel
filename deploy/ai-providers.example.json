@@ -22,6 +22,17 @@
         "keyRef": "deepseek"
       },
       {
+        "_comment": "Text fallback for when deepseek-v4-flash is rate-limited — same DeepSeek account/key, pricier model. No new secret needed.",
+        "name": "deepseek-pro",
+        "convention": "anthropic",
+        "capabilities": ["text"],
+        "baseUrl": "https://api.deepseek.com/anthropic",
+        "model": "deepseek-v4-pro",
+        "order": 3,
+        "enabled": true,
+        "keyRef": "deepseek"
+      },
+      {
         "name": "claude-haiku",
         "convention": "anthropic",
         "capabilities": ["vision", "text"],
