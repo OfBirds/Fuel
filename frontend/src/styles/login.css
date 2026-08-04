@@ -1,3 +1,14 @@
+/* Theme the shared auth-core <SsoCard> with Fuel's indigo palette (follows light/dark tokens). */
+.bsa-screen {
+  --auth-accent: var(--primary);
+  --auth-accent-fg: #fff;
+  --auth-ground: color-mix(in srgb, var(--primary) 8%, var(--bg));
+  --auth-surface: var(--surface);
+  --auth-fg: var(--text);
+  --auth-muted: var(--text-light);
+  --auth-border: color-mix(in srgb, var(--text) 15%, transparent);
+}
+
 .login-page {
   display: flex;
   align-items: center;
