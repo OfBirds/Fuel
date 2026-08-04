@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import '../styles/login.css';
 
@@ -80,16 +80,14 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, register, loginWithSSO, ssoOnline, ssoConfigured, authReady } = useAuth();
+  const { login, register, loginWithSSO, ssoOnline, ssoConfigured, authReady, needsInteractiveLogin } =
+    useAuth();
 
-  // CrimsonRaven (Keycloak) is the front door: when it's online, send the user straight there — it
-  // hosts the themed login, registration, verify-email and forgot-password pages. The legacy
-  // email/password form below is only reached when Raven is down or unconfigured (break-glass / dev).
-  useEffect(() => {
-    if (!authReady || !ssoOnline) return;
-    loginWithSSO().catch((err) =>
-      setError(err instanceof Error ? err.message : 'Could not reach CrimsonRaven.'));
-  }, [authReady, ssoOnline, loginWithSSO]);
+  // CrimsonRaven (Keycloak) is the front door. The auth engine already tried a SILENT (prompt=none)
+  // SSO on load: if CrimsonRaven had a session you're in and never see this page. Only when that
+  // probe finds no session (needsInteractiveLogin) do we show ONE explicit "Sign in" button below —
+  // we intentionally do NOT auto-redirect to Keycloak's login form, because an auto-parked form is
+  // what looped "restart login cookie not found" across tabs.
 
   const resetForm = () => {
     setError('');
@@ -173,8 +171,13 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
                 Try again
               </button>
             </>
+          ) : ssoOnline && needsInteractiveLogin ? (
+            <button type="button" className="submit-button"
+              onClick={() => { setError(''); loginWithSSO().catch((e) => setError(e instanceof Error ? e.message : 'Could not reach CrimsonRaven.')); }}>
+              Sign in with CrimsonRaven
+            </button>
           ) : (
-            <p className="login-subtitle">{ssoOnline ? 'Redirecting to CrimsonRaven…' : 'Loading…'}</p>
+            <p className="login-subtitle">{ssoOnline ? 'Signing you in…' : 'Loading…'}</p>
           )}
         </div>
       </div>

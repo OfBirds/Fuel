@@ -15,7 +15,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.17.0",
-    "@bearsoft/auth-core": "github:Trifunovich/auth-core#22908ccecdc12e7b97a78b8fd6faeb0b59f2c4f5"
+    "@bearsoft/auth-core": "github:Trifunovich/auth-core#f4f262940ba42ca7445b314d3ec0efaaa6b517a6"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
