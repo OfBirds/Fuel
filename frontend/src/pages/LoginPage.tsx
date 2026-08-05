@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { SsoCard } from '@bearsoft/auth-core/react';
+import '@bearsoft/auth-core/auth.css';
 import { useAuth } from '../context/AuthContext';
 import '../styles/login.css';
 
@@ -80,16 +82,13 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, register, loginWithSSO, ssoOnline, ssoConfigured, authReady } = useAuth();
+  const { login, register, ssoOnline, ssoConfigured, authReady } = useAuth();
 
-  // CrimsonRaven (Keycloak) is the front door: when it's online, send the user straight there — it
-  // hosts the themed login, registration, verify-email and forgot-password pages. The legacy
-  // email/password form below is only reached when Raven is down or unconfigured (break-glass / dev).
-  useEffect(() => {
-    if (!authReady || !ssoOnline) return;
-    loginWithSSO().catch((err) =>
-      setError(err instanceof Error ? err.message : 'Could not reach CrimsonRaven.'));
-  }, [authReady, ssoOnline, loginWithSSO]);
+  // CrimsonRaven (Keycloak) is the front door. The auth engine already tried a SILENT (prompt=none)
+  // SSO on load: if CrimsonRaven had a session you're in and never see this page. Only when that
+  // probe finds no session (needsInteractiveLogin) do we show ONE explicit "Sign in" button below —
+  // we intentionally do NOT auto-redirect to Keycloak's login form, because an auto-parked form is
+  // what looped "restart login cookie not found" across tabs.
 
   const resetForm = () => {
     setError('');
@@ -158,27 +157,11 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
     }
   };
 
-  // Until we know whether CrimsonRaven is up — or while bouncing to it — show a spinner,
-  // never the legacy form (no flash, and SSO is the only path when Raven is online).
+  // CrimsonRaven mode (or while we're still resolving it): the shared SsoCard — identical across all
+  // apps, only the wordmark + accent colour differ. It renders the silent-probe spinner, the
+  // "Sign in with Crimson Raven" button, and error/retry itself. Never the legacy form (no flash).
   if (!authReady || ssoOnline) {
-    return (
-      <div className="login-page">
-        <div className="login-container">
-          <h1>Indigo Swallow</h1>
-          {error ? (
-            <>
-              <p className="error-message">{error}</p>
-              <button type="button" className="submit-button"
-                onClick={() => { setError(''); loginWithSSO().catch((e) => setError(e instanceof Error ? e.message : 'Could not reach CrimsonRaven.')); }}>
-                Try again
-              </button>
-            </>
-          ) : (
-            <p className="login-subtitle">{ssoOnline ? 'Redirecting to CrimsonRaven…' : 'Loading…'}</p>
-          )}
-        </div>
-      </div>
-    );
+    return <SsoCard brand="Indigo Swallow" />;
   }
 
   // Legacy email/password — reached only when CrimsonRaven is down/unconfigured (break-glass).
@@ -188,7 +171,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
         <h1>Indigo Swallow</h1>
         {ssoConfigured && (
           <div className="maintenance-note">
-            <strong>CrimsonRaven is offline.</strong> Sign in or register with the same email to
+            <strong>Crimson Raven is offline.</strong> Sign in or register with the same email to
             reach your data until it's back.
           </div>
         )}

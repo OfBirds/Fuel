@@ -13,7 +13,7 @@ using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
-using OpenTelemetry.Exporter;
+using OpenTelemetry;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
@@ -29,7 +29,12 @@ var appVersion = Environment.GetEnvironmentVariable("APP_VERSION") ?? "dev";
 var logConfig = new LoggerConfiguration()
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information)
+    .MinimumLevel.Override("System.Net.Http.HttpClient", LogEventLevel.Warning)
     .Enrich.FromLogContext()
+    .Enrich.WithMachineName()
+    .Enrich.WithProcessId()
+    .Enrich.WithThreadId()
     .Enrich.WithProperty("Application", "Fuel")
     .Enrich.WithProperty("Version", appVersion)
     .WriteTo.Console()
@@ -40,7 +45,7 @@ var logConfig = new LoggerConfiguration()
         retainedFileCountLimit: 31);
 
 if (!string.IsNullOrWhiteSpace(seqUrl))
-    logConfig = logConfig.WriteTo.Seq(seqUrl);
+    logConfig = logConfig.WriteTo.Seq(seqUrl, apiKey: Environment.GetEnvironmentVariable("SEQ_API_KEY"));
 
 Log.Logger = logConfig.CreateLogger();
 
@@ -48,29 +53,21 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Host.UseSerilog();
 
-// Traces → Seq via OTLP. Endpoint is either explicit (OTEL_EXPORTER_OTLP_ENDPOINT)
-// or derived from SEQ_URL (Seq listens for OTLP on port 5341).
-var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT");
-if (string.IsNullOrWhiteSpace(otlpEndpoint) && !string.IsNullOrWhiteSpace(seqUrl))
-{
-    var seqUri = new Uri(seqUrl);
-    // Full signal path: the exporter uses a programmatic Endpoint as-is and
-    // does not append /v1/traces (it only does that for the env-var form).
-    otlpEndpoint = $"{seqUri.Scheme}://{seqUri.Host}:5341/ingest/otlp/v1/traces";
-}
+// Metrics + traces via OTLP to whatever OTEL_EXPORTER_OTLP_ENDPOINT points at — any
+// OTLP ingest. The homelab points it at Seq (which ingests OTLP natively), but this is
+// not hardwired: OTEL_EXPORTER_OTLP_ENDPOINT / OTEL_EXPORTER_OTLP_PROTOCOL are the standard
+// OpenTelemetry env vars, so a collector, Jaeger, etc. work unchanged. Off when unset.
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r.AddService("Fuel", serviceVersion: appVersion))
+    // Metrics are collected by nothing here: Seq (the homelab OTLP target) ingests logs
+    // and traces only, not metrics — exporting them 404s. Re-add .WithMetrics + a metrics
+    // OTLP endpoint when a metrics backend exists.
+    .WithTracing(t => t
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation());
 
-if (!string.IsNullOrWhiteSpace(otlpEndpoint))
-{
-    builder.Services.AddOpenTelemetry()
-        .ConfigureResource(r => r.AddService("Fuel", serviceVersion: appVersion))
-        .WithTracing(tracing => tracing
-            .AddAspNetCoreInstrumentation()
-            .AddOtlpExporter(o =>
-            {
-                o.Endpoint = new Uri(otlpEndpoint);
-                o.Protocol = OtlpExportProtocol.HttpProtobuf;
-            }));
-}
+if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+    builder.Services.AddOpenTelemetry().UseOtlpExporter();
 
 builder.Services.AddOpenApi();
 builder.Services.AddControllers(o => o.Filters.Add<ResourceOwnershipFilter>());

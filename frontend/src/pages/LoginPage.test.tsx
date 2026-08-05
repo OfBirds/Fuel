@@ -9,13 +9,18 @@ const loginWithSSO = vi.fn().mockResolvedValue(undefined);
 let ssoOnline = false;
 let ssoConfigured = false;
 let authReady = true;
+let needsInteractiveLogin = false;
 
-vi.mock('../context/AuthContext', () => ({
+// LoginPage's useAuth comes from '../context/AuthContext', which re-exports auth-core's — so mocking
+// auth-core's useAuth here covers it. The SSO screen is auth-core's own <SsoCard> (its button/spinner
+// behaviour is auth-core's concern, driven by the engine's needsInteractiveLogin); here we stub it and
+// just assert LoginPage picks SSO mode (renders SsoCard, not the legacy form).
+vi.mock('@bearsoft/auth-core/react', () => ({
   useAuth: () => ({
     user: null, token: null, login, register, loginWithSSO,
-    ssoOnline, ssoConfigured, authReady, logout: vi.fn(),
+    ssoOnline, ssoConfigured, authReady, needsInteractiveLogin, logout: vi.fn(),
   }),
-  AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SsoCard: ({ brand }: { brand: string }) => <div data-testid="sso-card">{brand}</div>,
 }));
 
 import LoginPage from './LoginPage';
@@ -45,20 +50,22 @@ describe('LoginPage password requirements', () => {
 });
 
 describe('LoginPage — CrimsonRaven-first', () => {
-  beforeEach(() => { vi.clearAllMocks(); ssoOnline = false; ssoConfigured = false; authReady = true; window.location.hash = ''; localStorage.clear(); });
+  beforeEach(() => { vi.clearAllMocks(); ssoOnline = false; ssoConfigured = false; authReady = true; needsInteractiveLogin = false; window.location.hash = ''; localStorage.clear(); });
 
-  it('redirects straight to CrimsonRaven when it is online — no form, no choice', async () => {
+  it('renders the shared SsoCard (never the legacy form, no auto-redirect) when CrimsonRaven is online', async () => {
     ssoOnline = true;
     render(<LoginPage onLoginSuccess={() => {}} />);
-    expect(screen.queryByLabelText('Email')).toBeNull();          // no legacy form
-    await waitFor(() => expect(loginWithSSO).toHaveBeenCalledTimes(1)); // auto-redirect
+    expect(screen.queryByLabelText('Email')).toBeNull();            // no legacy form in CR mode
+    expect(screen.getByTestId('sso-card')).toHaveTextContent('Indigo Swallow'); // shared card + Fuel wordmark
+    // The engine owns the silent probe; LoginPage must NOT itself fire an interactive redirect.
+    await waitFor(() => expect(loginWithSSO).not.toHaveBeenCalled());
   });
 
   it('falls back to the legacy form + maintenance notice when Raven is configured but down', () => {
     ssoConfigured = true; ssoOnline = false;
     render(<LoginPage onLoginSuccess={() => {}} />);
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
-    expect(screen.getByText(/CrimsonRaven is offline/i)).toBeInTheDocument();
+    expect(screen.getByText(/Crimson Raven is offline/i)).toBeInTheDocument();
     expect(loginWithSSO).not.toHaveBeenCalled();
   });
 
@@ -66,6 +73,6 @@ describe('LoginPage — CrimsonRaven-first', () => {
     ssoConfigured = false; ssoOnline = false;
     render(<LoginPage onLoginSuccess={() => {}} />);
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
-    expect(screen.queryByText(/CrimsonRaven is offline/i)).toBeNull();
+    expect(screen.queryByText(/Crimson Raven is offline/i)).toBeNull();
   });
 });

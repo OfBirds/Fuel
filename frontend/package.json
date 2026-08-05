@@ -14,7 +14,8 @@
     "oidc-client-ts": "^3.5.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.17.0"
+    "react-router-dom": "^7.17.0",
+    "@bearsoft/auth-core": "github:Trifunovich/auth-core#5e5bb4ede60e0bdf700f99b844076f9817a6230a"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
