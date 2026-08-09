@@ -13,61 +13,16 @@ using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
-using OpenTelemetry;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
+using Ofbirds.Observability;
 using Serilog;
-using Serilog.Events;
-using Serilog.Formatting.Compact;
-
-// Rolling, structured (compact JSON) log file — one file per day, Information and up.
-// Also ships to Seq when SEQ_URL is set (deploy stacks); every event is tagged
-// with the app version so logs are filterable per release.
-var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL");
-var appVersion = Environment.GetEnvironmentVariable("APP_VERSION") ?? "dev";
-
-var logConfig = new LoggerConfiguration()
-    .MinimumLevel.Information()
-    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
-    .MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information)
-    .MinimumLevel.Override("System.Net.Http.HttpClient", LogEventLevel.Warning)
-    .Enrich.FromLogContext()
-    .Enrich.WithMachineName()
-    .Enrich.WithProcessId()
-    .Enrich.WithThreadId()
-    .Enrich.WithProperty("Application", "Fuel")
-    .Enrich.WithProperty("Version", appVersion)
-    .WriteTo.Console()
-    .WriteTo.File(
-        formatter: new CompactJsonFormatter(),
-        path: "logs/log-.json",
-        rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: 31);
-
-if (!string.IsNullOrWhiteSpace(seqUrl))
-    logConfig = logConfig.WriteTo.Seq(seqUrl, apiKey: Environment.GetEnvironmentVariable("SEQ_API_KEY"));
-
-Log.Logger = logConfig.CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog();
-
-// Metrics + traces via OTLP to whatever OTEL_EXPORTER_OTLP_ENDPOINT points at — any
-// OTLP ingest. The homelab points it at Seq (which ingests OTLP natively), but this is
-// not hardwired: OTEL_EXPORTER_OTLP_ENDPOINT / OTEL_EXPORTER_OTLP_PROTOCOL are the standard
-// OpenTelemetry env vars, so a collector, Jaeger, etc. work unchanged. Off when unset.
-builder.Services.AddOpenTelemetry()
-    .ConfigureResource(r => r.AddService("Fuel", serviceVersion: appVersion))
-    // Metrics are collected by nothing here: Seq (the homelab OTLP target) ingests logs
-    // and traces only, not metrics — exporting them 404s. Re-add .WithMetrics + a metrics
-    // OTLP endpoint when a metrics backend exists.
-    .WithTracing(t => t
-        .AddAspNetCoreInstrumentation()
-        .AddHttpClientInstrumentation());
-
-if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
-    builder.Services.AddOpenTelemetry().UseOtlpExporter();
+// Logging + tracing: the shared OfBirds standard (console, rolling JSON file, Seq when
+// SEQ_URL is set; OTLP traces when an endpoint is set; health endpoints; correlation).
+// Metrics stay off until OTEL_EXPORTER_OTLP_METRICS_ENDPOINT points at something that
+// ingests them — Seq, the homelab target, takes logs and traces only.
+builder.AddOfbirdsObservability("Fuel");
 
 builder.Services.AddOpenApi();
 builder.Services.AddControllers(o => o.Filters.Add<ResourceOwnershipFilter>());
@@ -317,7 +272,7 @@ using (var scope = app.Services.CreateScope())
     scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
 }
 
-app.UseSerilogRequestLogging();
+app.UseOfbirdsObservability();
 
 if (app.Environment.IsDevelopment())
 {
