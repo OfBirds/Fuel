@@ -78,9 +78,12 @@ services:
       # by the Serilog `Application` property + a per-app-environment Seq API key.
       SEQ_URL: ${SEQ_URL}
       SEQ_API_KEY: ${SEQ_API_KEY}
-      # Traces + metrics -> any OTLP ingest (homelab: Seq). Standard OTEL env vars.
+      # Traces -> any OTLP ingest (homelab: Seq). Standard OTEL env vars.
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      # Metrics are opt-in: Ofbirds.Observability keeps them off until this is set, so it stayed
+      # unset while Seq was 2024.3 (logs+traces only). Seq 2026.1 ingests metrics natively.
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT}
     ports:
       - "${APP_PORT}:8080"
     networks:
