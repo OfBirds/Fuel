@@ -1,4 +1,12 @@
 version: 2
+
+# Every ecosystem is grouped, so a weekly run opens at most 6 PRs instead of ~13.
+# Two reasons this matters:
+#   1. Co-versioned packages must move together. Ungrouped, EFCore.Tools 10.0.11
+#      landed in its own PR against EFCore 10.0.4 and failed restore with NU1605.
+#   2. validate.yml serializes on the staging stack; a burst of PRs meant most of
+#      their runs were cancelled as superseded queued runs, so they merged blind.
+# Majors are split from minor/patch so one risky major can't block routine bumps.
 updates:
   # Backend NuGet packages
   - package-ecosystem: nuget
@@ -6,6 +14,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      backend:
+        patterns: ["*"]
+        update-types: [minor, patch]
+      backend-major:
+        patterns: ["*"]
+        update-types: [major]
 
   # Frontend npm packages
   - package-ecosystem: npm
@@ -13,9 +28,19 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      frontend:
+        patterns: ["*"]
+        update-types: [minor, patch]
+      frontend-major:
+        patterns: ["*"]
+        update-types: [major]
 
   # GitHub Actions used by the deploy workflow
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

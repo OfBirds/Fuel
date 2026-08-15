@@ -7,13 +7,6 @@ on:
   pull_request:
     branches: [main]
 
-# All PRs share the one staging stack, so validations are serialized: one run
-# at a time, never cancelled mid-flight. If GitHub cancels a superseded queued
-# run, re-run it from the Actions tab.
-concurrency:
-  group: validate-staging
-  cancel-in-progress: false
-
 # Least privilege by default; the build job widens to packages: write for GHCR.
 permissions:
   contents: read
@@ -114,6 +107,15 @@ jobs:
   deploy-staging:
     if: github.event.pull_request.head.repo.full_name == github.repository
     needs: build
+    # Only this job touches the single shared staging stack, so only this job
+    # serializes. test and build are per-PR: previously the whole workflow sat in
+    # one concurrency group, so a burst of dependabot PRs left most of them with
+    # no check results at all. GitHub still evicts a superseded *queued* job, so
+    # deploy-staging can be cancelled when several PRs land at once — re-run it
+    # from the Actions tab. Grouped dependabot PRs keep that burst small.
+    concurrency:
+      group: validate-staging
+      cancel-in-progress: false
     runs-on: [self-hosted]
     permissions:
       contents: read
