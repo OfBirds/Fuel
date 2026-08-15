@@ -25,11 +25,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with: { dotnet-version: '10.0.x' }
       - run: dotnet test backend/Fuel.slnx -c Release
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with: { node-version: '24', cache: 'npm', cache-dependency-path: frontend/package-lock.json }
       - run: npm ci
         working-directory: frontend
@@ -43,7 +43,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Compute version
         id: version
@@ -53,7 +53,7 @@ jobs:
           echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       # --- Generate the idempotent migration script (the explicit gate) ---
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
@@ -114,7 +114,7 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v8
         with:
